@@ -104,10 +104,23 @@ for (const batch of chunk(tasks, CONCURRENCY)) {
   if ((uploaded + uploadFailed) % 80 < CONCURRENCY) console.log(`  ...${uploaded + uploadFailed}/${tasks.length} images processed`);
 }
 
-for (const batch of chunk(mediaRows, 100)) {
+// Some images are genuinely shared across multiple products in Shopify's media
+// library (e.g. shared variant/stock photos) -- our schema ties one media row to
+// one product, so dedupe by shopify_id (the first product referencing it wins).
+const seenImageIds = new Set<string>();
+const dedupedMediaRows = mediaRows.filter((r) => {
+  if (seenImageIds.has(r.shopify_id)) return false;
+  seenImageIds.add(r.shopify_id);
+  return true;
+});
+const duplicateCount = mediaRows.length - dedupedMediaRows.length;
+
+for (const batch of chunk(dedupedMediaRows, 100)) {
   await upsert("media", batch, "shopify_id");
 }
-console.log(`✓ media: ${uploaded} uploaded, ${uploadFailed} failed, ${mediaRows.length} rows inserted`);
+console.log(
+  `✓ media: ${uploaded} uploaded, ${uploadFailed} failed, ${dedupedMediaRows.length} rows inserted (${duplicateCount} shared-image duplicates collapsed)`
+);
 
 // --- 4. Reviews (Judge.me metafield data; Pennywise metafields are never read here) ---
 const reviewRows: any[] = [];
