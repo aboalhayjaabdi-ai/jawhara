@@ -52,8 +52,8 @@ export async function selectAll<T>(table: string, query = "select=*"): Promise<T
   return res.json() as Promise<T[]>;
 }
 
-export async function countTable(table: string): Promise<number> {
-  const res = await fetch(`${URL_BASE}/rest/v1/${table}?select=id`, {
+export async function countTable(table: string, column = "id"): Promise<number> {
+  const res = await fetch(`${URL_BASE}/rest/v1/${table}?select=${column}`, {
     headers: { ...headers, Prefer: "count=exact", Range: "0-0" },
   });
   const range = res.headers.get("content-range"); // "0-0/N"
