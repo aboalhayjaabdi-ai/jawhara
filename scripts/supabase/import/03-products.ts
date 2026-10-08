@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { upsert, selectAll } from "../rest.ts";
-import { uploadFile } from "../storage.ts";
+import { objectExists, uploadFile } from "../storage.ts";
 import { chunk, idTail, readJsonl } from "./util.ts";
 
 const products = readJsonl("products");
@@ -73,10 +73,14 @@ async function processImage(p: any, edge: any, position: number) {
   const ext = entry.localPath.split(".").pop();
   const storagePath = `${productShopifyId}/${imageShopifyId}.${ext}`;
   const contentType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-  const data = readFileSync(entry.localPath);
 
-  await uploadFile("product-media", storagePath, data, contentType);
-  uploaded++;
+  if (await objectExists("product-media", storagePath)) {
+    uploaded++;
+  } else {
+    const data = readFileSync(entry.localPath);
+    await uploadFile("product-media", storagePath, data, contentType);
+    uploaded++;
+  }
 
   mediaRows.push({
     shopify_id: imageShopifyId,
@@ -89,8 +93,8 @@ async function processImage(p: any, edge: any, position: number) {
   });
 }
 
-// Limited concurrency to avoid hammering the Storage API.
-const CONCURRENCY = 8;
+// Limited concurrency to avoid hammering the Storage API (free-tier connection limits).
+const CONCURRENCY = 3;
 const tasks: Array<() => Promise<void>> = [];
 for (const p of products) {
   p.images.edges.forEach((edge: any, i: number) => tasks.push(() => processImage(p, edge, i)));

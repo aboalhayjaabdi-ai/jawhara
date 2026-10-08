@@ -37,13 +37,24 @@ export async function ensureBucket(id: string, isPublic: boolean) {
   }
 }
 
+export async function objectExists(bucket: string, path: string): Promise<boolean> {
+  const res = await fetch(`${URL_BASE}/storage/v1/object/info/${bucket}/${path}`, { headers: authHeaders });
+  return res.ok;
+}
+
 export async function uploadFile(bucket: string, path: string, data: Buffer, contentType: string) {
-  const res = await fetch(`${URL_BASE}/storage/v1/object/${bucket}/${path}`, {
-    method: "POST",
-    headers: { ...authHeaders, "Content-Type": contentType, "x-upsert": "true" },
-    body: data,
-  });
-  if (!res.ok) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await fetch(`${URL_BASE}/storage/v1/object/${bucket}/${path}`, {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": contentType, "x-upsert": "true" },
+      body: data,
+    });
+    if (res.ok) return;
+    if (res.status === 429 && attempt < 4) {
+      const backoffMs = 1000 * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, backoffMs));
+      continue;
+    }
     throw new Error(`Upload failed for ${path}: ${res.status} ${await res.text()}`);
   }
 }
