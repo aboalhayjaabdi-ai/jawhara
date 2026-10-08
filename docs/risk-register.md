@@ -16,6 +16,24 @@ Atelier purchase/license terms (check the Shopify Theme Store purchase history o
 receipts) to confirm what's explicitly permitted — this task is blocked on the user providing that
 confirmation, not on technical access.
 
+**Update (Phase 2.5):** Full theme successfully extracted — all 527 files (Liquid, CSS, JS,
+config, locales) retrieved via the Admin GraphQL `theme.files` API with zero gaps, so no manual
+ZIP download was needed. Stored locally only (`data/exports/theme/`, gitignored, never committed
+or redistributed). Design tokens (palette, typography, spacing, shape language) were extracted
+into `docs/design-spec.md` as plain facts (e.g. "zero corner radius," "Newsreader + Red Hat Text")
+for the new build to reference — this is analysis of the theme's design language, not reuse of its
+source code, and both fonts used are open-source (Google Fonts) with no licensing restriction.
+
+## 1b. Pennywise — excluded from migration (user decision, final)
+
+Per explicit instruction: Pennywise bundle-pricing functionality (the "2 för 299:-" style
+promotions) is **not** being migrated or recreated in any form. The `pennywise` metafield data
+remains in the raw Phase 2 export (174 of 376 products carry it) purely as part of the complete
+backup/audit trail — it is never imported into the Supabase schema, never used to seed discount
+logic, and has no code path anywhere in Phase 5. Historical orders that happened to occur during a
+Pennywise-era price are preserved unmodified (order history is never edited). Shopify's live
+Pennywise installation itself is never touched, uninstalled, or modified.
+
 ## 2. Third-party app functionality has no native equivalent
 
 **Risk:** Judge.me (reviews) and Pennywise (volume/bundle discounts) provide functionality
@@ -24,9 +42,19 @@ currently live on the storefront via app embeds/metafields, not Shopify-native f
 behavior.
 **Mitigation:** Review *data* (ratings, text, reviewer name, timestamps, verified-buyer flag) is
 extractable from product metafields and will be migrated into a native `reviews` table (Phase 3)
-with a rebuilt display component (Phase 4). Bundle/volume discount *logic* will be reimplemented
-server-side in the new discount engine (Phase 5) using the same quantity/percentage rules found in
-the `pennywise` metafield JSON as a spec, not ported as code.
+with a rebuilt display component (Phase 4).
+
+**Update (Phase 2.5, final decisions):**
+- **Pennywise bundle pricing is explicitly excluded** — see §1b above. Not reimplemented in any
+  form, per user instruction.
+- **Judge.me reviews — completeness verified.** `scripts/shopify/verify.ts` checked every
+  product's cached `review_widget_data` metafield against its own reported `number_of_reviews`
+  total: 127 products carry review data, and **none exceed the metafield's cache size** (the
+  pagination cap seen during Phase 1 audit, `per_page: 5`, never actually got hit for any real
+  product — all are at or under that cap). In plain terms: **the Shopify metafield cache already
+  holds every review Judge.me has for this store**; no separate Judge.me export/API call is
+  needed. If new reviews accumulate after this snapshot, they'll need a follow-up metafield pull
+  before Supabase import, same as any other incremental-sync concern noted in Phase 9.
 
 ## 3. GDPR exposure on customer data migration
 
