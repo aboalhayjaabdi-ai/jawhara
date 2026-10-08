@@ -93,3 +93,40 @@ export async function shopifyGraphQL<T>(query: string, variables?: Record<string
 }
 
 export const STORE = { domain: STORE_DOMAIN };
+
+interface Connection<T> {
+  edges: Array<{ cursor: string; node: T }>;
+  pageInfo: { hasNextPage: boolean };
+}
+
+/**
+ * Follows a paginated connection to completion, calling onPage after each page
+ * so callers can persist progress incrementally (resumability on crash/interrupt).
+ * `query` must accept an `$after: String` variable and request `cursor` on each edge
+ * plus `pageInfo { hasNextPage }` on the connection.
+ */
+export async function paginateAll<T>(
+  query: string,
+  getConnection: (data: unknown) => Connection<T>,
+  onPage: (nodes: T[], pageNum: number) => void | Promise<void>,
+  pageSize = 50
+): Promise<number> {
+  let after: string | null = null;
+  let pageNum = 0;
+  let total = 0;
+
+  for (;;) {
+    const data = await shopifyGraphQL<unknown>(query, { first: pageSize, after });
+    const conn = getConnection(data);
+    pageNum += 1;
+    total += conn.edges.length;
+    await onPage(
+      conn.edges.map((e) => e.node),
+      pageNum
+    );
+    if (!conn.pageInfo.hasNextPage || conn.edges.length === 0) break;
+    after = conn.edges[conn.edges.length - 1].cursor;
+  }
+
+  return total;
+}
