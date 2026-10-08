@@ -74,28 +74,44 @@ collections) — visitors browse by category grouping rather than relying on a s
   build adds instant (no full page reload) filtering by price/metal/type with URL-synced state
   for shareable filtered views.
 - **Checkout:** current cart drawer → Shopify-hosted checkout handoff; new build keeps the drawer
-  but moves checkout fully in-platform (Stripe Elements + Klarna), removing the redirect-to-
-  another-domain step entirely — a direct conversion improvement.
-- **Mobile responsiveness:** audit and tighten the 18-section homepage specifically for mobile
-  scroll length/performance — likely consolidating some adjacent product-list sections rather than
-  removing the catalog-forward strategy itself.
+  but moves checkout to **embedded Stripe Checkout** (Stripe-only, no separate Klarna build — see
+  the migration plan's Phase 5 for the full reasoning), rendered inline on the Jawhara-branded
+  page rather than a redirect to a separate domain — a direct conversion improvement that still
+  gets Stripe's maintained, optimized checkout UI rather than a hand-built payment form.
+- **Mobile responsiveness:** optimize *how* the 18-section homepage loads (code-splitting,
+  lazy-loading below-the-fold sections, responsive images) — **per your explicit instruction, no
+  sections or carousels are removed automatically.** Which sections appear, their order, and
+  their content are controlled entirely through the admin editor below, not trimmed by us.
 - **Reviews:** same visual presentation as Judge.me's current widget (star rating, review count,
   verified-buyer badge) but rendered from our own `reviews` table — no external script, faster
   render, no layout shift while the widget loads.
-- **Admin control:** the basic visual section editor (your requirement) lets you rebuild/reorder
-  this kind of hero + product-list + banner homepage structure yourself, without needing a
-  developer for every merchandising change — matching how you already use it today, just without
-  Shopify.
+- **Admin control — full visual editor, required for launch:** add/remove/reorder every homepage
+  section (drag-and-drop), edit banners/images/headings/text/buttons, manage featured
+  products/collections per section, edit product and collection page content, toggle section
+  visibility, and preview changes before publishing — all without code. This is broader than a
+  typical starter CMS screen, scoped deliberately because that's what actually running an
+  18-section, frequently-merchandised homepage without a developer requires.
 
-## What needs your decision before Phase 4 starts
+## Visual previews — required before implementation (your explicit gate)
+
+Before any production Phase 4 code is written, visual previews are built for your review and
+approval: homepage (desktop + mobile), product page (desktop + mobile), collection page, cart
+drawer, and checkout experience — using real Jawhara products/images already in Supabase, in the
+design language described above. These previews are the actual next deliverable.
+
+## Resolved decisions
 
 1. **Font licensing** — Newsreader is open-source (Google Fonts, free to use anywhere). Red Hat
-   Text is also open-source (Google Fonts). Both can be used directly with no licensing concern —
-   no decision needed here, just confirming for the record.
-2. **Homepage section count** — keep all 18 sections 1:1, or consolidate some of the 8 product-list
-   carousels during the rebuild? Recommend reviewing current analytics (if available) for which
-   carousels actually get engagement before deciding — can revisit once Phase 6 analytics exist.
-3. **Any specific pages/sections not sampled here** you want called out before Phase 4 begins —
+   Text is also open-source (Google Fonts). Both can be used directly with no licensing concern.
+2. **Homepage section count** — all 18 sections preserved, none consolidated or removed. Mobile/
+   performance work optimizes loading, not content. Section mix is yours to change later via the
+   admin editor, not something decided upfront in code.
+3. **Payments** — Stripe only, embedded Checkout. See the migration plan's Phase 5 for the full
+   reasoning behind embedded vs. hosted vs. fully custom.
+
+## Still open
+
+1. **Any specific pages/sections not sampled here** you want called out before Phase 4 begins —
    this doc is based on the homepage, product template, and cart; collection pages, the FAQ page,
    and account pages weren't individually detailed above but are included in the full theme
    extraction for reference.
