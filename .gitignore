@@ -19,3 +19,5 @@ data/media/
 .DS_Store
 *.log
 coverage/
+.vercel
+.env*
