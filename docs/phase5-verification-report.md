@@ -18,9 +18,9 @@ A read-only script called `stripe.accounts.retrieve()` and `stripe.balance.retri
 
 Two real blockers were found and fixed along the way, both in this container's outbound network
 policy, not in your Stripe account:
-- `api.stripe.com` (server-side API calls) — now allowlisted, confirmed via a real round-trip.
-- `js.stripe.com` (the browser-side SDK needed to render the embedded Checkout UI) — **still
-  pending** as of this report; see §8.
+- `api.stripe.com` (server-side API calls) — allowlisted, confirmed via a real round-trip.
+- `js.stripe.com` (the browser-side SDK needed to render the embedded Checkout UI) — allowlisted,
+  confirmed via a real rendered checkout session; see §8.
 
 ## 2. VAT — now a real, changeable setting
 
@@ -111,20 +111,31 @@ while checkout stays flagged off.
 `docs/stripe-webhook-vercel-runbook.md` has the exact Stripe Dashboard steps for registering the
 production webhook once a real Vercel deployment exists. No Vercel project was created or touched.
 
-## 8. Final testing — partially complete, one more allowlist needed
+## 8. Final testing — complete
 
-Playwright against the local dev server (never a public URL), checkout flag enabled only for the
-test process:
+With `js.stripe.com` allowlisted, Playwright against the local dev server (never a public URL),
+checkout flag enabled only for the test process:
 - ✅ Add-to-cart → cart drawer → "Till kassan" (correctly enabled, not showing the disabled
-  "Kassan öppnar snart" state) → navigation to `/kassa` — all confirmed working on desktop.
-- ⏳ **Blocked:** rendering the actual embedded Stripe Checkout UI requires the *browser* (not
-  just the server) to reach `js.stripe.com`, which this container's network policy still denies
-  (confirmed via a real connection attempt, same category of fix as the two earlier ones). Add
-  `js.stripe.com` under environment settings → Network access → Allowed domains, and I'll finish
-  this check (both breakpoints, confirming correct displayed totals/discount/shipping field, never
-  proceeding to card entry).
-- Build-output secret-leak grep re-run clean after every change in this round — no `sk_live_`,
-  `whsec_`, `SUPABASE_SERVICE_ROLE_KEY`, or `RESEND_API_KEY` value in any client bundle.
+  "Kassan öppnar snart" state) → navigation to `/kassa`, on both desktop and mobile viewports.
+- ✅ The real embedded Stripe Checkout UI renders fully and correctly inside the Jawhara-branded
+  page (screenshots captured at both breakpoints): correct product name and price (SEK), the
+  shipping-country field pre-locked to **Sweden** (confirming the SE-only restriction works), a
+  phone field with Swedish formatting, and the real payment methods enabled on your Stripe account
+  (Link, and Card with Visa/Mastercard/Amex/JCB). The card-number field was confirmed still showing
+  its placeholder — **no card details were ever entered, and the Pay button was never clicked.**
+- A genuine, unrelated bug was caught incidentally via the browser console while testing: a React
+  "duplicate key" warning in the footer, because two different footer links (`Kontakta oss` and
+  `Spåra din beställning`) both legitimately point at `/pages/contact` and were keyed by `href`.
+  Pre-existing since Phase 4, unrelated to Stripe — fixed with a one-line key change
+  (`components/layout/footer.tsx`), rebuilt clean.
+- Build-output secret-leak grep re-run clean after every change in this round, including the
+  footer fix — no `sk_live_`, `whsec_`, `SUPABASE_SERVICE_ROLE_KEY`, or `RESEND_API_KEY` value in
+  any client bundle.
+- Noted, not fixed: three Stripe telemetry/fraud-signal domains (`r.stripe.com`,
+  `m.stripe.network`, `errors.stripe.com`) are still blocked by this container's network policy.
+  They don't affect the checkout UI's correctness (confirmed above) and are specific to this dev
+  sandbox, not a real deployment — allowlisting them isn't required to finish Phase 5, only
+  optional for slightly richer fraud-detection signal during further local testing.
 
 ## What this does and does not prove
 
@@ -136,8 +147,8 @@ Nothing in this report should be read as "production-verified" in that sense.
 
 ## Outstanding before Phase 5 is fully done
 
-1. Allowlist `js.stripe.com` so the embedded Checkout UI can be visually verified.
-2. Confirm `jawhara.se`'s sending-domain status in the Resend dashboard.
+1. ~~Allowlist `js.stripe.com`~~ — done, and the embedded Checkout UI is now visually verified.
+2. ~~Confirm `jawhara.se`'s sending-domain status~~ — confirmed verified in Resend.
 3. Review and approve (or request changes to) the three draft email templates.
 4. Decide what to do about the currently-out-of-stock "Valfri Plånbok" wallet pool.
 5. Your explicit, separate go-ahead before `NEXT_PUBLIC_CHECKOUT_ENABLED` is ever set to `true`.

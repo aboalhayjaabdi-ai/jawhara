@@ -26,7 +26,7 @@ function LinkColumn({ heading, links }: { heading: string; links: { title: strin
     <div className="flex flex-col gap-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted">{heading}</div>
       {links.map((l) => (
-        <Link key={l.href} href={l.href} className="text-sm">
+        <Link key={l.title} href={l.href} className="text-sm">
           {l.title}
         </Link>
       ))}
