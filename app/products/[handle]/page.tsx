@@ -33,6 +33,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
     <ProductDetail
       title={product.title}
       handle={product.handle}
+      status={product.status}
       descriptionHtml={product.description_html}
       images={product.images}
       variants={product.variants}

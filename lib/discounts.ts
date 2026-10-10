@@ -1,4 +1,5 @@
 import { supabaseService } from "./supabase/service-client";
+import { isVariantAvailable } from "./inventory";
 
 export type CartLineInput = { variantId: string; qty: number };
 
@@ -6,8 +7,11 @@ type EligibleVariant = {
   variantId: string;
   productId: string;
   productShopifyId: string;
+  productStatus: string;
   price: number;
   inventoryQuantity: number;
+  inventoryTracked: boolean;
+  inventoryPolicy: string | null;
   collectionShopifyIds: string[];
 };
 
@@ -69,7 +73,7 @@ async function loadEligibleVariants(variantIds: string[]): Promise<Map<string, E
   const { data, error } = await supabaseService
     .from("product_variants")
     .select(
-      "id, price, inventory_quantity, product_id, products!inner(id, shopify_id, collection_products(collections(shopify_id)))"
+      "id, price, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(id, shopify_id, status, collection_products(collections(shopify_id)))"
     )
     .in("id", variantIds);
 
@@ -84,8 +88,11 @@ async function loadEligibleVariants(variantIds: string[]): Promise<Map<string, E
       variantId: row.id,
       productId: row.product_id,
       productShopifyId: row.products.shopify_id,
+      productStatus: row.products.status,
       price: Number(row.price),
       inventoryQuantity: row.inventory_quantity,
+      inventoryTracked: row.inventory_tracked,
+      inventoryPolicy: row.inventory_policy,
       collectionShopifyIds,
     });
   }
@@ -139,7 +146,16 @@ export async function computeCheckoutTotals(
     .filter((c) => variantMap.has(c.variantId))
     .map((c) => {
       const v = variantMap.get(c.variantId)!;
-      if (v.inventoryQuantity < c.qty) errors.push(`Otillräckligt lager för en vara i varukorgen.`);
+      if (v.productStatus !== "active") {
+        errors.push("En vara i varukorgen är inte längre tillgänglig.");
+      } else if (
+        !isVariantAvailable(
+          { productStatus: v.productStatus, inventoryTracked: v.inventoryTracked, inventoryPolicy: v.inventoryPolicy, inventoryQuantity: v.inventoryQuantity },
+          c.qty
+        )
+      ) {
+        errors.push("Otillräckligt lager för en vara i varukorgen.");
+      }
       return { variantId: c.variantId, productId: v.productId, qty: c.qty, unitPrice: v.price, lineTotal: v.price * c.qty };
     });
   if (lines.length !== cart.length) errors.push("En eller flera varor i varukorgen kunde inte hittas.");

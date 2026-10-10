@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
+import { isVariantAvailable } from "@/lib/inventory";
 
 type Variant = {
   id: string;
@@ -12,6 +13,8 @@ type Variant = {
   compare_at_price: number | null;
   option1: string | null;
   inventory_quantity: number;
+  inventory_tracked: boolean;
+  inventory_policy: string | null;
 };
 
 type Review = {
@@ -33,6 +36,7 @@ function stars(rating: number) {
 export function ProductDetail({
   title,
   handle,
+  status,
   descriptionHtml,
   images,
   variants,
@@ -41,6 +45,7 @@ export function ProductDetail({
 }: {
   title: string;
   handle: string;
+  status: string;
   descriptionHtml: string | null;
   images: string[];
   variants: Variant[];
@@ -136,10 +141,12 @@ export function ProductDetail({
                 image: images[0] ?? null,
               })
             }
-            disabled={!variant || variant.inventory_quantity <= 0}
+            disabled={!variant || !isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)}
             className="mt-7 flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
-            {variant && variant.inventory_quantity > 0 ? "Lägg till i varukorgen" : "Slut i lager"}
+            {variant && isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)
+              ? "Lägg till i varukorgen"
+              : "Slut i lager"}
           </button>
 
           {descriptionHtml && (

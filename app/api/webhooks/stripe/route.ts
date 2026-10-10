@@ -53,17 +53,32 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const { data: orderItems } = await supabaseService
     .from("order_items")
-    .select("variant_id, quantity")
+    .select("variant_id, quantity, product_variants(inventory_tracked, inventory_policy)")
     .eq("order_id", orderId);
 
   // Atomic, race-safe oversell check: decrement every line item; if ANY fails, nothing can be
   // un-decremented for the ones that already succeeded except by explicitly restoring them, so
   // we restore on partial failure and refund + flag instead of silently confirming an order we
   // can't actually fulfill.
+  //
+  // Three cases per Shopify's own real semantics (see lib/inventory.ts):
+  // - inventory_tracked = false: never touch the row at all. The recorded quantity is
+  //   meaningless for an untracked variant, so there's nothing to decrement or oversell-check.
+  // - tracked + policy CONTINUE: unconditional decrement (force_decrement_inventory), can go
+  //   negative by design -- the merchant explicitly chose to keep selling past zero.
+  // - tracked + policy DENY (the default): the existing strict, atomic decrement_inventory,
+  //   which fails if there isn't enough stock.
   const decremented: { variantId: string; qty: number }[] = [];
   let oversold = false;
   for (const item of orderItems ?? []) {
     if (!item.variant_id) continue;
+    const variant = (item as any).product_variants;
+    if (!variant?.inventory_tracked) continue; // untracked -- never decremented, never oversells
+    if (variant.inventory_policy === "CONTINUE") {
+      await supabaseService.rpc("force_decrement_inventory", { p_variant_id: item.variant_id, p_qty: item.quantity });
+      decremented.push({ variantId: item.variant_id, qty: item.quantity });
+      continue;
+    }
     const { data: ok } = await supabaseService.rpc("decrement_inventory", {
       p_variant_id: item.variant_id,
       p_qty: item.quantity,
@@ -77,9 +92,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   if (oversold) {
-    // Roll back whatever was already decremented in this same pass.
+    // Roll back whatever was already decremented in this same pass. force_decrement_inventory
+    // rows are safe to "roll back" with the same unconditional function (it's just add-back).
     for (const d of decremented) {
-      await supabaseService.rpc("decrement_inventory", { p_variant_id: d.variantId, p_qty: -d.qty });
+      await supabaseService.rpc("force_decrement_inventory", { p_variant_id: d.variantId, p_qty: -d.qty });
     }
     await supabaseService.from("orders").update({ financial_status: "voided", tags: ["oversold-auto-refunded"] }).eq("id", orderId);
     if (typeof session.payment_intent === "string") {
