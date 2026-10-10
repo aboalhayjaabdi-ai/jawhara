@@ -1,14 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCart } from "./cart-provider";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
 }
 
+const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
+
 export function CartDrawer() {
   const { items, isOpen, close, removeItem, setQty, subtotal } = useCart();
+  const router = useRouter();
 
   return (
     <>
@@ -66,10 +70,14 @@ export function CartDrawer() {
             <span className="font-semibold">{formatSek(subtotal)}</span>
           </div>
           <button
-            disabled={items.length === 0}
+            disabled={items.length === 0 || !CHECKOUT_ENABLED}
+            onClick={() => {
+              close();
+              router.push("/kassa");
+            }}
             className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
-            Till kassan
+            {CHECKOUT_ENABLED ? "Till kassan" : "Kassan öppnar snart"}
           </button>
         </div>
       </aside>
