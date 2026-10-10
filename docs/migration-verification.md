@@ -54,3 +54,29 @@ Post-import row counts in Supabase, checked against the Phase 2 extraction count
   menus, locations, markets, media manifest, and the Phase 1 audit snapshot) uploaded to that
   private bucket as the "live copy" backup, in addition to the independent downloadable archive
   delivered directly to the user earlier (outside any infrastructure this project configures).
+
+## Phase 4 preview: content-accuracy verification (2026-10-10)
+
+Following the user's report that some product headings in the visual preview were wrong, every
+hardcoded product entry across all 7 preview files was cross-checked against the authoritative
+`data/exports/products.jsonl`, resolving each image back to its Shopify product ID.
+
+- **26 distinct products referenced across the 7 preview files; 0 unresolved** (every image
+  resolved to a real product ID, every product ID found in `products.jsonl`).
+- **One root-cause bug found:** the homepage "Noellé Väskor Mini" / "Väskor" carousels
+  (`Main.dc.html`, `Homepage-Mobile.dc.html`) showed 5 card instances all mislabeled "Noelle mini
+  väska" at a flat fabricated 349 kr — the images were actually Klöver smyckesset, Love armband,
+  Love ring, and Astra örhänge (each correctly labeled everywhere else they appear).
+  **Fixed:** all 5 card instances now use real photos of the genuine "Noélle Väska Mini" product
+  (5 duplicate Shopify listings sharing one media set in `data/media/11059283919186/`), titled
+  "Noélle Väska Mini", priced 799 kr (real price from `products.jsonl`; this grid's card template
+  does not render a compare-at price for any entry, so the real 1599 kr compare-at is not shown
+  here but is not misstated either).
+- **One price-only mismatch fixed:** "H sminkväska" showed a flat fabricated 299 kr; corrected to
+  the real 239 kr.
+- **Checked and confirmed NOT a bug:** "Klöver ring" appearing twice (productIds 11130010665298 /
+  11130011713874) — both are genuinely independent Shopify listings named exactly that. Same
+  confirmed for "Love armband", "Klöver Halsband", "Klöver armband", and "H armband smal" each
+  legitimately appearing twice under the same name for two different real product IDs.
+- Republished to the artifact (version 13) with both fixes applied and verified via grep that no
+  residual "Noelle mini väska" or "349 kr" strings remain in either file.
