@@ -2,6 +2,12 @@
 const supabaseHostname = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co").hostname;
 
 const nextConfig = {
+  // middleware.ts needs the Node.js runtime (not the default Edge runtime) because it imports
+  // undici to route through this environment's required outbound proxy -- Edge Runtime's fetch
+  // can't be proxied that way at all, and can't bundle Node built-ins like node:dns either.
+  experimental: {
+    nodeMiddleware: true,
+  },
   async redirects() {
     return [
       // Old Shopify URL preservation. Product/collection/page paths already match
