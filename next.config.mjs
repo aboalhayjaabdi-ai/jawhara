@@ -2,6 +2,16 @@
 const supabaseHostname = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co").hostname;
 
 const nextConfig = {
+  async redirects() {
+    return [
+      // Old Shopify URL preservation. Product/collection/page paths already match
+      // Shopify's own URL scheme exactly (no redirect needed, see
+      // docs/migration-verification.md). This one real exception: the ParcelPanel
+      // order-tracking app isn't migrated yet (later-phase work), so its old URL
+      // would otherwise 404 -- send it to Contact in the meantime.
+      { source: "/apps/parcelpanel", destination: "/pages/contact", permanent: false },
+    ];
+  },
   images: {
     remotePatterns: [
       {

@@ -74,7 +74,9 @@ export function ProductDetail({
             ))}
           </div>
           <div className="relative flex-1 aspect-[1/1.25] overflow-hidden bg-[#f4f4f4]">
-            {images[0] && <Image src={images[0]} alt={title} fill priority className="object-cover" />}
+            {images[0] && (
+              <Image src={images[0]} alt={title} fill priority sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover" />
+            )}
             {onSale && (
               <div className="absolute left-4 top-4 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
                 Rea

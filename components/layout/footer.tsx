@@ -4,7 +4,10 @@ import Link from "next/link";
 const FOOTER_LINKS = [
   { title: "Startsida", href: "/pages/startsida" },
   { title: "Kontakta oss", href: "/pages/contact" },
-  { title: "Spåra din beställning", href: "/apps/parcelpanel" },
+  // Real link was the ParcelPanel order-tracking app (/apps/parcelpanel) -- that's a
+  // third-party logistics integration not yet migrated (later-phase work), so it would
+  // 404 today. Pointing it at Contact in the meantime rather than leaving a dead link.
+  { title: "Spåra din beställning", href: "/pages/contact" },
   { title: "Vanliga frågor", href: "/pages/vanliga-fragor" },
 ];
 const ABOUT_LINKS = [{ title: "Om oss", href: "/pages/om-oss" }];

@@ -19,7 +19,8 @@ const redHatText = Red_Hat_Text({
 });
 
 export const metadata: Metadata = {
-  title: "Jawhara",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se"),
+  title: { default: "Jawhara", template: "%s | Jawhara" },
   description: "Jawhara — smycken och accessoarer",
 };
 

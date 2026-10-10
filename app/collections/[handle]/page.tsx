@@ -1,11 +1,26 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getAllProductCards, getCollectionMeta, getCollectionProductCards, getCollectionProductCount } from "@/lib/queries";
 import { ProductCard } from "@/components/product/product-card";
 
 export const revalidate = 60;
 
 const PAGE_SIZE = 24;
+
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+  const { handle } = await params;
+  if (handle === "all") {
+    // Shopify's reserved /collections/all route has no backing collection row, so no
+    // real SEO title/description exists for it in the export -- see docs for this gap.
+    return { title: "Alla produkter", alternates: { canonical: "/collections/all" } };
+  }
+  const meta = await getCollectionMeta(handle);
+  if (!meta) return {};
+  const title = meta.seo_title || meta.title;
+  const description = meta.seo_description || (meta.description_html ? meta.description_html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) : undefined);
+  return { title, description, alternates: { canonical: `/collections/${handle}` } };
+}
 
 export default async function CollectionPage({
   params,

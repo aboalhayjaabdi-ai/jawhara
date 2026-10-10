@@ -33,9 +33,9 @@ export function ComparisonSlider({
           onMouseMove={(e) => e.buttons === 1 && handleMove(e.clientX)}
           onTouchMove={(e) => handleMove(e.touches[0].clientX)}
         >
-          <Image src={afterImage} alt="" fill className="object-cover" />
+          <Image src={afterImage} alt="" fill sizes="(min-width: 900px) 900px, 100vw" className="object-cover" />
           <div className="absolute inset-0 overflow-hidden" style={{ width: `${position}%` }}>
-            <Image src={beforeImage} alt="" fill className="object-cover" />
+            <Image src={beforeImage} alt="" fill sizes="(min-width: 900px) 900px, 100vw" className="object-cover" />
           </div>
           <div className="absolute inset-y-0 w-0.5 bg-bg" style={{ left: `${position}%` }}>
             <div className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-bg">

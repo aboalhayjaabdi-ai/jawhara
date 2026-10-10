@@ -16,7 +16,7 @@ export async function FeaturedProductSection({ handle }: { handle: string }) {
       <div className="mx-auto grid max-w-[1328px] items-center gap-10 bg-[#f7f7f7] lg:grid-cols-2 lg:gap-16">
         {product.images[0] && (
           <div className="relative h-[320px] lg:h-[520px]">
-            <Image src={product.images[0]} alt={product.title} fill className="object-cover" />
+            <Image src={product.images[0]} alt={product.title} fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
           </div>
         )}
         <div className="px-6 pb-10 lg:pb-0 lg:pr-14">

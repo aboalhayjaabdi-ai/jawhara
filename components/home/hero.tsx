@@ -13,8 +13,8 @@ export function Hero(props: HeroProps) {
   const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px" } = props;
   return (
     <div className="relative overflow-hidden" style={{ height }}>
-      <Image src={mobileImage ?? desktopImage} alt="" fill priority className="object-cover md:hidden" />
-      <Image src={desktopImage} alt="" fill priority className="hidden object-cover md:block" />
+      <Image src={mobileImage ?? desktopImage} alt="" fill priority sizes="100vw" className="object-cover md:hidden" />
+      <Image src={desktopImage} alt="" fill priority sizes="100vw" className="hidden object-cover md:block" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
 
       {props.variant === "centered-cta" ? (

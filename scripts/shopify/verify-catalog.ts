@@ -36,7 +36,9 @@ const dbVariants = await runSql<any[]>(`select shopify_id, product_id, (select s
   from product_variants`);
 const dbMedia = await runSql<any[]>(`select m.shopify_id, m.product_id, p.shopify_id as product_shopify_id, m.storage_path, m.position, m.width, m.height
   from media m join products p on p.id = m.product_id order by p.shopify_id, m.position`);
-const dbCollections = await runSql<any[]>(`select shopify_id, title, handle, description_html, sort_order, image_url from collections`);
+const dbCollections = await runSql<any[]>(
+  `select shopify_id, title, handle, description_html, sort_order, image_url, seo_title, seo_description from collections`
+);
 const dbCollectionProducts = await runSql<any[]>(`select c.shopify_id as collection_shopify_id, p.shopify_id as product_shopify_id, cp.position
   from collection_products cp join collections c on c.id = cp.collection_id join products p on p.id = cp.product_id
   order by c.shopify_id, cp.position`);
@@ -166,6 +168,8 @@ for (const c of collections) {
     ["description_html", c.descriptionHtml || null, row.description_html],
     ["sort_order", c.sortOrder, row.sort_order],
     ["image_url", c.image?.url ?? null, row.image_url],
+    ["seo_title", c.seo?.title ?? null, row.seo_title],
+    ["seo_description", c.seo?.description ?? null, row.seo_description],
   ];
   for (const [field, expected, actual] of checks) {
     if (expected !== actual) flag("collection", sid, c.title, field, expected, actual);
