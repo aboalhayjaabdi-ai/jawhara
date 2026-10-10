@@ -3,11 +3,13 @@
 // section templates (same architecture as the homepage). Extracted from
 // data/exports/pages.jsonl and data/exports/theme/templates/page.*.json.
 //
-// Flagged items requiring your decision (left verbatim, NOT silently corrected):
-// - Integritetspolicy (anvandarvillkor) body references "popiq.se" instead of jawhara.se --
-//   almost certainly a leftover from whatever privacy-policy template this was built from.
-// - Köpvillkor's "BYTE" section has a mailto:support@jawhara.se link whose VISIBLE text reads
-//   "support@jawharalondon.com" -- a different, unrelated address.
+// Two content inconsistencies were found, flagged, and resolved per explicit user approval
+// (2026-10-10), not silently corrected:
+// - Integritetspolicy referenced "popiq.se" instead of jawhara.se (a leftover from whatever
+//   privacy-policy template this was built from) -- fixed, domain only, approved as-is.
+// - Köpvillkor's "BYTE" section had a mailto:support@jawhara.se link whose VISIBLE text read
+//   "support@jawharalondon.com" -- display text corrected to match the real address, approved.
+//
 // - "jawhara-luxury-jewelry-landing-page" (unlinked from any menu, English copy, fabricated
 //   "As Seen In VOGUE/Harper's Bazaar" press mentions and a testimonial) was NOT migrated --
 //   it reads as placeholder/demo content from a page-builder app, not real approved copy.
@@ -82,7 +84,7 @@ export const PAGES: Record<string, PageContent> = {
 <p>Observera att kunden står för returkostnaden på 49 kr, vilken dras av från återbetalningsbeloppet.</p>
 <h5>BYTE</h5>
 <p>Om du istället önskar byta din produkt är du varmt välkommen att kontakta oss, så ordnar vi bytet åt dig. Observera att fria byten endast gäller smycken.<br><br>Maila oss på: </p>
-<p><a href="mailto:support@jawhara.se">support@jawharalondon.com</a>. </p>
+<p><a href="mailto:support@jawhara.se">support@jawhara.se</a>. </p>
 <h4>UTNYTTJANDE AV ÖPPET KÖP</h4>
 <p>Om det finns rimliga skäl att misstänka att en kund missbrukar möjligheten till öppet köp på ett ohållbart sätt, har JAWHARA rätt att avbryta pågående beställningar och/eller pausa kunden från framtida köp.</p>
 <p>Observera att detta endast gäller fall där beteendet är systematiskt och kan därmed inte tillämpas på slumpmässiga eller enskilda fall.</p>
@@ -122,7 +124,7 @@ export const PAGES: Record<string, PageContent> = {
     type: "html",
     title: "Integritetspolicy",
     bodyHtml: `
-<p>Denna integritetspolicy beskriver hur JAWHARA (webbplatsen, vi) samlar in, använder och delar dina personuppgifter vid dina besök, när du använder våra tjänster eller köper från popiq.se (webbplatsen) eller på annat sätt kommunicerar med oss angående webbplatsen (tillsammans kallade tjänsterna). Användningen av du/dina (mfl.) i den här integritetspolicyn avser dig som användare av tjänsterna, oavsett om du är kund, webbplatsbesökare eller annan person som vi har samlat in uppgifter om enligt denna integritetspolicy.</p>
+<p>Denna integritetspolicy beskriver hur JAWHARA (webbplatsen, vi) samlar in, använder och delar dina personuppgifter vid dina besök, när du använder våra tjänster eller köper från jawhara.se (webbplatsen) eller på annat sätt kommunicerar med oss angående webbplatsen (tillsammans kallade tjänsterna). Användningen av du/dina (mfl.) i den här integritetspolicyn avser dig som användare av tjänsterna, oavsett om du är kund, webbplatsbesökare eller annan person som vi har samlat in uppgifter om enligt denna integritetspolicy.</p>
 <p>Vi rekommenderar att du läser denna integritetspolicy noggrant.</p>
 <h4>Ändringar av denna integritetspolicy</h4>
 <p>Vi kan emellanåt uppdatera denna integritetspolicy, till exempel för att den ska överensstämma med nya rutiner eller på grund av andra driftmässiga, juridiska eller lagstiftningsmässiga skäl. Den reviderade integritetspolicyn kommer att publiceras på webbplatsen, vilket framgår av angivet datum vid "Senast uppdaterad", samt vidta eventuella andra åtgärder som krävs enligt tillämplig lag.</p>
