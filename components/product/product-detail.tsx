@@ -1,11 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
 import { getProductTemplateContent } from "@/lib/product-templates";
+import { addRecentlyViewed } from "@/lib/recently-viewed";
+import { ProductGallery } from "@/components/product/product-gallery";
 
 type Variant = {
   id: string;
@@ -35,6 +36,18 @@ function stars(rating: number) {
   return "★".repeat(Math.round(rating)) + "☆".repeat(5 - Math.round(rating));
 }
 
+// Real theme: blocks/product-inventory.liquid, threshold 10, show_inventory_quantity true.
+// Untracked variants never show a quantity or low-stock warning -- just "I lager".
+const INVENTORY_LOW_STOCK_THRESHOLD = 10;
+
+function inventoryStatusText(v: Variant): string {
+  if (!v.inventory_tracked) return "I lager";
+  if (v.inventory_quantity > INVENTORY_LOW_STOCK_THRESHOLD) return "I lager";
+  if (v.inventory_quantity > 0) return `${v.inventory_quantity} kvar`;
+  if (v.inventory_policy === "CONTINUE") return "I lager";
+  return "Slut i lager";
+}
+
 function AccordionRow({ heading, body, defaultOpen = false }: { heading: string; body: string; defaultOpen?: boolean }) {
   return (
     <details className="group border-b border-line py-4" open={defaultOpen}>
@@ -59,6 +72,7 @@ export function ProductDetail({
   sizeOptions,
   reviews,
   templateSuffix,
+  relatedProducts,
 }: {
   title: string;
   handle: string;
@@ -69,6 +83,7 @@ export function ProductDetail({
   sizeOptions: string[];
   reviews: Review[];
   templateSuffix: string | null;
+  relatedProducts: React.ReactNode;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCart();
@@ -82,6 +97,24 @@ export function ProductDetail({
   const onSale = variant?.compare_at_price != null && variant.compare_at_price > variant.price;
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
 
+  useEffect(() => {
+    if (!variant) return;
+    addRecentlyViewed({
+      title,
+      handle,
+      image: images[0] ?? null,
+      price: variant.price,
+      compareAtPrice: variant.compare_at_price,
+      sku: variant.sku,
+      available: isVariantAvailable(
+        { productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity },
+        1
+      ),
+      quickAddVariantId: variants.length === 1 ? variants[0].id : null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle]);
+
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-7 lg:px-14">
       <div className="mb-3 text-xs text-muted">
@@ -89,24 +122,13 @@ export function ProductDetail({
       </div>
 
       <div className="grid gap-16 lg:grid-cols-[1fr_440px]">
-        <div className="flex gap-4">
-          <div className="hidden w-[76px] flex-shrink-0 flex-col gap-3 lg:flex">
-            {images.map((img) => (
-              <div key={img} className="aspect-[1/1.25] overflow-hidden border border-line bg-[#f4f4f4]">
-                <Image src={img} alt={title} width={76} height={95} className="h-full w-full object-cover" />
-              </div>
-            ))}
-          </div>
-          <div className="relative flex-1 aspect-[1/1.25] overflow-hidden bg-[#f4f4f4]">
-            {images[0] && (
-              <Image src={images[0]} alt={title} fill priority sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover" />
-            )}
-            {onSale && (
-              <div className="absolute left-4 top-4 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
-                Rea
-              </div>
-            )}
-          </div>
+        <div className="relative">
+          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} />
+          {onSale && (
+            <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
+              Rea
+            </div>
+          )}
         </div>
 
         <div>
@@ -163,6 +185,10 @@ export function ProductDetail({
               <div className="text-sm font-semibold">{content.offerMessage.heading}</div>
               <p className="mt-1.5 text-xs leading-6 text-muted">{content.offerMessage.body}</p>
             </div>
+          )}
+
+          {content?.showInventoryStatus && variant && status === "active" && (
+            <div className="mt-3 text-xs text-muted">{inventoryStatusText(variant)}</div>
           )}
 
           <button
@@ -246,6 +272,8 @@ export function ProductDetail({
           </div>
         </div>
       )}
+
+      {relatedProducts}
 
       {content?.faq && (
         <div className="mt-16 border-t border-line pt-14">

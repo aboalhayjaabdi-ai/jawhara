@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { searchProductCards } from "@/lib/queries";
 import { ProductCard } from "@/components/product/product-card";
+import { RecentlyViewed } from "@/components/search/recently-viewed";
 
 export const metadata: Metadata = { title: "Sök" };
 
@@ -39,6 +40,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           ))}
         </div>
       )}
+
+      {!query && <RecentlyViewed />}
     </div>
   );
 }

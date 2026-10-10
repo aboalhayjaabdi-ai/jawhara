@@ -28,6 +28,13 @@ export type ProductTemplateContent = {
   accordionRows: AccordionRow[];
   sizeGuideHref: string | null;
   offerMessage: { heading: string; body: string } | null;
+  // Real theme: blocks/product-inventory.liquid, placed on 7/9 templates (absent on skal/default).
+  // Drives the "I lager" / "{count} kvar" / "Slut i lager" messaging -- see product-detail.tsx.
+  showInventoryStatus: boolean;
+  // Real theme: _product-media-gallery block's media_presentation setting. Only armband/vaskor are
+  // "carousel" (swipeable at every breakpoint); every other template is "grid" (a static stacked
+  // grid on desktop that becomes the same swipeable carousel below the 1024px breakpoint).
+  galleryLayout: "carousel" | "grid";
 };
 
 const JEWELRY_TRUST_LINES = ["14 dagars öppet köp", "Fri frakt & Fria byten", "Betala säkert med Klarna", "Vattentåligt & nickelfritt"];
@@ -82,6 +89,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "carousel",
   },
 
   halsband: {
@@ -99,6 +108,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "grid",
   },
 
   orhangen: {
@@ -116,6 +127,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "grid",
   },
 
   ringar: {
@@ -133,6 +146,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: "/pages/ringstorlek",
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "grid",
   },
 
   vaskor: {
@@ -153,6 +168,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "carousel",
   },
 
   "erbjudande-vaskor": {
@@ -174,6 +191,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
       heading: "Få en valfri plånbok på köpet!",
       body: "Lägg väskan och en valfri plånbok från kategorin Tillbehör i kundvagnen – plånboken blir gratis.",
     },
+    showInventoryStatus: true,
+    galleryLayout: "grid",
   },
 
   planbok: {
@@ -185,6 +204,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     accordionRows: [], // real template: only the dynamic description row -- nothing static to add
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: true,
+    galleryLayout: "grid",
   },
 
   // "RH skal" -- one-off bespoke template; the real theme's own marketing copy existed only here
@@ -205,6 +226,8 @@ export const PRODUCT_TEMPLATES: Record<string, ProductTemplateContent> = {
     ],
     sizeGuideHref: null,
     offerMessage: null,
+    showInventoryStatus: false,
+    galleryLayout: "grid",
   },
 };
 

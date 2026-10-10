@@ -21,6 +21,15 @@ const config: Config = {
         DEFAULT: "0px",
         full: "9999px", // kept only for circular icon buttons, not cards/inputs/badges
       },
+      keyframes: {
+        marquee: { to: { transform: "translateX(-50%)" } },
+      },
+      animation: {
+        // Real theme: right-to-left CSS transform loop over duplicated content, see
+        // components/home/marquee.tsx. Fixed duration -- the real site computes this
+        // dynamically per viewport, which doesn't port cleanly to a static component.
+        marquee: "marquee 20s linear infinite",
+      },
     },
   },
   plugins: [],

@@ -1,16 +1,21 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 export function ComparisonSlider({
   beforeImage,
   afterImage,
   heading,
+  buttonText,
+  buttonHref,
 }: {
   beforeImage: string;
   afterImage: string;
   heading?: string;
+  buttonText?: string;
+  buttonHref?: string;
 }) {
   const [position, setPosition] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,6 +50,13 @@ export function ComparisonSlider({
             </div>
           </div>
         </div>
+        {buttonText && buttonHref && (
+          <div className="mt-8 text-center">
+            <Link href={buttonHref} className="inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
+              {buttonText}
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );

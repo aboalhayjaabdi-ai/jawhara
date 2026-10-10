@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getProductByHandle } from "@/lib/queries";
 import { ProductDetail } from "@/components/product/product-detail";
+import { RelatedProducts } from "@/components/product/related-products";
 
 export const revalidate = 60;
 
@@ -40,6 +41,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       sizeOptions={product.sizeOptions}
       reviews={product.reviews}
       templateSuffix={product.template_suffix}
+      relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
     />
   );
 }

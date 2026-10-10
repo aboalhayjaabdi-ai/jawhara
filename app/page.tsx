@@ -59,7 +59,13 @@ export default function HomePage() {
 
       <ProductListSection collectionHandle="orhangen-copy" heading="Alla Örhängen" limit={6} layout="carousel" />
 
-      <ComparisonSlider beforeImage="/brand/comparison-before.png" afterImage="/brand/comparison-after.png" />
+      <ComparisonSlider
+        beforeImage="/brand/comparison-before.png"
+        afterImage="/brand/comparison-after.png"
+        heading="Smycken som du faktiskt gillar"
+        buttonText="KÖP NU"
+        buttonHref="/collections/all"
+      />
 
       <ProductListSection collectionHandle="guld-halsband" heading="Guld halsband" limit={6} layout="carousel" />
 
