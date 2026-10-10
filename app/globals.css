@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Zero-radius shape language (docs/design-spec.md) is the Tailwind default
+   via tailwind.config.ts; `rounded-full` remains available for genuinely
+   circular elements (cart count bubble, carousel dots). */
+
+body {
+  background: #ffffff;
+  color: #000000;
+}
+
+input,
+button {
+  border-radius: 0;
+}
