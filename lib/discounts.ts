@@ -47,11 +47,22 @@ export type CheckoutTotals = {
   subtotal: number;
   appliedDiscounts: AppliedDiscountLine[];
   discountTotal: number;
-  vat: 0; // explicit user decision 2026-10-10: no VAT on any products
+  vat: number; // from store_settings.vat_rate_percent -- a changeable setting, not a code constant
   shipping: 0; // confirmed real store behavior: always free, no minimum
   total: number;
   errors: string[]; // e.g. invalid code, out of stock -- caller decides whether to block checkout
 };
+
+/**
+ * Single global VAT rate applied to the subtotal, not per-product -- there's no trustworthy
+ * per-product tax rate in the real Shopify data to differentiate on (only a binary `taxable`
+ * flag, inconsistently used in just 42/788 variants and 2/286 real orders). Defaults to 0% (the
+ * explicit user decision of 2026-10-10) if the setting row is ever missing.
+ */
+async function getVatRatePercent(): Promise<number> {
+  const { data } = await supabaseService.from("store_settings").select("value").eq("key", "vat_rate_percent").single();
+  return Number(data?.value ?? 0);
+}
 
 /** Re-fetches real price/inventory/collection-membership from Supabase -- never trusts client-supplied values. */
 async function loadEligibleVariants(variantIds: string[]): Promise<Map<string, EligibleVariant>> {
@@ -225,7 +236,10 @@ export async function computeCheckoutTotals(
   }
 
   const discountTotal = Math.round(appliedDiscounts.reduce((sum, a) => sum + a.amountOff, 0) * 100) / 100;
-  const total = Math.max(0, Math.round((subtotal - discountTotal) * 100) / 100);
+  const taxableAmount = Math.max(0, subtotal - discountTotal);
+  const vatRatePercent = await getVatRatePercent();
+  const vat = Math.round(taxableAmount * (vatRatePercent / 100) * 100) / 100;
+  const total = Math.round((taxableAmount + vat) * 100) / 100;
 
-  return { lines, subtotal, appliedDiscounts, discountTotal, vat: 0, shipping: 0, total, errors };
+  return { lines, subtotal, appliedDiscounts, discountTotal, vat, shipping: 0, total, errors };
 }

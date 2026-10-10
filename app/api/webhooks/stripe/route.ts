@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendOrderConfirmationEmail } from "@/lib/email/order-confirmation";
+import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
@@ -91,9 +92,39 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // Shipping address: session.shipping_details is the field populated for this pinned API version
+  // (2025-02-24.acacia); collected_information.shipping_details is a newer-API-version alternate
+  // shape, kept as a fallback for forward compatibility if Stripe ever changes what's populated.
+  const shippingDetails = session.shipping_details ?? (session as any).collected_information?.shipping_details ?? null;
+  const shippingAddress = shippingDetails?.address;
+  let shippingAddressId: string | null = null;
+  if (shippingAddress) {
+    const { data: addressRow } = await supabaseService
+      .from("addresses")
+      .insert({
+        order_id: orderId,
+        first_name: shippingDetails?.name ?? null,
+        address1: shippingAddress.line1 ?? null,
+        address2: shippingAddress.line2 ?? null,
+        city: shippingAddress.city ?? null,
+        province: shippingAddress.state ?? null,
+        zip: shippingAddress.postal_code ?? null,
+        country_code: shippingAddress.country ?? null,
+        phone: shippingDetails?.phone ?? session.customer_details?.phone ?? null,
+      })
+      .select("id")
+      .single();
+    shippingAddressId = addressRow?.id ?? null;
+  }
+
   await supabaseService
     .from("orders")
-    .update({ financial_status: "paid", processed_at: new Date().toISOString() })
+    .update({
+      financial_status: "paid",
+      processed_at: new Date().toISOString(),
+      shipping_address_id: shippingAddressId,
+      phone: shippingDetails?.phone ?? session.customer_details?.phone ?? null,
+    })
     .eq("id", orderId);
 
   const stripeCustomerId = typeof session.customer === "string" ? session.customer : null;
@@ -120,12 +151,29 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     });
   }
 
-  const { data: order } = await supabaseService.from("orders").select("order_number, email, total_price").eq("id", orderId).single();
+  const { data: order } = await supabaseService
+    .from("orders")
+    .select("order_number, email, subtotal_price, total_discounts, total_tax, total_shipping, total_price")
+    .eq("id", orderId)
+    .single();
+  const { data: items } = await supabaseService.from("order_items").select("title, quantity, unit_price").eq("order_id", orderId);
+  const { data: addressRow } = shippingAddressId
+    ? await supabaseService.from("addresses").select("first_name, address1, address2, city, zip, country_code").eq("id", shippingAddressId).single()
+    : { data: null };
+
   if (order?.email) {
     await sendOrderConfirmationEmail({
       to: order.email,
       orderNumber: order.order_number,
+      items: (items ?? []).map((i) => ({ title: i.title, qty: i.quantity, unitPrice: Number(i.unit_price) })),
+      subtotal: Number(order.subtotal_price ?? 0),
+      discountTotal: Number(order.total_discounts ?? 0),
+      vat: Number(order.total_tax ?? 0),
+      shipping: Number(order.total_shipping ?? 0),
       total: Number(order.total_price),
+      shippingAddress: addressRow
+        ? { name: addressRow.first_name, address1: addressRow.address1, address2: addressRow.address2, city: addressRow.city, zip: addressRow.zip, country: addressRow.country_code }
+        : null,
     });
   }
 }
@@ -148,5 +196,10 @@ async function handleRefund(charge: Stripe.Charge) {
     .single();
   if (payment) {
     await supabaseService.from("refunds").insert({ order_id: payment.order_id, amount: payment.amount });
+
+    const { data: order } = await supabaseService.from("orders").select("order_number, email").eq("id", payment.order_id).single();
+    if (order?.email) {
+      await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: Number(payment.amount) });
+    }
   }
 }

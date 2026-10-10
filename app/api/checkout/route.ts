@@ -79,25 +79,44 @@ export async function POST(req: NextRequest) {
     },
   }));
 
-  // Discounts are applied as a single negative line item rather than Stripe coupons, since
-  // the eligible amount was already computed server-side from the real BXGY/percentage rules
-  // above -- Stripe just needs the final correct total, not to re-derive it.
-  if (totals.discountTotal > 0) {
+  // VAT (store_settings-configurable, 0% today) as its own positive line item, since Stripe
+  // line items can't be negative-adjusted for it either.
+  if (totals.vat > 0) {
     lineItems.push({
       quantity: 1,
       price_data: {
         currency: "sek",
-        unit_amount: -Math.round(totals.discountTotal * 100),
-        product_data: { name: `Rabatt (${totals.appliedDiscounts.map((d) => d.title).join(", ")})` },
+        unit_amount: Math.round(totals.vat * 100),
+        product_data: { name: "Moms" },
       },
     });
+  }
+
+  // Discounts: Stripe's price_data.unit_amount must be a non-negative integer -- a negative
+  // line item (the original approach here) is rejected outright by the API. The eligible amount
+  // was already computed server-side from the real BXGY/percentage rules above, so Stripe only
+  // needs to apply that final figure, via an ad-hoc one-time Coupon rather than re-deriving it.
+  let discounts: { coupon: string }[] | undefined;
+  if (totals.discountTotal > 0) {
+    const coupon = await stripe.coupons.create({
+      amount_off: Math.round(totals.discountTotal * 100),
+      currency: "sek",
+      duration: "once",
+      name: totals.appliedDiscounts.map((d) => d.title).join(", ").slice(0, 40),
+    });
+    discounts = [{ coupon: coupon.id }];
   }
 
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
     mode: "payment",
     line_items: lineItems,
+    discounts,
     customer_email: email,
+    // SE-only per explicit user decision -- matches 100% of real historical order history
+    // (Denmark is a configured-but-never-used Shopify market); widen later with one line.
+    shipping_address_collection: { allowed_countries: ["SE"] },
+    phone_number_collection: { enabled: true },
     metadata: {
       order_id: order.id,
       applied_discount_ids: JSON.stringify(totals.appliedDiscounts.map((d) => d.discountId)),
