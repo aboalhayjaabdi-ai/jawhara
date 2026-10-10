@@ -50,6 +50,7 @@ export default function HomePage() {
       <Hero
         variant="split-bottom"
         desktopImage="/brand/hero2-desktop.png"
+        mobileImage="/brand/hero2-mobile.png"
         buttonText="Handla nu"
         buttonHref="/collections/all"
         heading={"Premiummaterial och\nnoggrant utvalda detaljer"}

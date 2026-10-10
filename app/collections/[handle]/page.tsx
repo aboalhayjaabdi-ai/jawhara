@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getAllProductCards, getCollectionMeta, getCollectionProductCards, getCollectionProductCount } from "@/lib/queries";
 import { ProductCard } from "@/components/product/product-card";
+import { SubcategoryTiles } from "@/components/collection/subcategory-tiles";
 
 export const revalidate = 60;
 
@@ -48,7 +49,17 @@ export default async function CollectionPage({
     getCollectionProductCount(handle),
   ]);
 
-  return <CollectionGrid title={meta.title} description={meta.description_html} products={products} total={total} page={page} handle={handle} />;
+  return (
+    <CollectionGrid
+      title={meta.title}
+      description={meta.description_html}
+      products={products}
+      total={total}
+      page={page}
+      handle={handle}
+      templateSuffix={meta.template_suffix}
+    />
+  );
 }
 
 function CollectionGrid({
@@ -58,6 +69,7 @@ function CollectionGrid({
   total,
   page,
   handle,
+  templateSuffix = null,
 }: {
   title: string;
   description: string | null;
@@ -65,6 +77,7 @@ function CollectionGrid({
   total: number;
   page: number;
   handle: string;
+  templateSuffix?: string | null;
 }) {
   const hasNextPage = page * PAGE_SIZE < total;
   return (
@@ -76,6 +89,8 @@ function CollectionGrid({
         <h1 className="mt-3 text-4xl">{title}</h1>
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
       </div>
+
+      <SubcategoryTiles templateSuffix={templateSuffix} />
 
       <div className="grid grid-cols-2 gap-6 border-t border-line pt-10 lg:grid-cols-4 lg:gap-7">
         {products.map((p: any) => (

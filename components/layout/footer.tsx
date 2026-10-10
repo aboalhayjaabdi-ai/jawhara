@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NewsletterSignup } from "@/components/layout/newsletter-signup";
 
 // Real footer/social menus, from data/exports/menus.jsonl (handles: footer, connect, om-oss, villkor).
 const FOOTER_LINKS = [
@@ -37,11 +38,14 @@ function LinkColumn({ heading, links }: { heading: string; links: { title: strin
 export function Footer() {
   return (
     <footer className="border-t border-line bg-bg">
-      <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-10 px-6 py-16 lg:grid-cols-4 lg:px-14">
+      <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-10 px-6 py-16 lg:grid-cols-5 lg:px-14">
         <LinkColumn heading="Hjälp" links={FOOTER_LINKS} />
         <LinkColumn heading="Om Jawhara" links={ABOUT_LINKS} />
         <LinkColumn heading="Villkor" links={TERMS_LINKS} />
         <LinkColumn heading="Följ oss" links={SOCIAL_LINKS} />
+        <div className="col-span-2 lg:col-span-1">
+          <NewsletterSignup />
+        </div>
       </div>
       <div className="border-t border-line px-6 py-6 text-center text-xs text-muted lg:px-14">
         © {new Date().getFullYear()} Jawhara

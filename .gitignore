@@ -21,3 +21,4 @@ data/media/
 coverage/
 .vercel
 .env*
+*.tsbuildinfo

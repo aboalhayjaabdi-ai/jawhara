@@ -21,6 +21,7 @@ export async function FeaturedProductSection({ handle }: { handle: string }) {
         )}
         <div className="px-6 pb-10 lg:pb-0 lg:pr-14">
           <h2 className="text-[32px]">{product.title}</h2>
+          {variant?.sku && <div className="mt-1 text-xs text-muted">{variant.sku}</div>}
           {product.description_html && (
             <div
               className="mt-4 max-w-sm text-muted [&_p]:leading-7"

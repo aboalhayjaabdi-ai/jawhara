@@ -39,6 +39,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variants={product.variants}
       sizeOptions={product.sizeOptions}
       reviews={product.reviews}
+      templateSuffix={product.template_suffix}
     />
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
+import { getProductTemplateContent } from "@/lib/product-templates";
 
 type Variant = {
   id: string;
@@ -33,6 +35,20 @@ function stars(rating: number) {
   return "★".repeat(Math.round(rating)) + "☆".repeat(5 - Math.round(rating));
 }
 
+function AccordionRow({ heading, body, defaultOpen = false }: { heading: string; body: string; defaultOpen?: boolean }) {
+  return (
+    <details className="group border-b border-line py-4" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold uppercase tracking-wide">
+        {heading}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="transition-transform group-open:rotate-180" aria-hidden>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </summary>
+      <div className="mt-3 text-[13px] leading-7 text-muted [&_p]:mb-2" dangerouslySetInnerHTML={{ __html: body }} />
+    </details>
+  );
+}
+
 export function ProductDetail({
   title,
   handle,
@@ -42,6 +58,7 @@ export function ProductDetail({
   variants,
   sizeOptions,
   reviews,
+  templateSuffix,
 }: {
   title: string;
   handle: string;
@@ -51,9 +68,11 @@ export function ProductDetail({
   variants: Variant[];
   sizeOptions: string[];
   reviews: Review[];
+  templateSuffix: string | null;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCart();
+  const content = getProductTemplateContent(templateSuffix);
 
   const variant = useMemo(() => {
     if (!sizeOptions.length) return variants[0];
@@ -108,6 +127,10 @@ export function ProductDetail({
             </div>
           )}
 
+          {content?.introParagraph && (
+            <p className="mt-4 text-sm leading-6 text-muted">{content.introParagraph}</p>
+          )}
+
           {sizeOptions.length > 1 && (
             <div className="mt-8">
               <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -126,6 +149,19 @@ export function ProductDetail({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {content?.sizeGuideHref && (
+            <Link href={content.sizeGuideHref} className="mt-3 inline-block border-b border-fg text-xs font-semibold">
+              Storlekstabell
+            </Link>
+          )}
+
+          {content?.offerMessage && (
+            <div className="mt-6 border border-line bg-[#f7f7f7] p-4">
+              <div className="text-sm font-semibold">{content.offerMessage.heading}</div>
+              <p className="mt-1.5 text-xs leading-6 text-muted">{content.offerMessage.body}</p>
             </div>
           )}
 
@@ -149,12 +185,25 @@ export function ProductDetail({
               : "Slut i lager"}
           </button>
 
-          {descriptionHtml && (
-            <div className="mt-10 border-t border-line pt-6">
-              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Beskrivning</div>
-              <div className="text-[13px] leading-7 text-muted [&_p]:mb-2" dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
-            </div>
+          {content?.trustLines && (
+            <p className="mt-5 text-xs leading-6 text-muted">
+              {content.trustLines.map((line, i) => (
+                <span key={line}>
+                  — {line}
+                  {i < content.trustLines!.length - 1 && <br />}
+                </span>
+              ))}
+            </p>
           )}
+
+          <div className="mt-10 border-t border-line">
+            {descriptionHtml && (
+              <AccordionRow heading={content?.descriptionHeading ?? "Beskrivning"} body={descriptionHtml} defaultOpen />
+            )}
+            {content?.accordionRows.map((row) => (
+              <AccordionRow key={row.heading} heading={row.heading} body={row.body} />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -180,6 +229,30 @@ export function ProductDetail({
                   {r.verified_buyer && " · Verifierat köp"}
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {content?.uspBlock && (
+        <div className="mt-16 border-t border-line pt-14">
+          <div className="grid grid-cols-2 gap-10 text-center lg:grid-cols-4">
+            {content.uspBlock.map((item) => (
+              <div key={item.heading}>
+                <div className="text-sm font-semibold">{item.heading}</div>
+                <p className="mt-2 text-xs leading-6 text-muted">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {content?.faq && (
+        <div className="mt-16 border-t border-line pt-14">
+          <h2 className="text-[26px]">Vanliga frågor</h2>
+          <div className="mt-6 max-w-[760px]">
+            {content.faq.map((item, i) => (
+              <AccordionRow key={item.question} heading={item.question} body={`<p>${item.answer}</p>`} defaultOpen={i === 0} />
             ))}
           </div>
         </div>

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/components/cart/cart-provider";
 import { PriorityNav } from "@/components/layout/priority-nav";
+import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 
 // Real main-menu items, from data/exports/menus.jsonl (handle: main-menu), original order preserved.
 const NAV_ITEMS = [
@@ -24,7 +25,12 @@ export function Header() {
     <header className="sticky top-0 z-30 flex h-[68px] items-center border-b border-line bg-bg">
       <div className="mx-auto grid w-full max-w-[1440px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6 lg:px-14">
         <div className="min-w-0">
-          <PriorityNav items={NAV_ITEMS} />
+          <div className="md:hidden">
+            <MobileNavDrawer items={NAV_ITEMS} />
+          </div>
+          <div className="hidden md:block">
+            <PriorityNav items={NAV_ITEMS} />
+          </div>
         </div>
 
         <Link href="/" className="col-start-2 shrink-0 justify-self-center">
@@ -32,10 +38,12 @@ export function Header() {
         </Link>
 
         <div className="col-start-3 flex shrink-0 items-center justify-end gap-4 sm:gap-5">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
-            <circle cx="11" cy="11" r="7" />
-            <line x1="21" y1="21" x2="16.6" y2="16.6" />
-          </svg>
+          <Link href="/search" aria-label="Sök">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.6" y2="16.6" />
+            </svg>
+          </Link>
           <button onClick={open} aria-label="Öppna varukorg" className="relative">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
               <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
