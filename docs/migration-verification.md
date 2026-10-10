@@ -80,3 +80,61 @@ hardcoded product entry across all 7 preview files was cross-checked against the
   legitimately appearing twice under the same name for two different real product IDs.
 - Republished to the artifact (version 13) with both fixes applied and verified via grep that no
   residual "Noelle mini väska" or "349 kr" strings remain in either file.
+
+## Full catalog audit: Supabase vs. Shopify, root-cause fix (2026-10-10)
+
+Following a further report of wrong images/collection names, every product and collection in
+Supabase was compared against the raw Shopify export end-to-end (not a sample) using Shopify's
+product/collection ID as the join key: `scripts/shopify/verify-catalog.ts`. Pulled full,
+unpaginated table dumps via the Management API (PostgREST's default page cap would have
+truncated `collection_products` at 1,788 rows otherwise) and diffed every field.
+
+**First run — 115 mismatches, all one root cause:**
+
+| Check | Result |
+|---|---|
+| Products (376): title, handle, status, product_type, vendor, description_html, tags, SEO | 0 mismatches |
+| Variants (788): title, SKU, barcode, price, compare_at_price, inventory_quantity, options | 0 mismatches |
+| Collections (31): title, handle, description_html, sort_order, image_url | 0 mismatches |
+| Collection membership + order (1,788 links) | 0 mismatches |
+| Product ↔ image association | **115 mismatches / 92 missing media rows across 23 products** |
+
+**Root cause:** `media.shopify_id` had a global `unique` constraint, but 92 of 662 images in
+Shopify's own media library are genuinely attached to more than one product (e.g. the 5 duplicate
+"Noélle Väska Mini" listings all share the same 16 photos). The import's upsert logic collided on
+that constraint, so it silently kept only the first product's reference to each shared image and
+dropped the rest — 23 products ended up missing some or all of their real images in Supabase, with
+no title or price corruption anywhere.
+
+**Fix applied:**
+- `supabase/migrations/0002_media_shared_images.sql` — replaced the constraint with
+  `unique (shopify_id, product_id)`, since one image legitimately belonging to several products is
+  a real, valid state, not a data error.
+- `scripts/supabase/import/09-backfill-shared-media.ts` — inserted the 92 previously-dropped media
+  rows (idempotent; re-running finds nothing left to backfill).
+
+**Second run — 0 mismatches.** Full re-verification after the fix: 376/376 products, 788/788
+variants, 662/662 media rows (up from 570), 31/31 collections, 1,788/1,788 collection↔product
+links — exact match against Shopify on every field checked.
+
+**Separately, a preview-only issue found during this pass (not a Supabase/import bug):** the
+Product page preview showcased "Love armband" (productId 10846009885010) together with a real
+review that actually belongs to a *different* product, "Klöver armband" (misattribution made when
+the preview was hand-assembled, not a database error). Found a third, independent "Love armband"
+listing (productId 10281169912146) that has both the same price (289/399 kr) and its own genuine
+review (Kajsa L., 5★, "Superfint!!") — swapped the preview's images, SKU, size options, and
+description to that listing's real data so the title, content, and review shown all belong to the
+same real product. Republished (artifact version 14).
+
+**Final cross-check:** every one of the 80 product-card entries embedded across all 7 preview
+files was resolved back to its Shopify product ID and diffed against the now-corrected Supabase
+data (title and price) — 0 unresolved, 0 title mismatches, 0 price mismatches.
+
+**On "the preview reads live from Supabase":** the 7 preview files are static mockup pages (an
+Artifact Design canvas), built to get sign-off on visual direction and content accuracy before
+real Phase 4 code is written — they were never meant to query a database at runtime, and the
+platform's sandbox does not allow outbound network calls from inside the artifact anyway (the same
+restriction that caused the earlier hotlinked-image bug). What "directly from Supabase" means in
+practice at this stage: every value now shown was verified by script against the corrected
+database, not hand-typed from memory. The actual live, Supabase-backed storefront is what the real
+Phase 4 Next.js build produces next.
