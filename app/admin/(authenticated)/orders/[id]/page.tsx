@@ -55,6 +55,14 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
   const customerName = customer ? [customer.first_name, customer.last_name].filter(Boolean).join(" ") : null;
   const provider = order.source === "shopify" ? "Shopify" : order.source === "stripe" ? "Stripe" : "Manuell";
 
+  // Guest orders (the vast majority -- customer_id is only ever set for Shopify-imported orders)
+  // can still resolve to a real customer profile by email, read-only, purely for navigation.
+  let linkedCustomerId: string | null = order.customer_id;
+  if (!linkedCustomerId && order.email) {
+    const { data: matchedCustomer } = await supabase.from("customers").select("id").ilike("email", order.email).maybeSingle();
+    linkedCustomerId = matchedCustomer?.id ?? null;
+  }
+
   const unfulfilledItems = (items ?? [])
     .filter((i) => i.quantity - i.fulfilled_quantity > 0)
     .map((i) => ({ id: i.id, title: i.title, sku: i.sku, remaining: i.quantity - i.fulfilled_quantity }));
@@ -222,7 +230,13 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Kund</div>
-            <div className="text-sm text-gray-900">{customerName || "Gäst"}</div>
+            {linkedCustomerId ? (
+              <Link href={`/admin/customers/${linkedCustomerId}`} className="text-sm font-medium text-gray-900 hover:underline">
+                {customerName || "Visa kundprofil"}
+              </Link>
+            ) : (
+              <div className="text-sm text-gray-900">{customerName || "Gäst"}</div>
+            )}
             <div className="text-sm text-gray-500">{customer?.email ?? order.email ?? "—"}</div>
             {(customer?.phone ?? order.phone) && <div className="text-sm text-gray-500">{customer?.phone ?? order.phone}</div>}
           </div>

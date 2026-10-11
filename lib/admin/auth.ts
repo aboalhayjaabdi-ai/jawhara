@@ -6,10 +6,13 @@ if (typeof window !== "undefined") {
   throw new Error("lib/admin/auth.ts must never be imported into client code");
 }
 
+export type AdminRole = "admin" | "staff";
+
 export type AdminSession = {
   userId: string;
   adminId: string;
   email: string | null;
+  role: AdminRole;
 };
 
 /**
@@ -27,10 +30,24 @@ export async function requireAdmin(): Promise<AdminSession> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: adminRow } = await supabase.from("admin_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  const { data: adminRow } = await supabase.from("admin_users").select("id, role").eq("auth_user_id", user.id).maybeSingle();
   if (!adminRow) throw new Error("Not authorized: no admin_users row for this account.");
 
-  return { userId: user.id, adminId: adminRow.id, email: user.email ?? null };
+  return { userId: user.id, adminId: adminRow.id, email: user.email ?? null, role: adminRow.role as AdminRole };
+}
+
+/**
+ * Gates the handful of customer actions sensitive enough to restrict beyond "any admin_users row"
+ * (hard delete, anonymize, GDPR data export, bulk export) to role='admin'. There is still no
+ * staff-invitation UI anywhere in this project -- every existing admin_users row is already
+ * role='admin' -- so this has no visible effect today; it's the structural enforcement point the
+ * project's own roadmap called for ("design every new check to key off that column, so adding real
+ * roles later is a data change, not an architecture change"), exercised the moment a 'staff' row
+ * is ever created (still a direct database edit, same as creating any admin_users row today).
+ */
+export function requireRole(admin: AdminSession, role: AdminRole): { ok: true } | { ok: false; error: string } {
+  if (admin.role !== role) return { ok: false, error: `Endast rollen "${role}" kan göra detta.` };
+  return { ok: true };
 }
 
 /**

@@ -1,151 +1,177 @@
-# Phase 4 Verification Report (2026-10-10)
+# Phase 4 verification report — complete customer management
 
-Full re-verification requested before Phase 5 approval. Status per your 9 numbered requirements below.
+Date: 2026-10-11. Branch: `claude/festive-pasteur-77mezq`.
 
-## 1. Header navigation and logo overlap — FIXED, verified
+## Scope
 
-Root cause: the old header centered the logo with absolute positioning, which ignored how much
-space the nav actually needed and let "TILLBEHÖR" collide with "JAWHARA" at common desktop widths.
+A full Shopify-Admin-depth customer management system: directory with search/filter/sort/
+pagination/saved views, detailed profiles with contact info, addresses, order history, LTV/AOV,
+notes/tags/segments, marketing consent management, create/edit, CSV import/export with
+duplicate-safe preview, an activity timeline, GDPR export/anonymization/deletion with legally
+required accounting-record restrictions, role-gated server-side authorization + audit logging, and
+bulk operations — all against real Supabase data, on the existing Shopify-inspired admin design.
+Every standing constraint was preserved: the live Shopify store was never written to, the
+production domain/DNS was never touched, and `app/api/checkout`, `app/api/webhooks/stripe`, and
+`lib/discounts.ts` are confirmed byte-for-byte unchanged (see **Diff review** below), as are every
+Phase 1–3 products/collections/orders/inventory surface.
 
-Rebuilt as `components/layout/priority-nav.tsx`:
-- CSS grid (`1fr auto 1fr`) keeps the logo in the true center column — its position never depends
-  on nav content, so it cannot be pushed off-center.
-- `ResizeObserver` watches the nav's actual column width and a hidden measurement row (real
-  rendered widths, not estimates) to compute how many links fit, live, on every resize.
-- Overflow links move into a "MER ⌄" dropdown, original menu order preserved, MER's own width is
-  reserved *before* fitting more links so it's never pushed out itself.
-- Dropdown: button with `aria-haspopup`/`aria-expanded`, real links (not synthetic), closes on
-  outside click and Escape, opens with Enter/Space/click/tap — native semantics, no custom
-  hit-testing.
+## 1. Ground-truth research before building anything
 
-Automated test (`Playwright`, real rendered boxes, not visual inspection) at every requested width:
+Before writing code, a dedicated research pass read every migration touching
+`customers`/`addresses`/`orders`/`admin_users`/`audit_log`, every existing admin-table/filter
+convention, and every GDPR reference already in the repo. Two load-bearing facts that shaped the
+whole design, confirmed directly rather than assumed:
 
-| Width | Overflow | Overlap | Logo center offset | MER shown | Visible links |
-|---|---|---|---|---|---|
-| 320px | none | none | 0.0px | yes | *(none — MER only)* |
-| 375px | none | none | 0.0px | yes | Hem |
-| 768px | none | none | 0.0px | yes | Hem, Alla smycken |
-| 1024px | none | none | 0.0px | yes | Hem, Alla smycken, Armband |
-| 1280px | none | none | 0.0px | yes | Hem…Ringar (5) |
-| 1440px | none | none | 0.0px | yes | Hem…Örhängen (6) |
-| 1920px | none | none | 0.0px | yes | Hem…Örhängen (6) — capped by the header's 1440px max content width, same as 1440px |
+- **No live code path ever sets `orders.customer_id` for a Stripe or manual order** — only
+  Shopify-imported/synced orders get it. Every post-migration order is a guest order by
+  `customer_id` alone. Real per-customer order history, spend, and LTV must therefore match by
+  `customer_id` **or** same-email fallback for guest orders — never `customer_id` alone, or almost
+  every post-migration order would be invisible on a customer's profile.
+- **`orders.financial_status` is free text with no CHECK constraint**, and genuinely
+  case-inconsistent in real data: live Stripe/manual code writes lowercase (`'paid'`); Shopify-
+  imported/synced orders store Shopify's own uppercase values (`'PAID'`, `'PARTIALLY_REFUNDED'`).
+  Every aggregation in this phase matches case-insensitively.
 
-All 7: **PASS**. Two real bugs were caught and fixed during this work, not just the visible overlap:
-1. The MER dropdown panel was being clipped invisible by the same `overflow:hidden` wrapper used
-   to hide the measurement row — fixed by isolating the measurement row in its own clipped box.
-2. The "MER" width measurement itself was wrong (a block-level flex element was stretching to its
-   parent's full width instead of its content width), which silently collapsed ALL links into the
-   dropdown even when they should fit — fixed by using `inline-flex`.
+## 2. Database migrations
 
-Keyboard: tab to MER, Enter opens it, Escape closes it — verified programmatically, not assumed.
+- **`0016_phase4_customer_management.sql`** — `customers.source` (mirrors orders/products/
+  collections), `customers.anonymized_at`/`deletion_requested_at`; an `admin_users.role` CHECK
+  constraint (`'admin'`/`'staff'`) turning the roadmap's long-unused role column into a real,
+  enforceable value; a new `customer_saved_views` table; a new `customer_order_stats` view
+  (`security_invoker`) that is the single source of truth for order count/total spent/last order
+  date, correctly handling both quirks above; a new `customer_data_requests` table (GDPR audit
+  trail); an explicit admin-write RLS policy on `customers` (it previously had only SELECT/UPDATE
+  policies at all — no INSERT or DELETE policy existed, so admin writes already had to go through
+  the service-role client, same as every other admin write in this project; this adds
+  defense-in-depth parity with every other admin-managed table).
+- **`0017_fix_customer_data_requests_fk.sql`** — see **Issue found and fixed during
+  implementation** below.
 
-## 2 & 3. Products, images, and collections vs. Shopify — RE-VERIFIED, 0 mismatches
+## 3. Critical issue found and fixed during implementation
 
-Re-ran the full field-by-field audit (`scripts/shopify/verify-catalog.ts`), now also checking
-collection SEO title/description (the one field category not yet covered last time):
+`customer_data_requests.customer_id` was defined in 0016 as `references customers(id) on delete
+cascade`. The entire purpose of that table is to durably record that a deletion request happened —
+including for a customer who was then actually, fully deleted. With `ON DELETE CASCADE`, the
+instant `deleteCustomerAction`'s hard delete ran, Postgres would have immediately deleted the very
+audit row recording that it ran, silently destroying the GDPR accountability record the table
+exists to keep. Caught before this ever reached a real user action (while wiring the Server Action
+logic, not during the later test pass), fixed with `0017`: the constraint is now `ON DELETE SET
+NULL` (`customer_id` made nullable), and the action now inserts the request row **before** deleting
+the customer. Verified directly: a hard delete now leaves a `completed` request row behind with
+`customer_id = null`, rather than losing it.
 
-| Check | Result |
-|---|---|
-| 376 products: title, handle, status, type, vendor, description, tags, SEO | 0 mismatches |
-| 788 variants: SKU, price, compare-at, inventory, size/color options | 0 mismatches |
-| 662 product images: association, ordering, featured image | 0 mismatches |
-| 31 collections: title, handle, description, image, **SEO title/description** | 0 mismatches |
-| 1,788 collection↔product links, incl. order | 0 mismatches |
+## 4. Customer directory
 
-This re-confirms the fix from your previous report (the shared-image constraint bug) held and
-nothing regressed. No renamed, translated, duplicated, or mispopulated collections — handles and
-Swedish names match Shopify exactly.
+`/admin/customers`: search, country/marketing-consent/no-orders/spend-range/order-count filters,
+sort (name, created, total spent, order count, last order), pagination, bulk-select with tag add/
+remove, marketing-consent set, and delete (eligibility-checked per row — never anonymizes on the
+caller's behalf). CSV export and "Ny kund" in the toolbar.
 
-## 4. Pages and policies — BUILT from real content, one page intentionally not migrated
+**Scale-proportionate architecture, not the per-entity DB-query-builder pattern used for orders/
+products**: at ~500 customers (growing slowly), the list page loads every customer joined with
+`customer_order_stats` and default-address country in one shot and filters/sorts/paginates in
+application code — simpler and more honest than a dual DB-paginated/fetch-all code path, since
+there is no pre-existing default behavior here to risk regressing (this is brand new). The same
+`listCustomersWithStats`/`applyCustomersListFilters` pair backs the list page, CSV export, and
+saved-view evaluation, so none of the three can ever disagree on the numbers.
 
-Shopify's legacy `Page.body` field was empty for several pages — real content for this theme lives
-in page-specific JSON section templates (I had a background investigation confirm this and extract
-every page verbatim before writing any code). Built and live at `/pages/<handle>`:
+**Saved views and segments are one mechanism, not two**: a "customer segment based on purchase
+behavior/location/spending/frequency" is, structurally, a saved view whose filters happen to be
+stat-based. `customer_saved_views` stores a name + the exact same filter-params shape the URL
+itself uses, shared across all admins (same visibility model as every other admin resource in this
+project). A handful of quick-segment buttons (no orders, 2+ orders, 1000kr+, accepts marketing) are
+client-side filter shortcuts only — never persisted as fake rows.
 
-| Page | Handle | Content |
-|---|---|---|
-| Om oss (About) | `om-oss` | Real brand story, verbatim |
-| Köpvillkor (Terms — covers both shipping/delivery AND returns/refunds) | `aterbetalningspolicy` | Full real policy, verbatim |
-| Integritetspolicy (Privacy) | `anvandarvillkor` | Full real GDPR policy, verbatim |
-| Vanliga frågor (FAQ) | `vanliga-fragor` | 5 real Q&A pairs, verbatim |
-| Ringstorlek (size guide) | `ringstorlek` | Real conversion table |
-| Startsida | `startsida` | Real (thin) CTA content |
-| Kontakta oss (Contact) | `contact` | Real intro text + **working form** |
+## 5. Customer profile
 
-**Important finding, not invented by me:** the real store does not have separate Shipping and
-Returns pages — both topics live in the one Köpvillkor document. I did not split it into two pages,
-since that would misrepresent what's actually in Shopify.
+`/admin/customers/[id]`: stat tiles (order count, total spent, AOV, last order — all computed live
+from `customer_order_stats`, never a stored/stale column); editable contact info, note, and tags;
+a full address book (add/edit/delete/set-default); real order history (matched the same
+customer_id-or-email way as the stats view, so the two can never disagree); a merged activity
+timeline (the customer's own `audit_log` entries plus the lifecycle events of their real orders);
+marketing consent (toggle bumps `marketing_consent_updated_at`, same real-world behavior Shopify
+itself tracks) cross-referenced against the separate, previously-unreconciled `newsletter_
+subscribers` list; and the GDPR actions card.
 
-**Contact form is functionally real, not a mockup** — tested end-to-end: submits to a new
-`contact_submissions` table (migration `0003`), shows the real Swedish success message
-("Tack för att du kontaktar oss..."), verified a row actually landed in Supabase, then cleaned up
-the test row. No email notification yet — Resend integration is later-phase work; submissions are
-safely stored in the meantime, not lost.
+## 6. GDPR
 
-**Left for your decision, not silently changed** (per "don't rewrite legal terms without
-approval"):
-- Integritetspolicy's body references `popiq.se` instead of jawhara.se — looks like a leftover
-  from whatever template this policy was built from. Left verbatim.
-- Köpvillkor's "BYTE" section has a `mailto:support@jawhara.se` link whose *visible* text reads
-  `support@jawharalondon.com` — an unrelated address. Left verbatim.
+- **Export** (`/api/admin/customers/[id]/export-data`, role-gated to `admin`): assembles the
+  customer's own profile, address book, and full order history as a downloadable JSON file — the
+  subject-access-request deliverable. Logs a `customer_data_requests` row.
+- **Anonymize** (role-gated, typed-confirmation UI): always scrubs the customer's own
+  identifying fields (name/email/phone/note/tags) and their personal address book, but **never**
+  an order-linked address (that belongs to a specific transaction's financial record, not the
+  customer's identity profile) and never the orders/payments rows themselves. Logs `status:
+  'restricted'` when the customer had real orders (full erasure wasn't legally possible, PII
+  scrubbing is the actual outcome) or `'completed'` when they had none (anonymization still fully
+  achieves erasure).
+- **Delete** (role-gated, typed-confirmation UI): hard delete, structurally refused whenever
+  `order_count > 0` — "appropriate restrictions for legally required accounting records" is
+  enforced in code, not left to admin judgment, and the UI doesn't even show the delete option when
+  the customer has orders (only Anonymize does).
+- **Role gating**: `requireAdmin()` now also returns the caller's `admin_users.role`; a new
+  `requireRole()` helper gates export/anonymize/delete to `role === 'admin'`. There is still no
+  staff-invitation UI anywhere in this project (confirmed, and intentionally out of scope for this
+  phase — the single existing admin account is already `role: 'admin'`), so this has no visible
+  effect today; it is the structural enforcement point the project's own roadmap called for,
+  exercised the moment a `'staff'` row is ever created.
 
-**Deliberately not migrated:** an 8th, unlinked page (`jawhara-luxury-jewelry-landing-page`) built
-with a page-builder app, in English, with fabricated "As Seen In Vogue/Harper's Bazaar" press
-mentions and a testimonial — not linked from any menu, reads as placeholder/demo content rather
-than approved copy. Flagging its existence rather than either publishing unverified claims or
-quietly discarding it — your call.
+## 7. CSV import/export
 
-## 5. Homepage section count (16 vs. 18) — explained, needs your sign-off
+Export: one row per customer (email, name, phone, consent, tags, note, source, order count/total
+spent, and the default address's fields). Import: the same parse → diff-preview → commit shape
+Phase 3 established for products, reusing its generic parser (extracted into
+`lib/admin/csv/parse.ts` once a second real entity needed it, rather than duplicated). Natural
+dedup key is **email, case-insensitively** — a **soft** match, not a DB unique constraint, since
+`customers.email` has no uniqueness guarantee in the real migrated data (same reasoning as Phase
+3's `product_templates.key`). A row with no email can never be matched and always creates a new
+customer. Blank cells always mean "leave unchanged" on update, never "clear to empty."
 
-The live theme's `templates/index.json` `order` array has 18 entries total. 16 are real, visible
-content sections (all rebuilt, all live): 3 hero banners, 1 marquee, 8 product-list carousels (each
-tied to its real Shopify collection), 1 "Utforska kollektioner" text + 1 collection-links grid, 1
-featured-product, 1 before/after comparison slider. The remaining 2 entries are not visual
-sections at all — they're non-visual app-block configuration (one is empty, the other sets
-product-card text alignment/price-centering defaults sitewide). Nothing was removed, combined, or
-skipped; the 2 non-visual entries have no content to show. Flagging this explicitly for your
-approval rather than deciding unilaterally that they don't matter.
+## 8. Verification performed
 
-## 6. Navigation, footer, SEO — addressed
+- `npx tsc --noEmit` and `npm run build`: clean after every sub-area and on the final combined
+  pass.
+- **Direct functional tests** (disposable rows, cleaned up after): anonymize-with-real-orders
+  correctly scrubs PII while preserving the order's `customer_id` link and total; the
+  `customer_data_requests` row survives a hard delete with `customer_id` set to `null` (the FK fix,
+  re-verified after applying it); the GDPR export assembles the right profile/address/order data;
+  the CSV import round-trip creates a new customer with a default address from the file, then a
+  second import with a different-case email updates the *same* customer (no duplicate) while
+  leaving blank-celled fields untouched. 15/15 checks passed.
+- **Live browser verification** (Playwright, a disposable admin account created via the Supabase
+  Auth admin API and fully deleted afterward, with every test customer/saved-view it created also
+  deleted): 19/19 checks passed — login; directory loads; create a customer; profile renders with
+  all sections; save note/tags; toggle marketing consent; add an address; the merged activity
+  timeline shows the real actions just taken; search filter finds the customer; save and reload a
+  saved view; a quick-segment button applies via the URL; the CSV import wizard page loads; the
+  GDPR export link is present; a bulk tag-add action runs and is reflected on the row; anonymize
+  runs through its typed-confirmation flow and the profile shows the "Anonymiserad" badge; an
+  existing order's detail page renders its (now customer-profile-linked) Kund card; and a live,
+  **unedited** storefront product page still renders correctly.
+- **Diff review**: `git status`/`git diff` against the pre-Phase-4 state confirm `app/api/
+  checkout`, `app/api/webhooks`, `lib/discounts.ts`, and every Phase 1–3 products/collections/
+  orders/inventory file are untouched. Exactly 4 pre-existing files were modified (the order
+  detail page's Kund-card link, `admin-nav.ts`, `lib/admin/auth.ts`'s role extension, and the CSV
+  parser extraction) — everything else is new.
+- All disposable test data (customers, saved views, the test admin account, ad-hoc verification
+  scripts) was deleted/removed after use; none of it is part of this commit.
 
-- Every header nav link resolves to a real collection.
-- Footer: fixed one real dead link — "Spåra din beställning" pointed at `/apps/parcelpanel` (a
-  ParcelPanel order-tracking integration not migrated yet); temporarily redirected (302, since it's
-  not permanent) to Contact instead of 404ing.
-- Product/collection URLs already match Shopify's own scheme exactly (`/products/<handle>`,
-  `/collections/<handle>`) — no redirects needed there, verified by construction.
-- Added `generateMetadata` (title/description/canonical) on product, collection, and static pages,
-  using real `seo_title`/`seo_description` from Supabase where present.
-- Added `app/sitemap.ts` (363 URLs: products, collections, static pages) and `app/robots.ts`.
+## Known, deliberate scope cuts
 
-## 7. Design and responsiveness — verified
+No staff-invitation/role-assignment UI (the role-gating enforcement point exists; creating a
+`'staff'` account is still a direct database edit, exactly like creating any `admin_users` row is
+today — a dedicated staff-management UI remains out of scope for this phase, same as the original
+roadmap's own "Settings/staff/security" being a distinct later phase). Anonymization does not touch
+`auth.users`/`auth_user_id` — a customer with a real storefront login keeps the ability to sign in
+after anonymization, just to a now-blank profile; full auth-account erasure was not explicitly
+requested and is flagged here rather than silently handled. `newsletter_subscribers` is
+cross-referenced on the profile page for visibility but deliberately not merged into
+`customers.accepts_marketing` — they remain the two independent signals they already were.
 
-Palette, Newsreader/Red Hat Text, zero border-radius, centered logo, drawer cart all unchanged from
-your approved design direction. Screenshots attached: homepage/product/collection at desktop
-(1440px), tablet (768px), and mobile (375px), plus the header at all 7 tested widths.
+## Files touched
 
-## 8. Standing migration requirements — unchanged, still holding
-
-- All data is real, from Supabase (catalog re-verified above).
-- Pennywise: still completely absent from the schema (unchanged from Phase 3).
-- Judge.me reviews: still served from the independent `reviews` table.
-- Your live Shopify store: untouched — every change this session was to this repo and this
-  Supabase project only.
-- Not published to jawhara.se — this is still a local dev build only.
-- Stripe/checkout: still not built (Phase 5, next).
-- Admin visual editor: still not built (Phase 6) — section content lives in code for now, exactly
-  as before.
-
-## 9. Final verification
-
-- `next build`: clean, 0 type errors.
-- Real browser testing (Playwright + Chromium) at 320/375/768/1024/1280/1440/1920px for the header,
-  plus full-page screenshots at desktop/tablet/mobile for homepage/product/collection/pages.
-- Contact form tested with a real submission end-to-end, then cleaned up.
-- Fixed 2 genuine bugs found only through this testing (the MER dropdown clipping and width-
-  measurement bugs above) — neither was visible from code review alone.
-
-### Not yet done (explicitly Phase 5/6, not silently skipped)
-
-Checkout/Stripe, admin visual editor, email notifications for contact submissions, and the two
-flagged content questions (popiq.se, support@jawharalondon.com) awaiting your decision.
+22 new files (migrations, `lib/admin/customer-stats.ts`, `lib/admin/customers-filters.ts`,
+`lib/admin/gdpr.ts`, `lib/admin/csv/customers-import.ts`, `lib/admin/csv/parse.ts`, the customers
+admin pages/actions/API routes, and 10 new components) plus 4 modified files (`lib/admin/auth.ts`,
+`components/admin/admin-nav.ts`, `lib/admin/csv/products-import.ts`, and the order detail page's
+customer link). Full list available via `git status`.
