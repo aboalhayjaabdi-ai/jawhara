@@ -27,6 +27,8 @@ type Review = {
   body: string | null;
   verified_buyer: boolean;
   created_at: string;
+  merchant_reply_body: string | null;
+  merchant_reply_at: string | null;
 };
 
 function formatSek(amount: number) {
@@ -270,6 +272,12 @@ export function ProductDetail({
                   {r.author_name ?? "Anonym"}
                   {r.verified_buyer && " · Verifierat köp"}
                 </div>
+                {r.merchant_reply_body && (
+                  <div className="mt-4 border-l-2 border-line pl-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted">Svar från Jawhara</div>
+                    <p className="mt-2 text-sm leading-6">{r.merchant_reply_body}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

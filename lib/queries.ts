@@ -282,7 +282,7 @@ export async function getProductByHandle(handle: string) {
 
   const { data: reviews } = await supabase
     .from("reviews")
-    .select("rating, author_name, body, verified_buyer, created_at")
+    .select("rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at")
     .eq("product_id", product.id)
     .order("created_at", { ascending: false });
 
