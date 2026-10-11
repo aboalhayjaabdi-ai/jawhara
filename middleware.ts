@@ -43,8 +43,13 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/admin/login";
+  // Password-recovery/invite links carry their session as a URL hash fragment, which the server
+  // never sees (only client-side JS does) -- so this page must stay reachable with no cookie yet,
+  // the same way the login page does, or the recovery flow would redirect-loop before the browser
+  // ever gets a chance to exchange the token.
+  const isResetPasswordPage = pathname === "/admin/reset-password";
 
-  if (pathname.startsWith("/admin") && !isLoginPage) {
+  if (pathname.startsWith("/admin") && !isLoginPage && !isResetPasswordPage) {
     if (!user) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }

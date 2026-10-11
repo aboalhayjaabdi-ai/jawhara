@@ -12,4 +12,5 @@ export const ADMIN_NAV = [
   { href: "/admin/storefront", label: "Webbutik" },
   { href: "/admin/product-templates", label: "Produktmallar" },
   { href: "/admin/products/inventory", label: "Lager" },
+  { href: "/admin/security", label: "Säkerhet" },
 ];
