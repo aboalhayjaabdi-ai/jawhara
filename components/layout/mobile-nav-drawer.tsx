@@ -76,14 +76,14 @@ export function MobileNavDrawer({ items }: { items: NavItem[] }) {
       </summary>
 
       <div
-        className="fixed inset-0 top-[68px] z-40 bg-black/30"
+        className="fixed inset-0 z-40 bg-black/30"
         onClick={() => {
           if (detailsRef.current) detailsRef.current.open = false;
         }}
       />
       <div
         ref={panelRef}
-        className="fixed inset-y-0 left-0 top-[68px] z-40 w-[82vw] max-w-[320px] overflow-y-auto bg-bg"
+        className="fixed inset-y-0 left-0 z-40 w-[82vw] max-w-[320px] overflow-y-auto bg-bg"
       >
         <nav aria-label="Primär" className="flex flex-col py-6">
           {items.map((item) => (
@@ -98,6 +98,15 @@ export function MobileNavDrawer({ items }: { items: NavItem[] }) {
               {item.title}
             </Link>
           ))}
+          <Link
+            href="/pages/contact"
+            className="px-6 py-3.5 text-sm font-semibold uppercase tracking-wide"
+            onClick={() => {
+              if (detailsRef.current) detailsRef.current.open = false;
+            }}
+          >
+            Kontakta oss
+          </Link>
         </nav>
       </div>
     </details>
