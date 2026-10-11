@@ -39,18 +39,6 @@ export async function FeaturedProductSection({ handle }: { handle: string }) {
           <Link href={`/products/${product.handle}`} className="mt-6 inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
             Visa produkt
           </Link>
-
-          {/* Secondary promo image, exactly as configured in the real section (links to a
-              different product than the one featured above -- that's the live theme's own setup). */}
-          <Link href="/products/aria-armband-1" className="mt-8 block">
-            <Image
-              src="/brand/featured-product-link.png"
-              alt=""
-              width={320}
-              height={200}
-              className="h-auto w-full max-w-xs object-cover"
-            />
-          </Link>
         </div>
       </div>
     </section>

@@ -34,12 +34,16 @@ export function ComparisonSlider({
         {heading && <h2 className="mb-8 text-center text-2xl">{heading}</h2>}
         <div
           ref={containerRef}
-          className="relative aspect-[4/3] w-full cursor-ew-resize select-none overflow-hidden"
+          className="relative aspect-[16/9] w-full cursor-ew-resize select-none overflow-hidden"
           onMouseMove={(e) => e.buttons === 1 && handleMove(e.clientX)}
           onTouchMove={(e) => handleMove(e.touches[0].clientX)}
         >
           <Image src={afterImage} alt="" fill sizes="(min-width: 900px) 900px, 100vw" className="object-cover" />
-          <div className="absolute inset-0 overflow-hidden" style={{ width: `${position}%` }}>
+          {/* Same full-size box as the "after" layer above -- clip-path reveals only the left
+              `position`% instead of shrinking the box, so both images render at identical
+              scale/crop (matches the real theme's technique; a narrower box here would make
+              object-cover crop this image differently than the one above). */}
+          <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
             <Image src={beforeImage} alt="" fill sizes="(min-width: 900px) 900px, 100vw" className="object-cover" />
           </div>
           <div className="absolute inset-y-0 w-0.5 bg-bg" style={{ left: `${position}%` }}>

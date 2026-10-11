@@ -28,7 +28,8 @@ const config: Config = {
         // Real theme: right-to-left CSS transform loop over duplicated content, see
         // components/home/marquee.tsx. Fixed duration -- the real site computes this
         // dynamically per viewport, which doesn't port cleanly to a static component.
-        marquee: "marquee 20s linear infinite",
+        // 160s = 20s base × the 8x content REPEAT in marquee.tsx, so px/sec speed is unchanged.
+        marquee: "marquee 160s linear infinite",
       },
     },
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Real theme (blocks/_product-media-gallery.liquid + assets/slideshow.js): native
 // overflow-x scroll-snap drives real touch swipe, with a numeric counter ("1/5") and prev/next
@@ -9,16 +9,34 @@ import { useRef, useState } from "react";
 // so true clickable thumbnails were never actually live on the real site. "grid" layout templates
 // additionally show a static stacked image grid on desktop (>=1024px) that becomes this same
 // carousel below that breakpoint; "carousel" layout templates use the carousel at every breakpoint.
-export function ProductGallery({ images, title, layout }: { images: string[]; title: string; layout: "carousel" | "grid" }) {
+export function ProductGallery({
+  images,
+  title,
+  layout,
+  jumpToIndex,
+}: {
+  images: string[];
+  title: string;
+  layout: "carousel" | "grid";
+  /** When set (e.g. on variant/color selection), scrolls the gallery to this image index. */
+  jumpToIndex?: number;
+}) {
   const [activeIndex, setActiveIndex] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
 
-  function scrollToIndex(index: number) {
+  function scrollToIndex(index: number, behavior: ScrollBehavior = "smooth") {
     const track = trackRef.current;
     if (!track) return;
     const clamped = Math.max(0, Math.min(images.length - 1, index));
-    track.scrollTo({ left: clamped * track.clientWidth, behavior: "smooth" });
+    track.scrollTo({ left: clamped * track.clientWidth, behavior });
   }
+
+  useEffect(() => {
+    if (jumpToIndex == null) return;
+    scrollToIndex(jumpToIndex);
+    setActiveIndex(jumpToIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToIndex]);
 
   function handleScroll() {
     const track = trackRef.current;

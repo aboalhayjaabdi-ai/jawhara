@@ -73,6 +73,7 @@ export function ProductDetail({
   reviews,
   templateSuffix,
   relatedProducts,
+  variantImageIndex,
 }: {
   title: string;
   handle: string;
@@ -84,6 +85,8 @@ export function ProductDetail({
   reviews: Review[];
   templateSuffix: string | null;
   relatedProducts: React.ReactNode;
+  /** Real per-variant image links (Shopify's own variant.image), keyed by variant id. */
+  variantImageIndex: Record<string, number>;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCart();
@@ -93,6 +96,8 @@ export function ProductDetail({
     if (!sizeOptions.length) return variants[0];
     return variants.find((v) => v.option1 === selectedOption) ?? variants[0];
   }, [variants, selectedOption, sizeOptions.length]);
+
+  const galleryJumpIndex = variant ? variantImageIndex[variant.id] : undefined;
 
   const onSale = variant?.compare_at_price != null && variant.compare_at_price > variant.price;
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
@@ -123,7 +128,7 @@ export function ProductDetail({
 
       <div className="grid gap-16 lg:grid-cols-[1fr_440px]">
         <div className="relative">
-          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} />
+          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} jumpToIndex={galleryJumpIndex} />
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
               Rea

@@ -17,11 +17,13 @@ export async function SubcategoryTiles({ templateSuffix }: { templateSuffix: str
         const fallback = COLLECTION_TILE_FALLBACK_IMAGE[c.handle];
         const imageUrl = c.image_url ?? (fallback ? mediaUrl(fallback) : null);
         return (
-          <Link key={c.handle} href={`/collections/${c.handle}`} className="flex w-32 flex-shrink-0 flex-col gap-3">
+          <Link key={c.handle} href={`/collections/${c.handle}`} className="flex w-32 flex-shrink-0 flex-col gap-3 lg:w-48">
             <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#f4f4f4]">
-              {imageUrl && <Image src={imageUrl} alt={c.title} fill className="object-cover" sizes="128px" />}
+              {imageUrl && (
+                <Image src={imageUrl} alt={c.title} fill className="object-cover" sizes="(min-width: 1024px) 192px, 128px" />
+              )}
             </div>
-            <span className="text-center text-[11px] leading-tight">{c.title}</span>
+            <span className="text-center text-[11px] leading-tight lg:text-xs">{c.title}</span>
           </Link>
         );
       })}

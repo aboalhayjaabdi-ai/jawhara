@@ -42,6 +42,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       reviews={product.reviews}
       templateSuffix={product.template_suffix}
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
+      variantImageIndex={product.variantImageIndex}
     />
   );
 }

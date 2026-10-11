@@ -239,7 +239,7 @@ export async function getProductByHandle(handle: string) {
   const { data: product } = await supabase
     .from("products")
     .select(
-      "id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("handle", handle)
     .single();
@@ -251,11 +251,19 @@ export async function getProductByHandle(handle: string) {
     .eq("product_id", product.id)
     .order("created_at", { ascending: false });
 
-  const images = [...product.media].sort((a, b) => a.position - b.position).map((m) => mediaUrl(m.storage_path));
+  const sortedMedia = [...product.media].sort((a, b) => a.position - b.position);
+  const images = sortedMedia.map((m) => mediaUrl(m.storage_path));
   const variants = [...product.product_variants];
   const options = Array.from(new Set(variants.map((v) => v.option1).filter(Boolean))) as string[];
 
-  return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [] };
+  // Real per-variant image links (Shopify's own variant.image), where that data exists -- lets
+  // the gallery jump to the right photo when a color/variant option is selected.
+  const variantImageIndex: Record<string, number> = {};
+  sortedMedia.forEach((m, i) => {
+    if (m.variant_id) variantImageIndex[m.variant_id] = i;
+  });
+
+  return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex };
 }
 
 export async function searchProductCards(query: string, limit = 24): Promise<ProductCard[]> {
