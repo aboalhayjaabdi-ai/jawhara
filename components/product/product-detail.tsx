@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
 import { normalizeVariantTitle } from "@/lib/variant-title";
-import { getProductTemplateContent } from "@/lib/product-templates";
+import type { ProductTemplateContent } from "@/lib/product-templates";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { ProductGallery } from "@/components/product/product-gallery";
 
@@ -72,7 +72,7 @@ export function ProductDetail({
   variants,
   sizeOptions,
   reviews,
-  templateSuffix,
+  content,
   relatedProducts,
   variantImageIndex,
 }: {
@@ -84,14 +84,16 @@ export function ProductDetail({
   variants: Variant[];
   sizeOptions: string[];
   reviews: Review[];
-  templateSuffix: string | null;
+  /** Resolved by the server-component parent (app/(storefront)/products/[handle]/page.tsx) via
+   * the now-async, DB-backed getProductTemplateContent -- this client component can no longer
+   * call that directly. */
+  content: ProductTemplateContent | null;
   relatedProducts: React.ReactNode;
   /** Real per-variant image links (Shopify's own variant.image), keyed by variant id. */
   variantImageIndex: Record<string, number>;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCart();
-  const content = getProductTemplateContent(templateSuffix);
 
   const variant = useMemo(() => {
     if (!sizeOptions.length) return variants[0];

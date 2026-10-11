@@ -6,6 +6,7 @@ if (typeof window !== "undefined") {
 }
 
 export type ConsumeItem = { variantId: string | null; quantity: number };
+export type ConsumeContext = { orderId?: string | null; actorId?: string | null };
 export type ConsumeResult = { ok: true } | { ok: false; oversoldVariantId: string };
 
 /**
@@ -16,10 +17,14 @@ export type ConsumeResult = { ok: true } | { ok: false; oversoldVariantId: strin
  * has no Stripe webhook to do this for it) -- the webhook itself is left as-is, not refactored to
  * call this, since it already works and re-pointing it is unnecessary risk for this phase.
  *
+ * `context` (optional -- the webhook's own inline copy has no admin/order context to pass, and
+ * doesn't call this helper anyway) attributes the resulting ledger rows to the order/admin that
+ * triggered them, same as restockOrderItems's required context.
+ *
  * On a partial failure, rolls back whatever was already decremented in this same call before
  * reporting which variant oversold, so the caller never ends up with a half-consumed order.
  */
-export async function consumeInventoryForOrderItems(items: ConsumeItem[]): Promise<ConsumeResult> {
+export async function consumeInventoryForOrderItems(items: ConsumeItem[], context: ConsumeContext = {}): Promise<ConsumeResult> {
   const decremented: { variantId: string; qty: number }[] = [];
   for (const item of items) {
     if (!item.variantId) continue;
@@ -30,15 +35,31 @@ export async function consumeInventoryForOrderItems(items: ConsumeItem[]): Promi
       .maybeSingle();
     if (!variant?.inventory_tracked) continue;
     if (variant.inventory_policy === "CONTINUE") {
-      await supabaseService.rpc("force_decrement_inventory", { p_variant_id: item.variantId, p_qty: item.quantity });
+      await supabaseService.rpc("force_decrement_inventory", {
+        p_variant_id: item.variantId,
+        p_qty: item.quantity,
+        p_reason: "sale",
+        p_order_id: context.orderId ?? null,
+        p_actor_id: context.actorId ?? null,
+      });
       decremented.push({ variantId: item.variantId, qty: item.quantity });
       continue;
     }
-    const { data: ok } = await supabaseService.rpc("decrement_inventory", { p_variant_id: item.variantId, p_qty: item.quantity });
+    const { data: ok } = await supabaseService.rpc("decrement_inventory", {
+      p_variant_id: item.variantId,
+      p_qty: item.quantity,
+      p_reason: "sale",
+      p_order_id: context.orderId ?? null,
+      p_actor_id: context.actorId ?? null,
+    });
     if (ok) {
       decremented.push({ variantId: item.variantId, qty: item.quantity });
     } else {
-      await restockOrderItems(decremented.map((d) => ({ variantId: d.variantId, quantity: d.qty })));
+      await restockOrderItems(decremented.map((d) => ({ variantId: d.variantId, quantity: d.qty })), {
+        reason: "correction",
+        orderId: context.orderId,
+        actorId: context.actorId,
+      });
       return { ok: false, oversoldVariantId: item.variantId };
     }
   }

@@ -43,7 +43,10 @@ export async function createReturn(
 
   const toRestock = lines.filter((l) => l.restock);
   if (toRestock.length > 0) {
-    await restockOrderItems(toRestock.map((l) => ({ variantId: itemById.get(l.orderItemId)!.variant_id, quantity: l.quantity })));
+    await restockOrderItems(
+      toRestock.map((l) => ({ variantId: itemById.get(l.orderItemId)!.variant_id, quantity: l.quantity })),
+      { reason: "return_restock", orderId, actorId: admin.adminId }
+    );
     await supabaseService.from("returns").update({ restocked_at: new Date().toISOString() }).eq("id", returnRow.id);
   }
 

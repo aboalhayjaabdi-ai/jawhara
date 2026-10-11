@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getProductByHandle } from "@/lib/queries";
+import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
 
@@ -30,6 +31,8 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
+  const content = await getProductTemplateContent(product.template_suffix);
+
   return (
     <ProductDetail
       title={product.title}
@@ -40,7 +43,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variants={product.variants}
       sizeOptions={product.sizeOptions}
       reviews={product.reviews}
-      templateSuffix={product.template_suffix}
+      content={content}
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
       variantImageIndex={product.variantImageIndex}
     />

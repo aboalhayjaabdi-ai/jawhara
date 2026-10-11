@@ -26,7 +26,10 @@ export async function cancelOrder(orderId: string, reason: string, force: boolea
   // Restocking the unfulfilled remainder per line item is always correct, shipped or not: a fully
   // fulfilled item's remainder is already 0 (nothing to add back), and a never-fulfilled item's
   // remainder is its full quantity -- no separate "skip restock if shipped" branch is needed.
-  await restockOrderItems((items ?? []).map((i) => ({ variantId: i.variant_id, quantity: i.quantity - i.fulfilled_quantity })));
+  await restockOrderItems(
+    (items ?? []).map((i) => ({ variantId: i.variant_id, quantity: i.quantity - i.fulfilled_quantity })),
+    { reason: "cancellation", orderId, actorId: admin.adminId }
+  );
 
   await supabaseService
     .from("orders")

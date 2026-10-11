@@ -4,4 +4,8 @@
 export const ADMIN_NAV = [
   { href: "/admin", label: "Översikt" },
   { href: "/admin/orders", label: "Ordrar" },
+  { href: "/admin/products", label: "Produkter" },
+  { href: "/admin/collections", label: "Kollektioner" },
+  { href: "/admin/product-templates", label: "Produktmallar" },
+  { href: "/admin/products/inventory", label: "Lager" },
 ];

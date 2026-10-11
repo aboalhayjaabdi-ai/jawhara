@@ -156,9 +156,45 @@ export async function getDashboardMetrics(range: DashboardRange, from?: string, 
 
 export type DashboardTasks = {
   unfulfilledCount: number;
-  lowStock: { variantId: string; productHandle: string; title: string; option: string | null; quantity: number }[];
+  lowStock: LowStockVariant[];
   lowStockCount: number;
 };
+
+export type LowStockVariant = {
+  variantId: string;
+  productHandle: string;
+  title: string;
+  option: string | null;
+  quantity: number;
+};
+
+/**
+ * Tracked, active-product variants at or below `threshold`, lowest first. Extracted out of
+ * getDashboardTasks (which calls this with the dashboard's fixed threshold/limit) so the
+ * dashboard widget and the full paginated products/inventory page can never silently disagree on
+ * what counts as "low stock" -- one query, two callers.
+ */
+export async function getLowStockVariants(threshold: number, limit: number, offset = 0): Promise<{ rows: LowStockVariant[]; count: number }> {
+  const supabase = await createAuthServerClient();
+  const { data, count } = await supabase
+    .from("product_variants")
+    .select("id, title, option1, option2, option3, inventory_quantity, products!inner(handle, title, status)", { count: "exact" })
+    .eq("inventory_tracked", true)
+    .eq("products.status", "active")
+    .lte("inventory_quantity", threshold)
+    .order("inventory_quantity", { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  const rows = ((data ?? []) as any[]).map((v) => ({
+    variantId: v.id,
+    productHandle: v.products.handle,
+    title: v.products.title,
+    option: [v.option1, v.option2, v.option3].filter(Boolean).join(" / ") || null,
+    quantity: v.inventory_quantity,
+  }));
+
+  return { rows, count: count ?? 0 };
+}
 
 /**
  * Real, computable "things to do today" -- deliberately excludes refund requests, pending
@@ -169,29 +205,14 @@ export async function getDashboardTasks(): Promise<DashboardTasks> {
   const supabase = await createAuthServerClient();
   const LOW_STOCK_THRESHOLD = 5;
 
-  const [{ count: unfulfilledCount }, { data: lowStockRows, count: lowStockCount }] = await Promise.all([
+  const [{ count: unfulfilledCount }, { rows: lowStock, count: lowStockCount }] = await Promise.all([
     supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .is("cancelled_at", null)
       .or("fulfillment_status.is.null,fulfillment_status.eq.unfulfilled,fulfillment_status.eq.partial"),
-    supabase
-      .from("product_variants")
-      .select("id, title, option1, option2, option3, inventory_quantity, products!inner(handle, title, status)", { count: "exact" })
-      .eq("inventory_tracked", true)
-      .eq("products.status", "active")
-      .lte("inventory_quantity", LOW_STOCK_THRESHOLD)
-      .order("inventory_quantity", { ascending: true })
-      .limit(6),
+    getLowStockVariants(LOW_STOCK_THRESHOLD, 6, 0),
   ]);
 
-  const lowStock = ((lowStockRows ?? []) as any[]).map((v) => ({
-    variantId: v.id,
-    productHandle: v.products.handle,
-    title: v.products.title,
-    option: [v.option1, v.option2, v.option3].filter(Boolean).join(" / ") || null,
-    quantity: v.inventory_quantity,
-  }));
-
-  return { unfulfilledCount: unfulfilledCount ?? 0, lowStock, lowStockCount: lowStockCount ?? 0 };
+  return { unfulfilledCount: unfulfilledCount ?? 0, lowStock, lowStockCount };
 }

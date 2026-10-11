@@ -126,7 +126,12 @@ export default async function AdminDashboardPage({
 
       {tasks.lowStock.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Produkter med lågt lager</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Produkter med lågt lager</h2>
+            <Link href="/admin/products/inventory" className="text-xs font-medium text-gray-600 underline hover:text-gray-900">
+              Visa alla ({tasks.lowStockCount})
+            </Link>
+          </div>
           <div className="divide-y divide-gray-100">
             {tasks.lowStock.map((v) => (
               <a

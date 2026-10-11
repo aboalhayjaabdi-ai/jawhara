@@ -68,7 +68,10 @@ export async function createManualOrder(input: {
   await supabaseService.from("order_items").insert(orderItemRows);
 
   if (input.paymentMode === "mark_paid") {
-    const consumeResult = await consumeInventoryForOrderItems(input.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })));
+    const consumeResult = await consumeInventoryForOrderItems(
+      input.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      { orderId: order.id, actorId: admin.adminId }
+    );
     if (!consumeResult.ok) {
       await supabaseService.from("orders").delete().eq("id", order.id); // order_items cascade
       const variant = variantById.get(consumeResult.oversoldVariantId) as any;
