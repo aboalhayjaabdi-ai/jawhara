@@ -1,0 +1,7 @@
+// Only pages that genuinely exist and work today. Extend this list as each new admin section is
+// actually built (products, customers, collections, etc. per the approved roadmap) -- never add a
+// link here ahead of the page it points to.
+export const ADMIN_NAV = [
+  { href: "/admin", label: "Översikt" },
+  { href: "/admin/orders", label: "Ordrar" },
+];

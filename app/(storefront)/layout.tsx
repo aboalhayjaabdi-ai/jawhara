@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Newsreader, Red_Hat_Text } from "next/font/google";
-import "./globals.css";
+import "../globals.css";
 import { AnnouncementBar } from "@/components/layout/announcement-bar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";

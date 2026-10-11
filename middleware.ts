@@ -14,11 +14,13 @@ if (proxyUrl) {
   setGlobalDispatcher(new ProxyAgent(proxyUrl));
 }
 
-// Refreshes the session cookie on every request and gates /admin/* on being signed in at all.
-// This is the "authenticated" check only; the authoritative "is actually an admin" check (via
-// is_admin()/admin_users) happens in app/admin/layout.tsx, a Server Component, so it isn't
-// re-queried on every single request here (assets, prefetches, etc.) for latency's sake. RLS is
-// the real security boundary either way -- this and the layout check are both UX-level gates.
+// Refreshes the session cookie on every request and gates /admin/* on being a real admin --
+// signed in AND present in admin_users, not just signed in. This is defense in depth, one of
+// three independent layers (this middleware, the page-load check in
+// app/admin/(authenticated)/layout.tsx, and requireAdmin() re-checked inside every mutating
+// Server Action/route -- see lib/admin/auth.ts): a solo-business admin panel's traffic is low
+// enough that the extra admin_users lookup here costs nothing that matters, and RLS alone is
+// never treated as the only security boundary.
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -42,8 +44,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/admin/login";
 
-  if (pathname.startsWith("/admin") && !isLoginPage && !user) {
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+  if (pathname.startsWith("/admin") && !isLoginPage) {
+    if (!user) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+    const { data: adminRow } = await supabase.from("admin_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+    if (!adminRow) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
   }
   if (isLoginPage && user) {
     return NextResponse.redirect(new URL("/admin", request.url));
