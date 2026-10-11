@@ -7,6 +7,7 @@ import { Footer } from "@/components/layout/footer";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
+import { getSiteMenus } from "@/lib/queries";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -26,15 +27,16 @@ export const metadata: Metadata = {
   description: "Jawhara — smycken och accessoarer",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const menus = await getSiteMenus();
   return (
     <html lang="sv">
       <body className={`${newsreader.variable} ${redHatText.variable} font-sans`}>
         <CartProvider>
           <AnnouncementBar />
-          <Header />
+          <Header navItems={menus.mainMenu} />
           {children}
-          <Footer />
+          <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer />
           <AddToCartToast />
         </CartProvider>

@@ -5,9 +5,13 @@ import Link from "next/link";
 import { useCart, useJustAdded } from "@/components/cart/cart-provider";
 import { PriorityNav } from "@/components/layout/priority-nav";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
+import type { NavLink } from "@/lib/queries";
 
-// Real main-menu items, from data/exports/menus.jsonl (handle: main-menu), original order preserved.
-const NAV_ITEMS = [
+// Fallback only (used if the real-time query below the layout ever returns nothing) -- the real
+// main-menu content now lives in the `storefront_menus`/`storefront_menu_items` tables, editable
+// via /admin/storefront/menus, originally seeded verbatim from this exact list (migration
+// 0021_phase7_storefront_seed.sql).
+const FALLBACK_NAV_ITEMS: NavLink[] = [
   { title: "Hem", href: "/" },
   { title: "Alla smycken", href: "/collections/alla-smycken" },
   { title: "Armband", href: "/collections/armband" },
@@ -18,9 +22,10 @@ const NAV_ITEMS = [
   { title: "Tillbehör", href: "/collections/tillbehor" },
 ];
 
-export function Header() {
+export function Header({ navItems }: { navItems?: NavLink[] }) {
   const { count, open } = useCart();
   const justAdded = useJustAdded(500);
+  const NAV_ITEMS = navItems && navItems.length > 0 ? navItems : FALLBACK_NAV_ITEMS;
 
   return (
     <header className="sticky top-0 z-30 flex h-[68px] items-center border-b border-line bg-bg">

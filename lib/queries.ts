@@ -382,3 +382,34 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
   cards.sort((a, b) => Number(b.available) - Number(a.available));
   return cards.slice(0, limit);
 }
+
+export type HomeSection = { id: string; type: string; visible: boolean; config: Record<string, unknown> };
+
+/**
+ * The homepage's real, live section list -- RLS (migration 0020) means this anon-key client can
+ * only ever see the `status='published'` row, never the admin's draft. Returns [] (never throws)
+ * if no published layout exists yet, so the homepage degrades to an empty page rather than erroring.
+ */
+export async function getPublishedHomeSections(page = "home"): Promise<HomeSection[]> {
+  const { data } = await supabase.from("storefront_layouts").select("sections").eq("page", page).eq("status", "published").maybeSingle();
+  return (data?.sections as HomeSection[] | undefined) ?? [];
+}
+
+export type NavLink = { title: string; href: string };
+export type SiteMenus = { mainMenu: NavLink[]; footer: NavLink[]; about: NavLink[]; terms: NavLink[]; social: NavLink[] };
+
+/**
+ * All 5 real site menus (header + footer columns) in one query, read by the root layout on every
+ * page load. Replaces components/layout/header.tsx's/footer.tsx's previously-hardcoded arrays.
+ */
+export async function getSiteMenus(): Promise<SiteMenus> {
+  const { data } = await supabase.from("storefront_menus").select("handle, storefront_menu_items(title, href, position)");
+  const byHandle = new Map((data ?? []).map((m: any) => [m.handle, (m.storefront_menu_items ?? []).sort((a: any, b: any) => a.position - b.position).map((i: any) => ({ title: i.title, href: i.href }))]));
+  return {
+    mainMenu: byHandle.get("main-menu") ?? [],
+    footer: byHandle.get("footer") ?? [],
+    about: byHandle.get("about") ?? [],
+    terms: byHandle.get("terms") ?? [],
+    social: byHandle.get("social") ?? [],
+  };
+}
