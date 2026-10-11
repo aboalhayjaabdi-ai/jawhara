@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <Footer />
           <CartDrawer />
+          <AddToCartToast />
         </CartProvider>
       </body>
     </html>

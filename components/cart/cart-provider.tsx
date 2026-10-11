@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 export type CartItem = {
   variantId: string;
@@ -24,9 +24,9 @@ type CartContextValue = {
   subtotal: number;
   count: number;
   hydrated: boolean;
-  // Increments on every addItem call -- a transient "item just added" signal the header uses to
-  // bounce the cart icon, distinct from `count` (which also changes when qty is adjusted inside
-  // an already-open cart, and shouldn't re-trigger the bounce).
+  // Increments on every addItem call -- a transient "item just added" signal (see useJustAdded
+  // below), distinct from `count` (which also changes when qty is adjusted inside an already-open
+  // cart, and shouldn't re-trigger the add-to-cart feedback).
   bump: number;
 };
 
@@ -107,4 +107,25 @@ export function useCart() {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error("useCart must be used within CartProvider");
   return ctx;
+}
+
+/**
+ * True for `durationMs` after every real addItem() call (skips the initial mount), then false
+ * again -- a shared "just added" signal for add-to-cart feedback (icon/badge pop, toast), each
+ * consumer picking its own duration off the same underlying `bump` counter.
+ */
+export function useJustAdded(durationMs: number): boolean {
+  const { bump } = useCart();
+  const [active, setActive] = useState(false);
+  const prevBump = useRef(bump);
+
+  useEffect(() => {
+    if (bump === prevBump.current) return;
+    prevBump.current = bump;
+    setActive(true);
+    const timeout = setTimeout(() => setActive(false), durationMs);
+    return () => clearTimeout(timeout);
+  }, [bump, durationMs]);
+
+  return active;
 }

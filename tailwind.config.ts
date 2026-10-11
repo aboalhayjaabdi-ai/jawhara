@@ -23,6 +23,12 @@ const config: Config = {
       },
       keyframes: {
         marquee: { to: { transform: "translateX(-50%)" } },
+        "cart-pop": {
+          "0%": { transform: "scale(1)" },
+          "35%": { transform: "scale(1.3)" },
+          "60%": { transform: "scale(0.95)" },
+          "100%": { transform: "scale(1)" },
+        },
       },
       animation: {
         // Real theme: right-to-left CSS transform loop over duplicated content, see
@@ -30,6 +36,9 @@ const config: Config = {
         // dynamically per viewport, which doesn't port cleanly to a static component.
         // 160s = 20s base × the 8x content REPEAT in marquee.tsx, so px/sec speed is unchanged.
         marquee: "marquee 160s linear infinite",
+        // Single-play spring-like pop for add-to-cart feedback (header icon + count badge) --
+        // the overshoot easing gives a premium "bump" rather than a linear scale.
+        "cart-pop": "cart-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) 1",
       },
     },
   },
