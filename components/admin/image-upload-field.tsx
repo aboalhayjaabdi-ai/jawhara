@@ -2,7 +2,17 @@
 
 import { useRef, useState } from "react";
 
-export function ImageUploadField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+export function ImageUploadField({
+  label,
+  value,
+  onChange,
+  endpoint = "/api/admin/storefront/upload-image",
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  endpoint?: string;
+}) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -14,7 +24,7 @@ export function ImageUploadField({ label, value, onChange }: { label: string; va
     setError(null);
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch("/api/admin/storefront/upload-image", { method: "POST", body: formData });
+    const res = await fetch(endpoint, { method: "POST", body: formData });
     const data = await res.json();
     if (!res.ok) setError(data.error ?? "Uppladdning misslyckades.");
     else onChange(data.url);

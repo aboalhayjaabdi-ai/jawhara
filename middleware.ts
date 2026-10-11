@@ -21,7 +21,12 @@ if (proxyUrl) {
 // Server Action/route -- see lib/admin/auth.ts): a solo-business admin panel's traffic is low
 // enough that the extra admin_users lookup here costs nothing that matters, and RLS alone is
 // never treated as the only security boundary.
-export async function middleware(request: NextRequest) {
+//
+// Also serves DB-driven storefront redirects (url_redirects, managed at /admin/settings/redirects)
+// for every non-admin page route -- a plain, unauthenticated RLS-public-read lookup, skipped
+// entirely for static assets (anything with a file extension) so it never adds overhead to image/
+// font/script requests.
+async function handleAdminAuth(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -65,6 +70,30 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith("/admin")) {
+    return handleAdminAuth(request);
+  }
+
+  // Static assets (images, fonts, etc.) always have a file extension in their last segment --
+  // real redirects only ever target page routes, so skip the DB lookup for these entirely.
+  if (/\.[a-zA-Z0-9]+$/.test(pathname)) {
+    return NextResponse.next();
+  }
+
+  const anon = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: { getAll: () => [], setAll: () => {} },
+  });
+  const { data: redirect } = await anon.from("url_redirects").select("destination_path").eq("source_path", pathname).maybeSingle();
+  if (redirect) {
+    return NextResponse.redirect(new URL(redirect.destination_path, request.url), 308);
+  }
+
+  return NextResponse.next();
+}
+
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };

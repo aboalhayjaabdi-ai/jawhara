@@ -413,3 +413,9 @@ export async function getSiteMenus(): Promise<SiteMenus> {
     social: byHandle.get("social") ?? [],
   };
 }
+
+/** Admin-set logo override (store_settings.logo_url); null means "use the default static logo". */
+export async function getLogoUrl(): Promise<string | null> {
+  const { data } = await supabase.from("store_settings").select("value").eq("key", "logo_url").maybeSingle();
+  return (data?.value as string | null) ?? null;
+}

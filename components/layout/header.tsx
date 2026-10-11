@@ -22,7 +22,7 @@ const FALLBACK_NAV_ITEMS: NavLink[] = [
   { title: "Tillbehör", href: "/collections/tillbehor" },
 ];
 
-export function Header({ navItems }: { navItems?: NavLink[] }) {
+export function Header({ navItems, logoUrl }: { navItems?: NavLink[]; logoUrl?: string | null }) {
   const { count, open } = useCart();
   const justAdded = useJustAdded(500);
   const NAV_ITEMS = navItems && navItems.length > 0 ? navItems : FALLBACK_NAV_ITEMS;
@@ -40,7 +40,7 @@ export function Header({ navItems }: { navItems?: NavLink[] }) {
         </div>
 
         <Link href="/" className="col-start-2 shrink-0 justify-self-center">
-          <Image src="/brand/logo.png" alt="Jawhara" width={126} height={35} priority />
+          <Image src={logoUrl || "/brand/logo.png"} alt="Jawhara" width={126} height={35} priority className="h-[35px] w-auto object-contain" />
         </Link>
 
         <div className="col-start-3 flex shrink-0 items-center justify-end gap-4 sm:gap-5">

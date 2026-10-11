@@ -7,7 +7,7 @@ import { Footer } from "@/components/layout/footer";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
-import { getSiteMenus } from "@/lib/queries";
+import { getSiteMenus, getLogoUrl } from "@/lib/queries";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -28,13 +28,13 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const menus = await getSiteMenus();
+  const [menus, logoUrl] = await Promise.all([getSiteMenus(), getLogoUrl()]);
   return (
     <html lang="sv">
       <body className={`${newsreader.variable} ${redHatText.variable} font-sans`}>
         <CartProvider>
           <AnnouncementBar />
-          <Header navItems={menus.mainMenu} />
+          <Header navItems={menus.mainMenu} logoUrl={logoUrl} />
           {children}
           <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer />
