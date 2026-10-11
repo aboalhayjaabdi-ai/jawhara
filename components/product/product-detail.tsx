@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
+import { normalizeVariantTitle } from "@/lib/variant-title";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { ProductGallery } from "@/components/product/product-gallery";
@@ -203,7 +204,7 @@ export function ProductDetail({
                 variantId: variant.id,
                 productHandle: handle,
                 title,
-                variantTitle: variant.title,
+                variantTitle: normalizeVariantTitle(variant.title) ?? "",
                 price: variant.price,
                 image: images[0] ?? null,
               })

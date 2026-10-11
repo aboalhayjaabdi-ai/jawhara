@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ProductCard as ProductCardType } from "@/lib/queries";
 import { useCart } from "@/components/cart/cart-provider";
+import { normalizeVariantTitle } from "@/lib/variant-title";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -36,7 +37,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
                 variantId: product.quickAddVariantId!,
                 productHandle: product.handle,
                 title: product.title,
-                variantTitle: "Default Title",
+                variantTitle: normalizeVariantTitle("Default Title") ?? "",
                 price: product.price,
                 image: product.image,
               });
