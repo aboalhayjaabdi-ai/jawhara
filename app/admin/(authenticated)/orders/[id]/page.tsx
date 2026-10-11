@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
+import { OrderNotesCard } from "@/components/admin/order-notes-card";
+import { FulfillmentForm } from "@/components/admin/fulfillment-form";
+import { RefundForm } from "@/components/admin/refund-form";
+import { CancelOrderButton } from "@/components/admin/cancel-order-button";
+import { ReturnForm } from "@/components/admin/return-form";
+import { OrderActivityTimeline } from "@/components/admin/order-activity-timeline";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +27,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, shipping_address_id, customer_id, customers(first_name, last_name, email, phone)"
+      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, source, shipping_address_id, customer_id, customers(first_name, last_name, email, phone)"
     )
     .eq("id", id)
     .maybeSingle();
@@ -29,10 +35,13 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
   if (!order) notFound();
 
   const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }] = await Promise.all([
-    supabase.from("order_items").select("id, title, sku, quantity, unit_price, discounted_unit_price").eq("order_id", order.id),
+    supabase
+      .from("order_items")
+      .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id")
+      .eq("order_id", order.id),
     supabase.from("payments").select("id, kind, status, gateway, amount, currency_code, processed_at, stripe_payment_intent_id").eq("order_id", order.id),
     supabase.from("fulfillments").select("id, status, tracking_number, tracking_url, tracking_company, created_at").eq("order_id", order.id),
-    supabase.from("refunds").select("id, amount, reason, created_at").eq("order_id", order.id),
+    supabase.from("refunds").select("id, amount, reason, created_at, kind").eq("order_id", order.id),
     order.shipping_address_id
       ? supabase
           .from("addresses")
@@ -44,7 +53,14 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   const customer = order.customers as any;
   const customerName = customer ? [customer.first_name, customer.last_name].filter(Boolean).join(" ") : null;
-  const provider = order.shopify_id ? "Shopify" : order.stripe_checkout_session_id ? "Stripe" : "—";
+  const provider = order.source === "shopify" ? "Shopify" : order.source === "stripe" ? "Stripe" : "Manuell";
+
+  const unfulfilledItems = (items ?? [])
+    .filter((i) => i.quantity - i.fulfilled_quantity > 0)
+    .map((i) => ({ id: i.id, title: i.title, sku: i.sku, remaining: i.quantity - i.fulfilled_quantity }));
+  const returnableItems = (items ?? []).map((i) => ({ id: i.id, title: i.title, quantity: i.quantity }));
+  const alreadyRefunded = (refunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+  const refundableAmount = Math.max(0, Number(order.total_price) - alreadyRefunded);
 
   return (
     <div className="max-w-5xl">
@@ -56,13 +72,18 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           <h1 className="mt-2 text-2xl font-semibold text-gray-900">{order.order_number}</h1>
           <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
         </div>
-        <span
-          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-            provider === "Shopify" ? "bg-gray-100 text-gray-700" : provider === "Stripe" ? "bg-gray-900 text-white" : "text-gray-400"
-          }`}
-        >
-          {provider}
-        </span>
+        <div className="flex items-center gap-3">
+          <Link href={`/admin/print/orders/${order.id}/packing-slip`} target="_blank" className="text-xs font-medium text-gray-500 underline hover:text-gray-900">
+            Skriv ut följesedel
+          </Link>
+          <span
+            className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+              provider === "Shopify" ? "bg-gray-100 text-gray-700" : provider === "Stripe" ? "bg-gray-900 text-white" : "text-gray-400"
+            }`}
+          >
+            {provider}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -165,6 +186,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               </div>
             </div>
           )}
+
+          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} />}
+          <ReturnForm orderId={order.id} items={returnableItems} />
+          <OrderActivityTimeline orderId={order.id} />
         </div>
 
         <div className="space-y-6">
@@ -186,7 +211,14 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                 </div>
               )}
             </div>
+            {!order.cancelled_at && (
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <CancelOrderButton orderId={order.id} />
+              </div>
+            )}
           </div>
+
+          <RefundForm orderId={order.id} maxAmount={refundableAmount} currency={order.currency_code} />
 
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Kund</div>
@@ -229,12 +261,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {order.note && (
-            <div className="rounded-lg border border-gray-200 bg-white p-5">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Anteckning</div>
-              <div className="text-sm text-gray-700">{order.note}</div>
-            </div>
-          )}
+          <OrderNotesCard orderId={order.id} initialNote={order.note} initialTags={order.tags ?? []} />
         </div>
       </div>
     </div>

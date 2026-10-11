@@ -1,115 +1,132 @@
-# Order, Catalog & Customer Reconciliation — 2026-10-11
+# Order Reconciliation — the 283 vs. 400 discrepancy (2026-10-11, superseding the earlier report)
 
-Full read-only reconciliation of Shopify orders/customers/catalog against Supabase, per your
-request after flagging that Supabase might be missing orders beyond the original 286. Everything
-below is from live, read-only Shopify Admin API calls and direct Supabase reads — nothing is
-estimated or assumed. No Shopify data was modified, no Stripe API calls were made, no customer
-emails were sent, and no existing order was deleted.
+## Summary
 
-## 1. The "more than 286" premise — live-checked, and not what it first appeared
+Your Shopify Admin showed **400 orders**. This project's reconciliation tooling only ever found
+**283**. You asked for a thorough re-investigation rather than trusting the earlier report's
+conclusion that the counts already agreed. That re-investigation found a real, confirmed cause —
+**400 was always correct**, and the 283 was an artifact of a Shopify API permission restriction,
+not a data problem. All 400 orders are now imported into Supabase, with zero duplicates and zero
+changes to any original Shopify order.
 
-Before importing anything, I ran three independent live order-count queries (unfiltered, an
-explicit `status:any` filter, and an explicit `created_at:>2000-01-01` filter) — all three returned
-the **identical count: 283**. If the original extraction had been limited by Shopify's `read_orders`
-60-day/recent-only restriction, a `status:any` or explicit old-date query would have returned a
-*different* (larger) number or errored; it didn't. **There is no scope restriction limiting
-historical order access** — the app can see the shop's full order history.
+## 1. Root cause: a silent 60-day visibility window, not a data gap
 
-The real, live count (283) is actually **lower** than what was already in Supabase (286), not
-higher. `docs/migration-verification.md` shows 286 was already cross-checked against a live Shopify
-count on 2026-10-08 and matched exactly at the time — so nothing was wrong with the original
-extraction. The most likely explanation, confirmed by the ID-level diff below, is that 3 specific
-orders were removed from Shopify after Oct 8 (see §2). The newest live order is also from Oct 8,
-consistent with the storefront still being closed to new checkouts.
+The dedicated migration app's Shopify token has the standard `read_orders` scope, but **not**
+`read_all_orders`. Shopify enforces this with no error and no visible signal: `read_orders`
+transparently restricts the `orders`/`ordersCount` API fields to a **rolling ~60-day window**.
+Every query variant run through that token — unfiltered, `status:any`, an explicit old
+`created_at` filter, full cursor pagination — agreed on 283, because all of them were running
+through the same restricted window. That internal agreement is exactly why the original report
+concluded there was no restriction; it checked whether the queries *disagreed with each other*,
+not whether they matched the real, unrestricted total.
 
-**One real, confirmed access restriction found:** this app's token does **not** have the
-`read_draft_orders` scope — `draftOrdersCount` returns `ACCESS_DENIED`. If you consider draft
-orders (merchant-created, not customer checkouts) part of your order count, those remain invisible
-until that scope is granted. For reference, `abandonedCheckoutsCount` is 134 — real and accessible,
-but these never became actual orders in Shopify's own data model, so they're correctly excluded
-from an "orders" reconciliation.
+**Direct proof**: a second Shopify connection available in this environment, with the broader
+`read_all_orders` scope, queried against the exact same store (`1tq41d-4y.myshopify.com`) and
+returned **exactly 400** — matching Shopify Admin's own displayed count precisely. The oldest
+order visible to the restricted token was #SE11183 (created 2026-08-12 — almost exactly 60 days
+before this investigation). The real oldest order, visible only through the broader connection, is
+**#1001** (created 2026-05-15). Every order from 2026-05-15 through 2026-08-11 — 117 orders — was
+completely invisible to the restricted token, while remaining fully visible, live, and unmodified
+in Shopify Admin the whole time.
 
-## 2. Orders — final state after reconciliation
+## 2. Correcting the earlier report's "3 orders deleted" claim
 
-| | Count |
-|---|---|
-| Live Shopify orders (verified 3 ways) | 283 |
-| Supabase orders, total | 294 |
-| — Shopify-origin (`shopify_id` set) | 286 |
-| — Stripe-origin (`stripe_checkout_session_id` set) | 8 |
-| **Missing from Supabase → imported** | **0** |
-| **Present in Supabase but no longer live in Shopify → reported, NOT deleted** | **3** |
-| Field drift found and corrected | 3 orders (fulfillment status changed since Oct 8) |
-| Order line items missing → imported | 0 |
+The earlier report concluded that orders #SE11153, #SE11163, and #SE11173 had been removed from
+Shopify, because they appeared in an Oct 8 snapshot but not in an Oct 11 live re-pull. That
+conclusion is now confirmed wrong. All three were created Aug 10–11 — **before** the 60-day
+cutoff. They did not disappear: they aged out of the restricted token's moving window between the
+two extraction dates (the window reached back to ~Aug 9 on Oct 8, and only to ~Aug 12 by Oct 11).
 
-**The 3 orders no longer live in Shopify** (all from the same 15-hour window, consecutive order
-numbers — pattern suggests a batch cleanup on Shopify's side, not assumed further than that):
+This is now directly confirmed in Supabase: all three orders are present, with real data —
 
-| Order | Shopify ID | Created |
+| Order | Shopify ID | Created | Financial status | Fulfillment status |
+|---|---|---|---|---|
+| #SE11153 | 8216712773970 | 2026-08-10 11:12 | PAID | FULFILLED |
+| #SE11163 | 8217870729554 | 2026-08-10 20:09 | PAID | FULFILLED |
+| #SE11173 | 8218195296594 | 2026-08-11 01:34 | PAID | FULFILLED |
+
+No Shopify order was ever deleted. No Supabase row was ever deleted either, at any point in this
+process.
+
+## 3. The fix: how the missing orders were imported
+
+Per your explicit approval, the full order history was pulled **read-only** through the
+already-connected, broader-scoped Shopify app (not the restricted dedicated migration app), using
+only `ordersCount`/`orders` read queries — no mutation of any kind was made against Shopify at any
+point. All 400 orders (not just the 117 missing ones) were pulled, written to
+`data/exports/orders-mcp-backfill.jsonl`, and imported via the new
+`scripts/shopify/import-mcp-backfill-orders.ts`, which reuses the exact same idempotent
+`shopify_id`-keyed upsert pipeline (`upsert(table, rows, "shopify_id")`, a real
+`ON CONFLICT (shopify_id) DO UPDATE`) already proven safe by `import-missing-orders.ts`. Re-running
+it is a safe no-op.
+
+**Before → after:**
+
+| | Before | After |
 |---|---|---|
-| #SE11153 | 8216712773970 | 2026-08-10 11:12:55 UTC |
-| #SE11163 | 8217870729554 | 2026-08-10 20:09:09 UTC |
-| #SE11173 | 8218195296594 | 2026-08-11 01:34:16 UTC |
+| Live Shopify orders (full history, confirmed via the broader connection) | 400 | 400 (unchanged — nothing was ever written to Shopify) |
+| Supabase orders, total | 294 | **408** |
+| — Shopify-origin (`source = 'shopify'`) | 286 | **400** |
+| — Stripe-origin (`source = 'stripe'`) | 8 | 8 (unchanged) |
+| `order_items` | 731 | 983 |
+| `payments` | 319 | 474 |
+| `fulfillments` | 247 | 358 |
+| `refunds` | 11 | 34 |
+| `addresses` | 1,130 | 1,364 |
 
-Per your explicit instruction, these rows were **left exactly as they are** in Supabase — your
-order history is preserved regardless of what later happened on the Shopify side. Worth checking on
-Shopify's own side if you want to know why they were removed; I can't determine that from the API
-(a deleted order leaves no trace to query, unlike a cancelled one).
+Net new Shopify-origin order rows: 114 (not 117), because 3 of the 117 orders invisible to the
+restricted token were already present in Supabase from an earlier, less-restricted extraction
+window (see §2) — those 3 were updated in place with their current, real data, not duplicated.
 
-**3 real field-drift corrections applied** (orders fulfilled since the original Oct 8 extraction,
-now showing their real current status): #SE13533, #SE13633, #SE13643 — `fulfillment_status` updated
-from `IN_PROGRESS` to `FULFILLED`.
+Every column — order number, date, totals, currency, status, line items, payments, fulfillments
+with tracking, refunds, shipping/billing addresses — came directly from Shopify's own fields via
+the same field mapping this project's existing import scripts already use. Nothing was recomputed,
+estimated, or invented.
 
-**Pipeline gap closed** (unrelated to the order-count question, found while reconciling): the
-original import never wrote `payments`, `fulfillments`, `refunds`, or order-linked `addresses` —
-those tables existed in the schema but were empty for every Shopify order. Backfilled from the same
-live data:
+## 4. Getting `read_all_orders` on the dedicated app (for durable, future self-service syncs)
 
-| Table | Rows added |
-|---|---|
-| `payments` | 319 |
-| `fulfillments` | 247 |
-| `refunds` | 11 |
-| `addresses` (order-linked shipping/billing) | 565 |
+The one-time backfill above used a broader-scoped connection available only inside a Claude Code
+session. The **deployed Jawhara Admin app** — manual re-runs of `scripts/shopify/reconcile-orders.ts`,
+and Phase 2's "Sync from Shopify" button — only ever has the dedicated migration app's own
+restricted token, which still can't see anything older than ~60 days. To make future syncs fully
+self-service, request the broader scope on that app:
 
-A second reconciliation run after the import confirmed **zero remaining drift and zero remaining
-gaps** (other than the 3 orders with no live Shopify data to backfill from, which is expected).
-Re-running `scripts/shopify/reconcile-orders.ts` is safe at any time — it's idempotent — and is
-exactly what to run as the final incremental sync before launch.
+1. Open the **Dev Dashboard** (dev.shopify.com) and find the app that mints the token
+   (match its Client ID to `SHOPIFY_CLIENT_ID` in `.env.local`).
+2. Go to that app's **API access** page.
+3. Find the **"Read all orders"** access-request card (listed separately from the base
+   `read_orders` scope you already have).
+4. Click **Request access** and fill in the justification field — e.g. "Internal reconciliation
+   and ongoing incremental sync between Shopify and our own independent order-management system;
+   needs full historical order visibility, not just the last 60 days."
+5. Submit. Shopify reviews this request; there is no published turnaround-time guarantee, so it
+   may take anywhere from hours to longer.
+6. Once approved, **no code change is needed** — the app's existing OAuth client-credentials flow
+   picks up the new scope automatically on its next token mint.
 
-## 3. Catalog (products, variants, collections) — re-verified, fully clean
+Until this is approved, `reconcile-orders.ts` and the "Sync from Shopify" button will correctly
+catch any *new* order placed from now on, but will report every one of the 117 historical orders as
+"missing from live Shopify" if re-run — that's expected (they're outside its 60-day view), not a
+regression, and not something to act on.
 
-Re-ran the existing `scripts/shopify/verify-catalog.ts` unchanged. 376 products / 788 variants /
-662 images / 31 collections / 1,788 collection memberships — all present, zero missing. The only 13
-reported differences are the collection tile images already intentionally re-hosted to Supabase
-Storage in a previous approved round (Shopify CDN URL vs. your own Storage URL) — not drift, not
-something to change back.
+## 5. What was never touched
 
-## 4. Customers — fully clean, nothing to import
+No Shopify mutation of any kind — every call made throughout this investigation and fix, through
+both Shopify connections, was a read query. No Stripe API call. No fulfillment or refund action
+triggered. No customer email sent. No Supabase row deleted. Every write went through the same
+idempotent `shopify_id`-keyed upsert this project already uses everywhere else — re-running
+`import-mcp-backfill-orders.ts` again is a safe no-op.
 
-Live Shopify customers: 504. Supabase: 504. Zero missing either direction, zero field drift, zero
-missing addresses.
+## 6. Catalog and customers — unaffected, still clean
 
-## 5. Admin dashboard
+Re-confirmed unaffected by this correction (unchanged from the original reconciliation pass):
+376 products / 788 variants / 662 images / 31 collections / 1,788 collection memberships all
+present with zero drift; 504 customers present in both Shopify and Supabase with zero missing
+addresses either direction.
 
-Added `/admin/orders` — a read-only order list (order number, date, customer, total,
-financial/fulfillment status, and a Shopify/Stripe provider badge) so both historical Shopify
-orders and new Stripe orders are visible with their correct payment provider, per your requirement.
-Reuses the existing admin auth/layout; no checkout/payment logic touched.
+## New files from this fix
 
-## 6. What was never touched
-
-No Shopify mutation of any kind (every script here only ever sent read queries). No Stripe API
-calls. No fulfillment or refund actions triggered. No customer emails sent. No Supabase row deleted.
-Every write went through the same idempotent `shopify_id`-keyed upsert this project already uses
-elsewhere — re-running any of these scripts again is a safe no-op unless something genuinely
-changed on the Shopify side.
-
-## New files
-
-- `scripts/shopify/reconcile-orders.ts` — read-only diff/report (re-run anytime, including as the
-  pre-launch final sync)
-- `scripts/shopify/import-missing-orders.ts` — idempotent import/backfill (re-run anytime)
-- `scripts/shopify/verify-customers.ts` — read-only customer/address diff
-- `app/admin/(authenticated)/orders/page.tsx` — admin orders list
-- `data/exports/order-reconciliation-mismatches.json`, `data/exports/customer-reconciliation-mismatches.json` — full detail dumps (gitignored, local only)
+- `data/exports/orders-mcp-backfill.jsonl` — the full 400-order raw pull (gitignored, local only)
+- `scripts/shopify/import-mcp-backfill-orders.ts` — the idempotent import step (re-runnable)
+- `supabase/migrations/0012_phase2_order_management.sql` — adds `orders.source` (shopify/stripe/manual)
+  and the Phase 2 order-management schema (see the Phase 2 implementation report for the rest)
