@@ -117,6 +117,9 @@ export function ProductDetail({
         1
       ),
       quickAddVariantId: variants.length === 1 ? variants[0].id : null,
+      // Recently-viewed is a flattened point-in-time snapshot (see lib/recently-viewed.ts) --
+      // multi-variant quick-add there is out of scope for this round, same as before.
+      variants: [],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
@@ -141,12 +144,16 @@ export function ProductDetail({
           <h1 className="text-[30px]">{title}</h1>
           {variant?.sku && <div className="mt-1.5 text-xs text-muted">{variant.sku}</div>}
           {avgRating != null && (
-            <div className="mt-2.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => document.getElementById("recensioner")?.scrollIntoView({ behavior: "smooth" })}
+              className="mt-2.5 flex items-center gap-2"
+            >
               <span className="text-xs">{stars(avgRating)}</span>
-              <span className="text-xs text-muted">
+              <span className="text-xs text-muted underline">
                 {avgRating.toFixed(1)} ({reviews.length} {reviews.length === 1 ? "recension" : "recensioner"})
               </span>
-            </div>
+            </button>
           )}
           {variant && (
             <div className="mt-4 flex items-baseline gap-2">
@@ -206,6 +213,7 @@ export function ProductDetail({
                 title,
                 variantTitle: normalizeVariantTitle(variant.title) ?? "",
                 price: variant.price,
+                compareAtPrice: variant.compare_at_price,
                 image: images[0] ?? null,
               })
             }
@@ -240,7 +248,7 @@ export function ProductDetail({
       </div>
 
       {reviews.length > 0 && (
-        <div className="mt-16 border-t border-line pt-16">
+        <div id="recensioner" className="mt-16 border-t border-line pt-16">
           <div className="max-w-[760px]">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Recensioner</div>
             <h2 className="mt-2.5 text-[26px]">Vad kunder säger</h2>

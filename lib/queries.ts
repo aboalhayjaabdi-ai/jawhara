@@ -2,6 +2,16 @@ import { supabase } from "./supabase/client";
 import { mediaUrl } from "./supabase/media";
 import { isVariantAvailable } from "./inventory";
 
+export type ProductCardVariant = {
+  id: string;
+  price: number;
+  compareAtPrice: number | null;
+  option1: string | null;
+  option2: string | null;
+  option3: string | null;
+  available: boolean;
+};
+
 export type ProductCard = {
   title: string;
   handle: string;
@@ -10,10 +20,10 @@ export type ProductCard = {
   compareAtPrice: number | null;
   sku: string | null;
   available: boolean;
-  // Quick-add only ever targets a product's single variant from the grid -- a product with
-  // real size/option variants still requires visiting the PDP to choose, same as the original
-  // theme's quick-add modal did for multi-option products.
+  // Set only for a single-variant product -- quick-add can add it directly. A product with real
+  // size/color options instead offers a variant picker (see `variants` below) before adding.
   quickAddVariantId: string | null;
+  variants: ProductCardVariant[];
 };
 
 function cheapestVariant<T extends { price: number }>(variants: T[]) {
@@ -30,6 +40,9 @@ function toCard(p: {
     sku?: string | null;
     price: number;
     compare_at_price: number | null;
+    option1?: string | null;
+    option2?: string | null;
+    option3?: string | null;
     inventory_quantity?: number;
     inventory_tracked?: boolean;
     inventory_policy?: string | null;
@@ -40,7 +53,7 @@ function toCard(p: {
   // Shows the selected/cheapest variant's own SKU, or the first variant's if that's blank --
   // never a different product's SKU, never invented when none exists.
   const sku = variant?.sku ?? p.product_variants[0]?.sku ?? null;
-  const available = p.product_variants.some((v) =>
+  const variantAvailable = (v: (typeof p.product_variants)[number]) =>
     isVariantAvailable(
       {
         productStatus: p.status ?? "active",
@@ -49,8 +62,8 @@ function toCard(p: {
         inventoryQuantity: v.inventory_quantity ?? 0,
       },
       1
-    )
-  );
+    );
+  const available = p.product_variants.some(variantAvailable);
   return {
     title: p.title,
     handle: p.handle,
@@ -60,6 +73,17 @@ function toCard(p: {
     sku,
     available,
     quickAddVariantId: p.product_variants.length === 1 ? p.product_variants[0].id ?? null : null,
+    variants: p.product_variants
+      .filter((v) => v.id)
+      .map((v) => ({
+        id: v.id!,
+        price: v.price,
+        compareAtPrice: v.compare_at_price,
+        option1: v.option1 ?? null,
+        option2: v.option2 ?? null,
+        option3: v.option3 ?? null,
+        available: variantAvailable(v),
+      })),
   };
 }
 
@@ -71,7 +95,7 @@ export async function getCollectionProductCards(handle: string, limit: number, o
   const { data } = await supabase
     .from("collection_products")
     .select(
-      "position, products!inner(title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy))"
+      "position, products!inner(title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
     )
     .eq("collection_id", collection.id)
     .eq("products.status", "active")
@@ -86,7 +110,7 @@ export async function getAllProductCards(limit: number, offset = 0): Promise<{ c
   const { data, count } = await supabase
     .from("products")
     .select(
-      "title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)",
+      "title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)",
       { count: "exact" }
     )
     .eq("status", "active")
@@ -118,7 +142,18 @@ type RawProductRow = {
   status?: string;
   created_at?: string;
   media: { storage_path: string; position: number }[];
-  product_variants: { id?: string; sku?: string | null; price: number; compare_at_price: number | null; inventory_quantity?: number; inventory_tracked?: boolean; inventory_policy?: string | null }[];
+  product_variants: {
+    id?: string;
+    sku?: string | null;
+    price: number;
+    compare_at_price: number | null;
+    option1?: string | null;
+    option2?: string | null;
+    option3?: string | null;
+    inventory_quantity?: number;
+    inventory_tracked?: boolean;
+    inventory_policy?: string | null;
+  }[];
 };
 
 // Collection sizes in this catalog top out at a couple hundred products, so sorting/filtering by
@@ -184,7 +219,7 @@ export async function getFilteredCollectionProducts(
   const { data } = await supabase
     .from("collection_products")
     .select(
-      "products!inner(title, handle, status, created_at, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy))"
+      "products!inner(title, handle, status, created_at, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
     )
     .eq("collection_id", collection.id)
     .eq("products.status", "active");
@@ -197,7 +232,7 @@ export async function getFilteredCollectionProducts(
 export async function getFilteredAllProducts(options: CollectionFilterOptions, limit: number, offset = 0): Promise<{ cards: ProductCard[]; total: number }> {
   const { data } = await supabase
     .from("products")
-    .select("title, handle, status, created_at, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)")
+    .select("title, handle, status, created_at, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)")
     .eq("status", "active");
 
   return sortFilterPaginate((data ?? []) as RawProductRow[], options, limit, offset);
@@ -271,7 +306,7 @@ export async function searchProductCards(query: string, limit = 24): Promise<Pro
   const { data } = await supabase
     .from("products")
     .select(
-      "title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)"
+      "title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("status", "active")
     .ilike("title", `%${query}%`)
@@ -325,7 +360,7 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
     const { data } = await supabase
       .from("collection_products")
       .select(
-        "position, products!inner(title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy))"
+        "position, products!inner(title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
       )
       .eq("collection_id", collection.id)
       .eq("products.status", "active")

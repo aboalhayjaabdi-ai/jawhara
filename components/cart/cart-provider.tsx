@@ -8,6 +8,7 @@ export type CartItem = {
   title: string;
   variantTitle: string;
   price: number;
+  compareAtPrice: number | null;
   image: string | null;
   qty: number;
 };
@@ -23,6 +24,10 @@ type CartContextValue = {
   subtotal: number;
   count: number;
   hydrated: boolean;
+  // Increments on every addItem call -- a transient "item just added" signal the header uses to
+  // bounce the cart icon, distinct from `count` (which also changes when qty is adjusted inside
+  // an already-open cart, and shouldn't re-trigger the bounce).
+  bump: number;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -33,6 +38,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [bump, setBump] = useState(0);
 
   useEffect(() => {
     try {
@@ -61,7 +67,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { ...item, qty }];
     });
-    setIsOpen(true);
+    setBump((b) => b + 1);
   }
 
   function removeItem(variantId: string) {
@@ -89,6 +95,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         subtotal,
         count,
         hydrated,
+        bump,
       }}
     >
       {children}
