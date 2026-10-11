@@ -7,6 +7,7 @@ export const ADMIN_NAV = [
   { href: "/admin/customers", label: "Kunder" },
   { href: "/admin/products", label: "Produkter" },
   { href: "/admin/collections", label: "Kollektioner" },
+  { href: "/admin/discounts", label: "Rabatter" },
   { href: "/admin/product-templates", label: "Produktmallar" },
   { href: "/admin/products/inventory", label: "Lager" },
 ];
