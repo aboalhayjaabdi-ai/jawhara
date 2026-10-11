@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createAuthBrowserClient } from "@/lib/supabase/browser-auth";
+import { createClient } from "@supabase/supabase-js";
+
+// Deliberately NOT createAuthBrowserClient() here: that client (@supabase/ssr) is hardcoded to
+// the PKCE flow and only ever looks for a "?code=" query param, but Supabase's password-recovery
+// links use the classic implicit-flow "#access_token=...&type=recovery" hash fragment -- a plain
+// supabase-js client (detectSessionInUrl: true by default) is what actually reads that. The
+// resulting session lives in localStorage only, which is enough to call updateUser() once; the
+// normal cookie-based admin session is then established the ordinary way when the user signs in
+// again on /admin/login with their new password.
+function createRecoveryClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+}
 
 // Reached only via a Supabase-issued password-recovery link (carries its session as a URL hash
 // fragment the server never sees -- middleware.ts explicitly exempts this path so the page can
@@ -10,6 +21,7 @@ import { createAuthBrowserClient } from "@/lib/supabase/browser-auth";
 // invited admin account and for an ordinary "forgot password" reset later.
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const [supabase] = useState(() => createRecoveryClient());
   const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -17,7 +29,6 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabase = createAuthBrowserClient();
     // The recovery link's #access_token=...&type=recovery hash is exchanged for a real session
     // by the Supabase client as soon as it initializes client-side -- give it a moment, then
     // confirm a session actually exists before showing the form.
@@ -25,7 +36,7 @@ export default function ResetPasswordPage() {
       setReady(!!data.session);
       if (!data.session) setError("Länken är ogiltig eller har gått ut. Begär en ny länk från en administratör.");
     });
-  }, []);
+  }, [supabase]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,7 +50,6 @@ export default function ResetPasswordPage() {
       return;
     }
     setStatus("submitting");
-    const supabase = createAuthBrowserClient();
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       setStatus("error");
