@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { requireAdmin } from "@/lib/admin/auth";
 import { t } from "@/lib/admin/i18n";
+import { parseOrdersListFilters, resolveCarrierOrderIds, getAdjacentOrderIds } from "@/lib/admin/orders-filters";
+import { financialStatusLabel, fulfillmentStatusLabel, STATUS_TONE_CLASSES } from "@/lib/admin/order-status-labels";
 import { OrderNotesCard } from "@/components/admin/order-notes-card";
 import { FulfillmentForm } from "@/components/admin/fulfillment-form";
 import { RefundForm } from "@/components/admin/refund-form";
@@ -49,6 +51,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
     .maybeSingle();
 
   if (!order) notFound();
+  const orderId = order.id;
 
   const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }] = await Promise.all([
     supabase
@@ -95,6 +98,71 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const alreadyRefunded = (refunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
   const refundableAmount = Math.max(0, Number(order.total_price) - alreadyRefunded);
   const backHref = from ? `/admin/orders?${from}` : "/admin/orders";
+
+  // Up/down prev-next navigation, respecting the same filters/sort the admin was viewing the list
+  // under (carried via `from`) -- so paging through orders from a filtered/sorted view stays
+  // consistent with what's actually above/below the current order in that same list.
+  const listFilters = parseOrdersListFilters(from ? Object.fromEntries(new URLSearchParams(from)) : {});
+  if (isFulfillmentStaff) {
+    listFilters.view = "active";
+    listFilters.carrier = undefined;
+    listFilters.provider = undefined;
+  }
+  const carrierOrderIds = listFilters.carrier ? await resolveCarrierOrderIds(listFilters.carrier) : undefined;
+  const { prevId, nextId } = await getAdjacentOrderIds(order.id, listFilters, carrierOrderIds);
+  const navHref = (targetId: string) => `/admin/orders/${targetId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+
+  const fulfillmentLabel = fulfillmentStatusLabel(order.fulfillment_status);
+  const financialLabel = financialStatusLabel(order.financial_status, order.cancelled_at);
+
+  // Shared top-right icon row: up/down to the previous/next order in the current list context,
+  // plus (full admin only) the packing-slip print icon. Both branches render the exact same arrows.
+  function OrderNavIcons() {
+    return (
+      <div className="flex items-center gap-1">
+        {!isFulfillmentStaff && (
+          <Link
+            href={`/admin/print/orders/${orderId}/packing-slip`}
+            target="_blank"
+            aria-label="Skriv ut följesedel"
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+          </Link>
+        )}
+        {prevId ? (
+          <Link href={navHref(prevId)} aria-label="Föregående order" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </Link>
+        ) : (
+          <span aria-hidden className="rounded-md p-1.5 text-gray-200">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </span>
+        )}
+        {nextId ? (
+          <Link href={navHref(nextId)} aria-label="Nästa order" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </Link>
+        ) : (
+          <span aria-hidden className="rounded-md p-1.5 text-gray-200">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+        )}
+      </div>
+    );
+  }
 
   // Shared by both the full admin view and the fulfillment_staff view: the product image/title are
   // clickable, carrying the exact purchased variant through to the product page (?variant=<id>) so
@@ -151,10 +219,20 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
     return (
       <div className="max-w-5xl">
         <div className="mb-6">
-          <Link href={backHref} className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
-            {t(locale, "order.back")}
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+          <div className="flex items-center justify-between">
+            <Link href={backHref} aria-label={t(locale, "order.back")} className="flex items-center gap-1 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </Link>
+            <OrderNavIcons />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+            <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillmentLabel.tone]}`}>
+              {FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""] ? t(locale, FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""]) : fulfillmentLabel.label}
+            </span>
+          </div>
           <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
         </div>
 
@@ -250,29 +328,32 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
 
   return (
     <div className="max-w-5xl">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <Link href={backHref} className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
-            ← Ordrar
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <Link href={backHref} aria-label="Tillbaka till ordrar" className="flex items-center gap-1 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="hidden text-xs uppercase tracking-wide lg:inline">Ordrar</span>
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-gray-900">{order.order_number}</h1>
-          <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
-          {order.hidden_at && (
-            <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-rose-600">Borttagen från listan</div>
-          )}
+          <OrderNavIcons />
         </div>
-        <div className="flex items-center gap-3">
-          <Link href={`/admin/print/orders/${order.id}/packing-slip`} target="_blank" className="text-xs font-medium text-gray-500 underline hover:text-gray-900">
-            Skriv ut följesedel
-          </Link>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillmentLabel.tone]}`}>{fulfillmentLabel.label}</span>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[financialLabel.tone]}`}>{financialLabel.label}</span>
           <span
-            className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+            className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
               provider === "Shopify" ? "bg-gray-100 text-gray-700" : provider === "Stripe" ? "bg-gray-900 text-white" : "text-gray-400"
             }`}
           >
             {provider}
           </span>
         </div>
+        <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
+        {order.hidden_at && (
+          <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-rose-600">Borttagen från listan</div>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -383,11 +464,11 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Betalning</span>
-                <span className="font-medium text-gray-900">{order.financial_status || "—"}</span>
+                <span className="font-medium text-gray-900">{financialLabel.label}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Leverans</span>
-                <span className="font-medium text-gray-900">{order.fulfillment_status || "—"}</span>
+                <span className="font-medium text-gray-900">{fulfillmentLabel.label}</span>
               </div>
               {order.cancelled_at && (
                 <div className="flex justify-between">

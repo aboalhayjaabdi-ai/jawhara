@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { bulkFulfillOrders } from "@/app/admin/(authenticated)/orders/actions/bulk-fulfillment";
 import { hideOrders, unhideOrders } from "@/app/admin/(authenticated)/orders/actions/hide";
+import { financialStatusLabel, fulfillmentStatusLabel, STATUS_TONE_CLASSES } from "@/lib/admin/order-status-labels";
 
 export type OrderRow = {
   id: string;
@@ -15,7 +16,10 @@ export type OrderRow = {
   financial_status: string | null;
   fulfillment_status: string | null;
   source: "shopify" | "stripe" | "manual";
+  cancelled_at?: string | null;
   customerName: string | null;
+  itemCount?: number;
+  carrier?: string | null;
 };
 
 function formatMoney(amount: number | null, currency: string) {
@@ -25,6 +29,10 @@ function formatMoney(amount: number | null, currency: string) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("sv-SE", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
 }
 
 const PROVIDER_LABEL: Record<OrderRow["source"], string> = { shopify: "Shopify", stripe: "Stripe", manual: "Manuell" };
@@ -129,7 +137,40 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
       )}
       {message && <div className="mb-3 text-xs text-gray-500">{message}</div>}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {/* Mobile: a card list resembling the native Shopify Admin app's order list (order number +
+          price, "{customer} • {N} artiklar • {time}", status pills, carrier/channel line) -- no
+          bulk-select here, that stays a desktop-table feature. Desktop table below is untouched. */}
+      <div className="space-y-2 lg:hidden">
+        {orders.map((o) => {
+          const financial = financialStatusLabel(o.financial_status, o.cancelled_at);
+          const fulfillment = fulfillmentStatusLabel(o.fulfillment_status);
+          return (
+            <Link
+              key={o.id}
+              href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`}
+              className="block rounded-lg border border-gray-200 bg-white p-4 active:bg-gray-50"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="font-semibold text-gray-900">{o.order_number}</span>
+                <span className="font-semibold text-gray-900">{formatMoney(o.total_price, o.currency_code)}</span>
+              </div>
+              <div className="mt-1 text-sm text-gray-500">
+                {[o.customerName || o.email || "—", `${o.itemCount ?? 0} artiklar`, formatTime(o.created_at)].join(" · ")}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillment.tone]}`}>{fulfillment.label}</span>
+                <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[financial.tone]}`}>{financial.label}</span>
+              </div>
+              <div className="mt-2 text-xs text-gray-400">
+                {formatDate(o.created_at)} · {[o.carrier, PROVIDER_LABEL[o.source]].filter(Boolean).join(" · ")}
+              </div>
+            </Link>
+          );
+        })}
+        {orders.length === 0 && <p className="py-10 text-center text-sm text-gray-400">Inga ordrar hittades.</p>}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white lg:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
@@ -151,7 +192,10 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
             </tr>
           </thead>
           <tbody>
-            {orders.map((o) => (
+            {orders.map((o) => {
+              const financial = financialStatusLabel(o.financial_status, o.cancelled_at);
+              const fulfillment = fulfillmentStatusLabel(o.fulfillment_status);
+              return (
               <tr key={o.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="h-4 w-4 rounded border-gray-300" />
@@ -164,8 +208,12 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
                 <td className="px-5 py-3 text-gray-500">{formatDate(o.created_at)}</td>
                 <td className="px-5 py-3 text-gray-500">{o.customerName || o.email || "—"}</td>
                 <td className="px-5 py-3 text-gray-900">{formatMoney(o.total_price, o.currency_code)}</td>
-                <td className="px-5 py-3 text-gray-500">{o.financial_status || "—"}</td>
-                <td className="px-5 py-3 text-gray-500">{o.fulfillment_status || "—"}</td>
+                <td className="px-5 py-3">
+                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[financial.tone]}`}>{financial.label}</span>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillment.tone]}`}>{fulfillment.label}</span>
+                </td>
                 <td className="px-5 py-3">
                   <span
                     className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -176,7 +224,8 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
                   </span>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
 

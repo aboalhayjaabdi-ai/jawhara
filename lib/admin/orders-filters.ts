@@ -102,3 +102,25 @@ export function applyOrdersListFilters<
   q = q.order(filters.sort ?? "created_at", { ascending: filters.dir === "asc" });
   return q;
 }
+
+/** The order immediately before/after a given order within the same filtered + sorted list the
+ * order list page itself shows -- powers the order detail page's up/down prev/next navigation.
+ * Fetches just the filtered id list (orders volume here is a few hundred rows, trivial to hold in
+ * memory) rather than a keyset-pagination query, so it reuses applyOrdersListFilters verbatim
+ * instead of re-deriving its WHERE/ORDER BY logic. */
+export async function getAdjacentOrderIds(
+  orderId: string,
+  filters: OrdersListFilters,
+  carrierOrderIds?: string[]
+): Promise<{ prevId: string | null; nextId: string | null }> {
+  let query: any = supabaseService.from("orders").select("id");
+  query = applyOrdersListFilters(query, filters, carrierOrderIds);
+  const { data } = await query;
+  const ids: string[] = (data ?? []).map((r: any) => r.id);
+  const idx = ids.indexOf(orderId);
+  if (idx === -1) return { prevId: null, nextId: null };
+  return {
+    prevId: idx > 0 ? ids[idx - 1] : null,
+    nextId: idx < ids.length - 1 ? ids[idx + 1] : null,
+  };
+}
