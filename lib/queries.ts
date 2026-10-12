@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabase } from "./supabase/client";
 import { mediaUrl } from "./supabase/media";
 import { isVariantAvailable } from "./inventory";
@@ -247,14 +248,16 @@ export async function getCollectionsByHandles(handles: string[]) {
   return handles.map((h) => byHandle.get(h)).filter(Boolean) as { title: string; handle: string; image_url: string | null }[];
 }
 
-export async function getCollectionMeta(handle: string) {
+// cache()'d for the same reason as getProductByHandle -- the collection page's generateMetadata()
+// and its page component both call this with the same handle.
+export const getCollectionMeta = cache(async (handle: string) => {
   const { data } = await supabase
     .from("collections")
     .select("title, handle, description_html, image_url, seo_title, seo_description, template_suffix")
     .eq("handle", handle)
     .single();
   return data;
-}
+});
 
 export async function getCollectionProductCount(handle: string): Promise<number> {
   const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).single();
@@ -310,7 +313,11 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
   });
 }
 
-export async function getProductByHandle(handle: string) {
+// cache() dedupes this within a single request: the product page's generateMetadata() and its
+// page component both call this with the same handle -- without it, that's two full serial
+// round trips to Supabase (this function itself already does two: product, then reviews) before
+// the page can start rendering, which showed up directly as ~2s server-response-time in Lighthouse.
+export const getProductByHandle = cache(async (handle: string) => {
   const { data: product } = await supabase
     .from("products")
     .select(
@@ -339,7 +346,7 @@ export async function getProductByHandle(handle: string) {
   });
 
   return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex };
-}
+});
 
 /** Real-time eligibility check for the "Valfri Plånbok" wallet promo link -- matches the exact
  * product-for-product BXGY shape against the live `discounts` table (public-read RLS, no secrets
