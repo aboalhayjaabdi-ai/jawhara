@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const ENTITY_TYPES = [
   "collection",
+  "content_page",
   "customer",
   "customer_saved_view",
   "discount",

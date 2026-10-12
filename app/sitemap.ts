@@ -1,19 +1,20 @@
 import type { MetadataRoute } from "next";
 import { supabase } from "@/lib/supabase/client";
-import { PAGES } from "@/lib/pages-content";
+import { getAllPageHandles } from "@/lib/pages-content";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [{ data: products }, { data: collections }] = await Promise.all([
+  const [{ data: products }, { data: collections }, pageHandles] = await Promise.all([
     supabase.from("products").select("handle, updated_at").eq("status", "active"),
     supabase.from("collections").select("handle, updated_at"),
+    getAllPageHandles(),
   ]);
 
   const staticEntries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/collections/all`, changeFrequency: "daily", priority: 0.9 },
-    ...Object.keys(PAGES).map((handle) => ({
+    ...pageHandles.map((handle) => ({
       url: `${SITE_URL}/pages/${handle}`,
       changeFrequency: "monthly" as const,
       priority: 0.3,

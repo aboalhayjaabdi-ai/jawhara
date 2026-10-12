@@ -4,9 +4,15 @@ import { getPageContent } from "@/lib/pages-content";
 import { FaqAccordion } from "@/components/pages/faq-accordion";
 import { ContactForm } from "@/components/pages/contact-form";
 
+// Matches the same revalidate convention as every other DB-backed storefront page (e.g.
+// products/[handle]) -- without this, Next statically caches the page indefinitely (no dynamic
+// API is otherwise called here), so an admin edit would never show up without a full rebuild.
+// The content actions also call revalidatePath() for immediate consistency after a save.
+export const revalidate = 60;
+
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
-  const content = getPageContent(handle);
+  const content = await getPageContent(handle);
   // No real SEO title/description exists in the Shopify export for any page (verified during
   // extraction) -- falling back to the real page title rather than inventing meta copy.
   return { title: content?.title ?? "Jawhara" };
@@ -14,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
 export default async function StaticPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const content = getPageContent(handle);
+  const content = await getPageContent(handle);
   if (!content) notFound();
 
   return (

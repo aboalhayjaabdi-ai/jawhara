@@ -10,6 +10,7 @@ export const ADMIN_NAV = [
   { href: "/admin/discounts", label: "Rabatter" },
   { href: "/admin/reviews", label: "Recensioner" },
   { href: "/admin/storefront", label: "Webbutik" },
+  { href: "/admin/content", label: "Innehåll" },
   { href: "/admin/product-templates", label: "Produktmallar" },
   { href: "/admin/products/inventory", label: "Lager" },
   { href: "/admin/settings", label: "Inställningar" },
