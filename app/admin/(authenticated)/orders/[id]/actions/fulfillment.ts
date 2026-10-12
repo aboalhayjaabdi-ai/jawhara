@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
+import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -60,6 +61,10 @@ export async function createFulfillment(
     .select("id")
     .single();
   if (fulfillmentError || !fulfillment) return { ok: false, error: fulfillmentError?.message ?? "Kunde inte skapa leverans." };
+
+  await registerFulfillmentsForTracking([
+    { id: fulfillment.id, trackingNumber: input.trackingNumber || null, trackingCompany: input.trackingCompany || null },
+  ]);
 
   await supabaseService.from("fulfillment_items").insert(
     requested.map((line) => ({ fulfillment_id: fulfillment.id, order_item_id: line.orderItemId, quantity: line.quantity }))

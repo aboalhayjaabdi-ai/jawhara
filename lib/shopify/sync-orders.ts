@@ -1,5 +1,6 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { paginateAll } from "./client";
+import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/sync-orders.ts must never be imported into client code");
@@ -138,7 +139,28 @@ export async function syncOrdersFromShopify(): Promise<SyncOrdersResult> {
           created_at: f.createdAt,
         };
       });
-      if (fulfillmentRows.length) await supabaseService.from("fulfillments").upsert(fulfillmentRows, { onConflict: "shopify_id" });
+      if (fulfillmentRows.length) {
+        const { data: upserted } = await supabaseService
+          .from("fulfillments")
+          .upsert(fulfillmentRows, { onConflict: "shopify_id" })
+          .select("id, tracking_number, tracking_company");
+        const withTracking = (upserted ?? []).filter((f) => f.tracking_number);
+        if (withTracking.length) {
+          // Only register fulfillments 17TRACK hasn't seen before -- re-upserting an order
+          // already synced on a prior run must not re-register (and reset) numbers it already has.
+          const { data: alreadyCached } = await supabaseService
+            .from("tracking_cache")
+            .select("fulfillment_id")
+            .in("fulfillment_id", withTracking.map((f) => f.id));
+          const cachedIds = new Set((alreadyCached ?? []).map((c) => c.fulfillment_id));
+          const newOnes = withTracking.filter((f) => !cachedIds.has(f.id));
+          if (newOnes.length) {
+            await registerFulfillmentsForTracking(
+              newOnes.map((f) => ({ id: f.id, trackingNumber: f.tracking_number, trackingCompany: f.tracking_company }))
+            );
+          }
+        }
+      }
 
       importedCount += 1;
     } catch (err) {
