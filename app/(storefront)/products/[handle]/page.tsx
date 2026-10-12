@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle } from "@/lib/queries";
+import { getProductByHandle, isEligibleForWalletPromo } from "@/lib/queries";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
@@ -31,7 +31,10 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
-  const content = await getProductTemplateContent(product.template_suffix);
+  const [content, walletPromoEligible] = await Promise.all([
+    getProductTemplateContent(product.template_suffix),
+    isEligibleForWalletPromo(product.shopify_id ?? null),
+  ]);
 
   return (
     <ProductDetail
@@ -46,6 +49,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       content={content}
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
       variantImageIndex={product.variantImageIndex}
+      walletPromoEligible={walletPromoEligible}
     />
   );
 }

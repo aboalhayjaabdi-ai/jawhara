@@ -314,7 +314,7 @@ export async function getProductByHandle(handle: string) {
   const { data: product } = await supabase
     .from("products")
     .select(
-      "id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("handle", handle)
     .single();
@@ -339,6 +339,22 @@ export async function getProductByHandle(handle: string) {
   });
 
   return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex };
+}
+
+/** Real-time eligibility check for the "Valfri Plånbok" wallet promo link -- matches the exact
+ * product-for-product BXGY shape against the live `discounts` table (public-read RLS, no secrets
+ * in that table), so the link only ever appears on bags genuinely in an active promotion's
+ * buy_item_ids, not just products sharing the same display template. Never touches
+ * lib/discounts.ts's checkout-time calculation logic -- this is a read-only display gate. */
+export async function isEligibleForWalletPromo(productShopifyId: string | null): Promise<boolean> {
+  if (!productShopifyId) return false;
+  const { data } = await supabase
+    .from("discounts")
+    .select("buy_item_ids")
+    .eq("status", "active")
+    .eq("buy_item_type", "product")
+    .eq("get_item_type", "product");
+  return (data ?? []).some((d) => (d.buy_item_ids as string[] | null)?.includes(productShopifyId));
 }
 
 export async function searchProductCards(query: string, limit = 24): Promise<ProductCard[]> {

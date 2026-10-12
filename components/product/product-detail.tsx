@@ -78,6 +78,7 @@ export function ProductDetail({
   content,
   relatedProducts,
   variantImageIndex,
+  walletPromoEligible,
 }: {
   title: string;
   handle: string;
@@ -94,6 +95,11 @@ export function ProductDetail({
   relatedProducts: React.ReactNode;
   /** Real per-variant image links (Shopify's own variant.image), keyed by variant id. */
   variantImageIndex: Record<string, number>;
+  /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForWalletPromo --
+   * whether this product's real shopify_id is in the live "Valfri Plånbok" discount's
+   * buy_item_ids. Gates the "Välj din plånbok här" link independently of content.offerMessage,
+   * since some products share the same display template without being discount-eligible. */
+  walletPromoEligible: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCart();
@@ -208,6 +214,11 @@ export function ProductDetail({
             <div className="mt-6 border border-line bg-[#f7f7f7] p-4">
               <div className="text-sm font-semibold">{content.offerMessage.heading}</div>
               <p className="mt-1.5 text-xs leading-6 text-muted">{content.offerMessage.body}</p>
+              {walletPromoEligible && content.offerMessage.href && (
+                <Link href={content.offerMessage.href} className="mt-2.5 inline-block border-b border-fg text-xs font-semibold">
+                  Välj din plånbok här →
+                </Link>
+              )}
             </div>
           )}
 

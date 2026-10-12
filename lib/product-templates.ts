@@ -18,7 +18,7 @@ export type ProductTemplateContent = {
   descriptionHeading: string;
   accordionRows: AccordionRow[];
   sizeGuideHref: string | null;
-  offerMessage: { heading: string; body: string } | null;
+  offerMessage: { heading: string; body: string; href?: string | null } | null;
   showInventoryStatus: boolean;
   galleryLayout: "carousel" | "grid";
 };

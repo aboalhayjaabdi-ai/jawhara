@@ -21,6 +21,7 @@ export function ProductTemplateForm({ id, initial }: { id?: string; initial: Pro
   const [sizeGuideHref, setSizeGuideHref] = useState(initial.sizeGuideHref ?? "");
   const [offerHeading, setOfferHeading] = useState(initial.offerMessage?.heading ?? "");
   const [offerBody, setOfferBody] = useState(initial.offerMessage?.body ?? "");
+  const [offerHref, setOfferHref] = useState(initial.offerMessage?.href ?? "");
   const [showInventoryStatus, setShowInventoryStatus] = useState(initial.showInventoryStatus);
   const [galleryLayout, setGalleryLayout] = useState(initial.galleryLayout);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export function ProductTemplateForm({ id, initial }: { id?: string; initial: Pro
       descriptionHeading: descriptionHeading || "Specifikationer",
       accordionRows,
       sizeGuideHref: sizeGuideHref || null,
-      offerMessage: offerHeading.trim() ? { heading: offerHeading, body: offerBody } : null,
+      offerMessage: offerHeading.trim() ? { heading: offerHeading, body: offerBody, href: offerHref.trim() || null } : null,
       showInventoryStatus,
       galleryLayout,
     };
@@ -193,7 +194,8 @@ export function ProductTemplateForm({ id, initial }: { id?: string; initial: Pro
         <div className="mt-3">
           <label className="text-xs text-gray-500">Erbjudandemeddelande (valfritt)</label>
           <input value={offerHeading} onChange={(e) => setOfferHeading(e.target.value)} placeholder="Rubrik" className="mt-1 mb-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
-          <input value={offerBody} onChange={(e) => setOfferBody(e.target.value)} placeholder="Text" className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+          <input value={offerBody} onChange={(e) => setOfferBody(e.target.value)} placeholder="Text" className="mb-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+          <input value={offerHref} onChange={(e) => setOfferHref(e.target.value)} placeholder="Länk (valfritt, t.ex. /collections/tillbehor)" className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
         </div>
       </div>
 
