@@ -6,7 +6,11 @@ import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult<T = undefined> = (T extends undefined ? { ok: true } : { ok: true; data: T }) | { ok: false; error: string };
 
-export async function createShippingCarrier(name: string, trackingUrlTemplate: string): Promise<ActionResult<{ id: string }>> {
+export async function createShippingCarrier(
+  name: string,
+  trackingUrlTemplate: string,
+  trackingApiCarrierCode: number | null
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
   if (!name.trim()) return { ok: false, error: "Namn krävs." };
 
@@ -15,7 +19,12 @@ export async function createShippingCarrier(name: string, trackingUrlTemplate: s
 
   const { data, error } = await supabaseService
     .from("shipping_carriers")
-    .insert({ name, tracking_url_template: trackingUrlTemplate || null, position: nextPosition })
+    .insert({
+      name,
+      tracking_url_template: trackingUrlTemplate || null,
+      tracking_api_carrier_code: trackingApiCarrierCode,
+      position: nextPosition,
+    })
     .select("id")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "Kunde inte skapa transportören." };
@@ -25,11 +34,19 @@ export async function createShippingCarrier(name: string, trackingUrlTemplate: s
   return { ok: true, data: { id: data.id } };
 }
 
-export async function updateShippingCarrier(id: string, name: string, trackingUrlTemplate: string): Promise<ActionResult> {
+export async function updateShippingCarrier(
+  id: string,
+  name: string,
+  trackingUrlTemplate: string,
+  trackingApiCarrierCode: number | null
+): Promise<ActionResult> {
   const admin = await requireAdmin();
   if (!name.trim()) return { ok: false, error: "Namn krävs." };
 
-  const { error } = await supabaseService.from("shipping_carriers").update({ name, tracking_url_template: trackingUrlTemplate || null }).eq("id", id);
+  const { error } = await supabaseService
+    .from("shipping_carriers")
+    .update({ name, tracking_url_template: trackingUrlTemplate || null, tracking_api_carrier_code: trackingApiCarrierCode })
+    .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
   await logAdminAction(admin.adminId, "shipping_carriers.update", "shipping_carrier", id, { name });

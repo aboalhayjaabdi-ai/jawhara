@@ -15,7 +15,9 @@ export default async function AdminCarriersSettingsPage() {
       <h1 className="mt-2 mb-1 text-2xl font-semibold text-gray-900">Transportörer</h1>
       <p className="mb-6 text-xs text-gray-500">
         Sparade transportörer med spårnings-URL-mall (använd <code>{"{trackingNumber}"}</code> där spårningsnumret ska sättas
-        in). Används som val i leveransformuläret på ordrar, så att en spårningslänk fylls i automatiskt.
+        in). Används som val i leveransformuläret på ordrar, så att en spårningslänk fylls i automatiskt. 17TRACK-koden är
+        transportörens numeriska kod i 17TRACK:s egna lista, krävs för att aktivera automatisk spårning på
+        "Spåra din beställning" -- lämna tom tills du har ett 17TRACK-konto och vet koden.
       </p>
       <ShippingCarriersManager carriers={carriers} />
     </div>

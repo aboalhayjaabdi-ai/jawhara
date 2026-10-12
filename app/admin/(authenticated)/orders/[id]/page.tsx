@@ -41,7 +41,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
       .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id")
       .eq("order_id", order.id),
     supabase.from("payments").select("id, kind, status, gateway, amount, currency_code, processed_at, stripe_payment_intent_id").eq("order_id", order.id),
-    supabase.from("fulfillments").select("id, status, tracking_number, tracking_url, tracking_company, created_at").eq("order_id", order.id),
+    supabase
+      .from("fulfillments")
+      .select("id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(tracking_api_registered_at)")
+      .eq("order_id", order.id),
     supabase.from("refunds").select("id, amount, reason, created_at, kind").eq("order_id", order.id),
     order.shipping_address_id
       ? supabase
@@ -170,6 +173,13 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                         ) : (
                           f.tracking_number
                         )}
+                      </div>
+                    )}
+                    {f.tracking_number && (
+                      <div className="mt-1 text-xs text-gray-400">
+                        {(f as any).tracking_cache?.tracking_api_registered_at
+                          ? "Registrerad hos 17TRACK"
+                          : "Inte registrerad hos 17TRACK (ej konfigurerat)"}
                       </div>
                     )}
                   </div>
