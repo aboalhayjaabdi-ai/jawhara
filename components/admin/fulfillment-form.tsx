@@ -2,20 +2,46 @@
 
 import { useState, useTransition } from "react";
 import { createFulfillment } from "@/app/admin/(authenticated)/orders/[id]/actions/fulfillment";
+import { buildTrackingUrl } from "@/lib/shipping/tracking-url";
+import type { ShippingCarrier } from "@/lib/admin/shipping-carriers";
 
 type UnfulfilledItem = { id: string; title: string; sku: string | null; remaining: number };
 
-export function FulfillmentForm({ orderId, items }: { orderId: string; items: UnfulfilledItem[] }) {
+const CUSTOM_CARRIER = "__custom__";
+
+export function FulfillmentForm({ orderId, items, carriers }: { orderId: string; items: UnfulfilledItem[]; carriers: ShippingCarrier[] }) {
   const [selected, setSelected] = useState<Record<string, number>>(
     Object.fromEntries(items.map((i) => [i.id, i.remaining]))
   );
   const [checked, setChecked] = useState<Record<string, boolean>>(Object.fromEntries(items.map((i) => [i.id, true])));
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrierSelection, setCarrierSelection] = useState<string>(CUSTOM_CARRIER);
   const [trackingCompany, setTrackingCompany] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
+  const [urlEditedByHand, setUrlEditedByHand] = useState(false);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function handleCarrierChange(value: string) {
+    setCarrierSelection(value);
+    if (value === CUSTOM_CARRIER) return;
+    const carrier = carriers.find((c) => c.id === value);
+    if (!carrier) return;
+    setTrackingCompany(carrier.name);
+    if (!urlEditedByHand) {
+      const url = buildTrackingUrl(carrier.trackingUrlTemplate, trackingNumber);
+      if (url) setTrackingUrl(url);
+    }
+  }
+
+  function handleTrackingNumberChange(value: string) {
+    setTrackingNumber(value);
+    if (urlEditedByHand || carrierSelection === CUSTOM_CARRIER) return;
+    const carrier = carriers.find((c) => c.id === carrierSelection);
+    const url = buildTrackingUrl(carrier?.trackingUrlTemplate ?? null, value);
+    if (url) setTrackingUrl(url);
+  }
 
   function submit() {
     setError(null);
@@ -69,19 +95,34 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <input
           value={trackingNumber}
-          onChange={(e) => setTrackingNumber(e.target.value)}
+          onChange={(e) => handleTrackingNumberChange(e.target.value)}
           placeholder="Spårningsnummer"
           className="rounded-md border border-gray-200 px-3 py-2 text-sm"
         />
-        <input
-          value={trackingCompany}
-          onChange={(e) => setTrackingCompany(e.target.value)}
-          placeholder="Transportör"
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm"
-        />
+        {carriers.length > 0 ? (
+          <select value={carrierSelection} onChange={(e) => handleCarrierChange(e.target.value)} className="rounded-md border border-gray-200 px-3 py-2 text-sm">
+            <option value={CUSTOM_CARRIER}>Annan transportör…</option>
+            {carriers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {(carrierSelection === CUSTOM_CARRIER || carriers.length === 0) && (
+          <input
+            value={trackingCompany}
+            onChange={(e) => setTrackingCompany(e.target.value)}
+            placeholder="Transportör"
+            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+          />
+        )}
         <input
           value={trackingUrl}
-          onChange={(e) => setTrackingUrl(e.target.value)}
+          onChange={(e) => {
+            setUrlEditedByHand(true);
+            setTrackingUrl(e.target.value);
+          }}
           placeholder="Spårningslänk"
           className="rounded-md border border-gray-200 px-3 py-2 text-sm"
         />

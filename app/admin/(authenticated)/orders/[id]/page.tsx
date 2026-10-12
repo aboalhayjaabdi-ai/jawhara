@@ -7,6 +7,7 @@ import { RefundForm } from "@/components/admin/refund-form";
 import { CancelOrderButton } from "@/components/admin/cancel-order-button";
 import { ReturnForm } from "@/components/admin/return-form";
 import { OrderActivityTimeline } from "@/components/admin/order-activity-timeline";
+import { listShippingCarriers } from "@/lib/admin/shipping-carriers";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   if (!order) notFound();
 
-  const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }] = await Promise.all([
+  const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }, carriers] = await Promise.all([
     supabase
       .from("order_items")
       .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id")
@@ -49,6 +50,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           .eq("id", order.shipping_address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    listShippingCarriers(),
   ]);
 
   const customer = order.customers as any;
@@ -195,7 +197,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} />}
+          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} carriers={carriers} />}
           <ReturnForm orderId={order.id} items={returnableItems} />
           <OrderActivityTimeline orderId={order.id} />
         </div>
