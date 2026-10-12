@@ -17,11 +17,21 @@ export function CartDrawer() {
   const router = useRouter();
 
   return (
-    <aside
-      className={`fixed inset-0 z-50 flex flex-col bg-bg transition-transform duration-300 ${
-        isOpen ? "translate-x-0" : "translate-x-full"
-      }`}
-    >
+    <>
+      {/* Desktop-only dimmed backdrop -- mobile stays the untouched full-screen takeover with
+          nothing behind it to dim. */}
+      <div
+        onClick={close}
+        aria-hidden
+        className={`fixed inset-0 z-40 hidden bg-black/40 transition-opacity duration-300 lg:block ${
+          isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+      <aside
+        className={`fixed inset-0 z-50 flex flex-col bg-bg transition-transform duration-300 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px] lg:shadow-2xl ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
       <div className="mx-auto flex h-16 w-full max-w-xl flex-shrink-0 items-center justify-between px-6">
         <h2 className="font-serif text-lg">Din varukorg</h2>
         <button onClick={close} aria-label="Stäng" className="text-sm uppercase tracking-wide">
@@ -102,6 +112,7 @@ export function CartDrawer() {
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
