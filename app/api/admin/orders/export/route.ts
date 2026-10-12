@@ -79,9 +79,9 @@ export async function GET(req: NextRequest) {
     { header: "Variant", key: "variant", width: 16 },
     { header: "SKU", key: "sku", width: 16 },
     { header: "Antal", key: "qty", width: 8 },
-    { header: "Ordinarie pris", key: "unitPrice", width: 14, style: { numFmt: "#,##0.00" } },
-    { header: "Pris efter rabatt", key: "discountedUnitPrice", width: 16, style: { numFmt: "#,##0.00" } },
-    { header: "Radsumma", key: "lineTotal", width: 14, style: { numFmt: "#,##0.00" } },
+    { header: "Ordinarie pris", key: "unitPrice", width: 14 },
+    { header: "Pris efter rabatt", key: "discountedUnitPrice", width: 16 },
+    { header: "Radsumma", key: "lineTotal", width: 14 },
     { header: "Återbetalat antal", key: "refundedQty", width: 14 },
     { header: "Rabatt (order)", key: "orderDiscount", width: 14, style: { numFmt: "#,##0.00" } },
     { header: "Frakt", key: "shipping", width: 12, style: { numFmt: "#,##0.00" } },
@@ -97,6 +97,12 @@ export async function GET(req: NextRequest) {
   ];
   sheet.getRow(1).font = { bold: true };
 
+  // Per-item columns (product/variant/SKU/qty/prices) hold one value per order line item,
+  // newline-separated within the single cell -- keeps every order to exactly one row, per the
+  // explicit requirement, while still showing full per-item detail rather than collapsing it away.
+  const MULTILINE_COLUMNS = ["product", "variant", "sku", "qty", "unitPrice", "discountedUnitPrice", "lineTotal", "refundedQty"] as const;
+  const numberFormat = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   for (const order of orders ?? []) {
     const customer = order.customers as any;
     const customerName = customer ? [customer.first_name, customer.last_name].filter(Boolean).join(" ") : "";
@@ -104,56 +110,66 @@ export async function GET(req: NextRequest) {
     const fulfillment = fulfillmentByOrder.get(order.id);
     const refundedAmount = refundedByOrder.get(order.id) ?? 0;
 
-    if (lineItems.length === 0) {
-      sheet.addRow({
-        orderNumber: order.order_number,
-        date: new Date(order.created_at),
-        customer: customerName,
-        email: order.email ?? "",
-        financialStatus: order.cancelled_at ? "Avbruten" : order.financial_status ?? "",
-        fulfillmentStatus: order.fulfillment_status ?? "",
-        carrier: fulfillment?.carrier ?? "",
-        trackingNumber: fulfillment?.trackingNumber ?? "",
-        orderDiscount: Number(order.total_discounts ?? 0),
-        shipping: Number(order.total_shipping ?? 0),
-        vat: Number(order.total_tax ?? 0),
-        refundedAmount,
-        orderTotal: Number(order.total_price ?? 0),
-        currency: order.currency_code,
-        source: PROVIDER_LABEL[order.source] ?? order.source,
-      });
-      continue;
+    const rowData: Record<string, unknown> = {
+      orderNumber: order.order_number,
+      date: new Date(order.created_at),
+      customer: customerName,
+      email: order.email ?? "",
+      orderDiscount: Number(order.total_discounts ?? 0),
+      shipping: Number(order.total_shipping ?? 0),
+      vat: Number(order.total_tax ?? 0),
+      financialStatus: order.cancelled_at ? "Avbruten" : order.financial_status ?? "",
+      fulfillmentStatus: order.fulfillment_status ?? "",
+      carrier: fulfillment?.carrier ?? "",
+      trackingNumber: fulfillment?.trackingNumber ?? "",
+      refundedAmount,
+      orderTotal: Number(order.total_price ?? 0),
+      currency: order.currency_code,
+      source: PROVIDER_LABEL[order.source] ?? order.source,
+    };
+
+    if (lineItems.length > 0) {
+      const products: string[] = [];
+      const variants: string[] = [];
+      const skus: string[] = [];
+      const qtys: string[] = [];
+      const unitPrices: string[] = [];
+      const discountedUnitPrices: string[] = [];
+      const lineTotals: string[] = [];
+      const refundedQtys: string[] = [];
+
+      for (const item of lineItems) {
+        const unitPrice = Number(item.unit_price);
+        const discountedUnitPrice = Number(item.discounted_unit_price ?? item.unit_price);
+        products.push(item.title);
+        variants.push(
+          (item.product_variants as any)?.title && (item.product_variants as any).title !== "Default Title"
+            ? (item.product_variants as any).title
+            : ""
+        );
+        skus.push(item.sku ?? "");
+        qtys.push(String(item.quantity));
+        unitPrices.push(numberFormat.format(unitPrice));
+        discountedUnitPrices.push(numberFormat.format(discountedUnitPrice));
+        lineTotals.push(numberFormat.format(discountedUnitPrice * item.quantity));
+        refundedQtys.push(String(item.refunded_quantity ?? 0));
+      }
+
+      rowData.product = products.join("\n");
+      rowData.variant = variants.join("\n");
+      rowData.sku = skus.join("\n");
+      rowData.qty = qtys.join("\n");
+      rowData.unitPrice = unitPrices.join("\n");
+      rowData.discountedUnitPrice = discountedUnitPrices.join("\n");
+      rowData.lineTotal = lineTotals.join("\n");
+      rowData.refundedQty = refundedQtys.join("\n");
     }
 
-    for (const item of lineItems) {
-      const unitPrice = Number(item.unit_price);
-      const discountedUnitPrice = Number(item.discounted_unit_price ?? item.unit_price);
-      sheet.addRow({
-        orderNumber: order.order_number,
-        date: new Date(order.created_at),
-        customer: customerName,
-        email: order.email ?? "",
-        product: item.title,
-        variant: (item.product_variants as any)?.title && (item.product_variants as any).title !== "Default Title" ? (item.product_variants as any).title : "",
-        sku: item.sku ?? "",
-        qty: item.quantity,
-        unitPrice,
-        discountedUnitPrice,
-        lineTotal: discountedUnitPrice * item.quantity,
-        refundedQty: item.refunded_quantity ?? 0,
-        orderDiscount: Number(order.total_discounts ?? 0),
-        shipping: Number(order.total_shipping ?? 0),
-        vat: Number(order.total_tax ?? 0),
-        financialStatus: order.cancelled_at ? "Avbruten" : order.financial_status ?? "",
-        fulfillmentStatus: order.fulfillment_status ?? "",
-        carrier: fulfillment?.carrier ?? "",
-        trackingNumber: fulfillment?.trackingNumber ?? "",
-        refundedAmount,
-        orderTotal: Number(order.total_price ?? 0),
-        currency: order.currency_code,
-        source: PROVIDER_LABEL[order.source] ?? order.source,
-      });
+    const row = sheet.addRow(rowData);
+    for (const key of MULTILINE_COLUMNS) {
+      row.getCell(key).alignment = { wrapText: true, vertical: "top" };
     }
+    row.height = Math.max(15, lineItems.length * 14);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
