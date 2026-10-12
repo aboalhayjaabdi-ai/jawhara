@@ -17,6 +17,7 @@ export async function GET(request: Request) {
       .from("orders")
       .select("id, order_number, email, total_price, currency_code")
       .or(`order_number.ilike.${like},email.ilike.${like}`)
+      .is("hidden_at", null)
       .limit(5),
     supabase.from("customers").select("id, first_name, last_name, email").or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like}`).limit(5),
   ]);

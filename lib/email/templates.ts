@@ -110,20 +110,26 @@ export function shippingConfirmationTemplate(
     shippingAddress: ShippingAddress;
     trackingNumber?: string | null;
     carrier?: string | null;
-    trackingUrl?: string | null;
+    // Jawhara's own tracking page, pre-identified via a signed per-order token -- never an
+    // external carrier URL. Always provided by the caller once a fulfillment exists.
+    trackingPageUrl: string;
   }
 ) {
-  const { orderNumber, items, shippingAddress, trackingNumber, carrier, trackingUrl } = params;
+  const { orderNumber, items, shippingAddress, trackingNumber, carrier, trackingPageUrl } = params;
   const body = `
     ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}</p>
     ${lineItemsTable(items)}
     ${
       trackingNumber
-        ? `<p style="font-size: 14px;"><strong>Spårningsnummer:</strong> ${trackingNumber}${carrier ? ` (${carrier})` : ""}
-           ${trackingUrl ? `<br/><a href="${trackingUrl}" style="color:#111;">Spåra din leverans</a>` : ""}</p>`
+        ? `<p style="font-size: 14px;"><strong>Spårningsnummer:</strong> ${trackingNumber}${carrier ? ` (${carrier})` : ""}</p>`
         : ""
     }
+    <table role="presentation" style="margin: 20px 0;"><tr><td>
+      <a href="${trackingPageUrl}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; font-weight: 600; padding: 14px 28px;">
+        Spåra mitt paket
+      </a>
+    </td></tr></table>
     ${addressBlock(shippingAddress)}
     ${content.outroHtml ?? ""}
   `;

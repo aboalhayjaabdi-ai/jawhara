@@ -74,14 +74,16 @@ export async function getDashboardMetrics(range: DashboardRange, from?: string, 
     supabase
       .from("orders")
       .select("id, customer_id, total_price, total_discounts, total_shipping, total_tax, created_at, cancelled_at")
+      .is("hidden_at", null)
       .gte("created_at", start.toISOString())
       .lt("created_at", end.toISOString()),
     supabase
       .from("orders")
       .select("total_price, cancelled_at")
+      .is("hidden_at", null)
       .gte("created_at", prevStart.toISOString())
       .lt("created_at", prevEnd.toISOString()),
-    supabase.from("orders").select("customer_id").lt("created_at", start.toISOString()).not("customer_id", "is", null),
+    supabase.from("orders").select("customer_id").is("hidden_at", null).lt("created_at", start.toISOString()).not("customer_id", "is", null),
   ]);
 
   const activeOrders = (orders ?? []).filter((o) => !o.cancelled_at);
@@ -210,6 +212,7 @@ export async function getDashboardTasks(): Promise<DashboardTasks> {
       .from("orders")
       .select("id", { count: "exact", head: true })
       .is("cancelled_at", null)
+      .is("hidden_at", null)
       .or("fulfillment_status.is.null,fulfillment_status.eq.unfulfilled,fulfillment_status.eq.partial"),
     getLowStockVariants(LOW_STOCK_THRESHOLD, 6, 0),
   ]);

@@ -53,6 +53,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     .from("orders")
     .select("id, order_number, created_at, financial_status, fulfillment_status, total_price, currency_code, source, cancelled_at")
     .or(orFilter)
+    .is("hidden_at", null)
     .order("created_at", { ascending: false });
 
   const addressRows: Address[] = (addresses ?? []).map((a) => ({

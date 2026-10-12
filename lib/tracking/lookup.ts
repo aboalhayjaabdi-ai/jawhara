@@ -1,4 +1,5 @@
 import { supabaseService } from "@/lib/supabase/service-client";
+import { verifyTrackingToken } from "./token";
 
 export type TrackingEvent = { timestamp: string; status: string; location?: string; description?: string };
 
@@ -16,8 +17,28 @@ export type ShipmentTracking = {
 };
 
 export type OrderTrackingResult =
-  | { ok: false; reason: "not_found" | "rate_limited" }
+  | { ok: false; reason: "not_found" | "rate_limited" | "invalid_token" }
   | { ok: true; orderNumber: string; notYetShipped: boolean; shipments: ShipmentTracking[] };
+
+async function loadShipments(orderId: string): Promise<ShipmentTracking[]> {
+  const { data: fulfillments } = await supabaseService
+    .from("fulfillments")
+    .select(
+      "id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(events, tracking_api_registered_at)"
+    )
+    .eq("order_id", orderId)
+    .order("created_at");
+
+  return (fulfillments ?? []).map((f: any) => ({
+    fulfillmentId: f.id,
+    carrier: f.tracking_company ?? null,
+    trackingNumber: f.tracking_number ?? null,
+    trackingUrl: f.tracking_url ?? null,
+    status: f.status,
+    events: (f.tracking_cache?.events ?? []) as TrackingEvent[],
+    registered: Boolean(f.tracking_cache?.tracking_api_registered_at),
+  }));
+}
 
 const RATE_LIMIT_WINDOW_MINUTES = 15;
 const RATE_LIMIT_MAX_ATTEMPTS = 10;
@@ -56,23 +77,21 @@ export async function lookupOrderTracking(orderNumber: string, email: string, ip
     return { ok: false, reason: "not_found" };
   }
 
-  const { data: fulfillments } = await supabaseService
-    .from("fulfillments")
-    .select(
-      "id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(events, tracking_api_registered_at)"
-    )
-    .eq("order_id", order.id)
-    .order("created_at");
+  const shipments = await loadShipments(order.id);
+  return { ok: true, orderNumber: order.order_number, notYetShipped: shipments.length === 0, shipments };
+}
 
-  const shipments: ShipmentTracking[] = (fulfillments ?? []).map((f: any) => ({
-    fulfillmentId: f.id,
-    carrier: f.tracking_company ?? null,
-    trackingNumber: f.tracking_number ?? null,
-    trackingUrl: f.tracking_url ?? null,
-    status: f.status,
-    events: (f.tracking_cache?.events ?? []) as TrackingEvent[],
-    registered: Boolean(f.tracking_cache?.tracking_api_registered_at),
-  }));
+/** Verifies the signed per-order token from a shipping-confirmation email's "Spåra mitt paket"
+ * link -- no order number/email re-entry needed. The token only ever encodes an order id, so a
+ * valid token already proves the holder received the original email; no further rate limiting
+ * is needed (unlike the manual form, a token can't be brute-forced to enumerate orders). */
+export async function lookupOrderTrackingByToken(token: string): Promise<OrderTrackingResult> {
+  const verified = verifyTrackingToken(token);
+  if (!verified) return { ok: false, reason: "invalid_token" };
 
+  const { data: order } = await supabaseService.from("orders").select("id, order_number").eq("id", verified.orderId).maybeSingle();
+  if (!order) return { ok: false, reason: "invalid_token" };
+
+  const shipments = await loadShipments(order.id);
   return { ok: true, orderNumber: order.order_number, notYetShipped: shipments.length === 0, shipments };
 }

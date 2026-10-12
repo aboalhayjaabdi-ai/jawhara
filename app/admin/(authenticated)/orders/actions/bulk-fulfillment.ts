@@ -57,6 +57,7 @@ export async function bulkFulfillOrders(orderIds: string[]): Promise<BulkFulfill
     if (order.email) {
       await sendShippingConfirmationEmail({
         to: order.email,
+        orderId,
         orderNumber: order.order_number,
         items: remaining.map((i) => ({ title: i.title, qty: i.quantity - i.fulfilled_quantity, unitPrice: Number(i.discounted_unit_price ?? i.unit_price) })),
         shippingAddress: null,

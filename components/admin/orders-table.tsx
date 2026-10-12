@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { bulkFulfillOrders } from "@/app/admin/(authenticated)/orders/actions/bulk-fulfillment";
+import { hideOrders, unhideOrders } from "@/app/admin/(authenticated)/orders/actions/hide";
 
 export type OrderRow = {
   id: string;
@@ -28,7 +29,7 @@ function formatDate(iso: string) {
 
 const PROVIDER_LABEL: Record<OrderRow["source"], string> = { shopify: "Shopify", stripe: "Stripe", manual: "Manuell" };
 
-export function OrdersTable({ orders }: { orders: OrderRow[] }) {
+export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }: { orders: OrderRow[]; viewingHidden?: boolean; returnQuery?: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -55,19 +56,75 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
     });
   }
 
+  function bulkHide() {
+    if (!confirm(`Ta bort ${selected.size} order(er) från den vanliga listan? De kan återställas senare -- inget betalnings- eller bokföringsdata påverkas.`)) return;
+    setMessage(null);
+    startTransition(async () => {
+      const result = await hideOrders(Array.from(selected));
+      if (result.ok) {
+        setMessage(`${result.count} order(er) borttagna från listan.`);
+        setSelected(new Set());
+      } else {
+        setMessage(result.error);
+      }
+    });
+  }
+
+  function bulkUnhide() {
+    setMessage(null);
+    startTransition(async () => {
+      const result = await unhideOrders(Array.from(selected));
+      if (result.ok) {
+        setMessage(`${result.count} order(er) återställda.`);
+        setSelected(new Set());
+      } else {
+        setMessage(result.error);
+      }
+    });
+  }
+
   return (
     <div>
       {selected.size > 0 && (
-        <div className="mb-3 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
           <span className="text-gray-700">{selected.size} valda</span>
-          <button
-            type="button"
-            onClick={bulkFulfill}
-            disabled={isPending}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {isPending ? "Levererar…" : "Fulfillera valda"}
-          </button>
+          <div className="flex gap-2">
+            {!viewingHidden && (
+              <button
+                type="button"
+                onClick={bulkFulfill}
+                disabled={isPending}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {isPending ? "Levererar…" : "Fulfillera valda"}
+              </button>
+            )}
+            <a
+              href={`/api/admin/orders/export?ids=${Array.from(selected).join(",")}`}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Exportera valda
+            </a>
+            {viewingHidden ? (
+              <button
+                type="button"
+                onClick={bulkUnhide}
+                disabled={isPending}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {isPending ? "Återställer…" : "Återställ valda"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={bulkHide}
+                disabled={isPending}
+                className="rounded-md border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {isPending ? "Tar bort…" : "Ta bort valda"}
+              </button>
+            )}
+          </div>
         </div>
       )}
       {message && <div className="mb-3 text-xs text-gray-500">{message}</div>}
@@ -100,7 +157,7 @@ export function OrdersTable({ orders }: { orders: OrderRow[] }) {
                   <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="h-4 w-4 rounded border-gray-300" />
                 </td>
                 <td className="px-5 py-3">
-                  <Link href={`/admin/orders/${o.id}`} className="font-medium text-gray-900 hover:underline">
+                  <Link href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`} className="font-medium text-gray-900 hover:underline">
                     {o.order_number}
                   </Link>
                 </td>

@@ -15,7 +15,7 @@ function sampleParamsFor(key: EmailTemplateKey) {
     return { orderNumber: SAMPLE_ORDER_NUMBER, items, subtotal: 1198, discountTotal: 0, vat: 0, shipping: 0, total: 1198, shippingAddress };
   }
   if (key === "shipping_confirmation") {
-    return { orderNumber: SAMPLE_ORDER_NUMBER, items, shippingAddress, trackingNumber: "1234567890", carrier: "PostNord", trackingUrl: "https://www.postnord.se" };
+    return { orderNumber: SAMPLE_ORDER_NUMBER, items, shippingAddress, trackingNumber: "1234567890", carrier: "4PX", trackingPageUrl: "https://jawhara.se/sparra-mitt-paket?token=exempel" };
   }
   return { orderNumber: SAMPLE_ORDER_NUMBER, refundAmount: 399, reason: "En av produkterna var slut i lager." };
 }

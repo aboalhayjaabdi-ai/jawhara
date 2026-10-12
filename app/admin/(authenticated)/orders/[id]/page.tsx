@@ -1,13 +1,16 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { OrderNotesCard } from "@/components/admin/order-notes-card";
 import { FulfillmentForm } from "@/components/admin/fulfillment-form";
 import { RefundForm } from "@/components/admin/refund-form";
 import { CancelOrderButton } from "@/components/admin/cancel-order-button";
+import { OrderHideButton } from "@/components/admin/order-hide-button";
 import { ReturnForm } from "@/components/admin/return-form";
 import { OrderActivityTimeline } from "@/components/admin/order-activity-timeline";
-import { listShippingCarriers } from "@/lib/admin/shipping-carriers";
+import { getOrderItemImages } from "@/lib/admin/order-images";
+import { normalizeVariantTitle } from "@/lib/variant-title";
 
 export const dynamic = "force-dynamic";
 
@@ -21,24 +24,25 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminOrderDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
   const { id } = await params;
+  const { from } = await searchParams;
   const supabase = await createAuthServerClient();
 
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, source, shipping_address_id, customer_id, customers(first_name, last_name, email, phone)"
+      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, source, shipping_address_id, customer_id, hidden_at, customers(first_name, last_name, email, phone)"
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!order) notFound();
 
-  const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }, carriers] = await Promise.all([
+  const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }] = await Promise.all([
     supabase
       .from("order_items")
-      .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id")
+      .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id, product_id, product_variants(title)")
       .eq("order_id", order.id),
     supabase.from("payments").select("id, kind, status, gateway, amount, currency_code, processed_at, stripe_payment_intent_id").eq("order_id", order.id),
     supabase
@@ -53,8 +57,11 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           .eq("id", order.shipping_address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    listShippingCarriers(),
   ]);
+
+  const itemImages = await getOrderItemImages(
+    (items ?? []).map((i) => ({ id: i.id, variantId: i.variant_id, productId: i.product_id }))
+  );
 
   const customer = order.customers as any;
   const customerName = customer ? [customer.first_name, customer.last_name].filter(Boolean).join(" ") : null;
@@ -74,16 +81,20 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
   const returnableItems = (items ?? []).map((i) => ({ id: i.id, title: i.title, quantity: i.quantity }));
   const alreadyRefunded = (refunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
   const refundableAmount = Math.max(0, Number(order.total_price) - alreadyRefunded);
+  const backHref = from ? `/admin/orders?${from}` : "/admin/orders";
 
   return (
     <div className="max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <Link href="/admin/orders" className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
+          <Link href={backHref} className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
             ← Ordrar
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-gray-900">{order.order_number}</h1>
           <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
+          {order.hidden_at && (
+            <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-rose-600">Borttagen från listan</div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Link href={`/admin/print/orders/${order.id}/packing-slip`} target="_blank" className="text-xs font-medium text-gray-500 underline hover:text-gray-900">
@@ -107,18 +118,34 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </div>
             <table className="w-full text-sm">
               <tbody>
-                {(items ?? []).map((item) => (
-                  <tr key={item.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-gray-900">{item.title}</div>
-                      {item.sku && <div className="text-xs text-gray-500">{item.sku}</div>}
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-500">× {item.quantity}</td>
-                    <td className="px-5 py-3 text-right font-medium text-gray-900">
-                      {formatMoney((item.discounted_unit_price ?? item.unit_price) * item.quantity, order.currency_code)}
-                    </td>
-                  </tr>
-                ))}
+                {(items ?? []).map((item) => {
+                  const variantTitle = normalizeVariantTitle((item.product_variants as any)?.title);
+                  const image = itemImages[item.id];
+                  return (
+                    <tr key={item.id} className="border-b border-gray-100 last:border-0">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-4">
+                          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
+                            {image?.imageUrl ? (
+                              <Image src={image.imageUrl} alt={item.title} fill sizes="64px" className="object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[10px] text-gray-400">Ingen bild</div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">{item.title}</div>
+                            {variantTitle && <div className="text-xs text-gray-500">{variantTitle}</div>}
+                            {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-500">× {item.quantity}</td>
+                      <td className="px-5 py-3 text-right font-medium text-gray-900">
+                        {formatMoney((item.discounted_unit_price ?? item.unit_price) * item.quantity, order.currency_code)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {(items ?? []).length === 0 && (
                   <tr>
                     <td className="px-5 py-6 text-center text-sm text-gray-400" colSpan={3}>
@@ -207,7 +234,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} carriers={carriers} />}
+          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} />}
           <ReturnForm orderId={order.id} items={returnableItems} />
           <OrderActivityTimeline orderId={order.id} />
         </div>
@@ -231,11 +258,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                 </div>
               )}
             </div>
-            {!order.cancelled_at && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <CancelOrderButton orderId={order.id} />
-              </div>
-            )}
+            <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-gray-100 pt-3">
+              {!order.cancelled_at && <CancelOrderButton orderId={order.id} />}
+              <OrderHideButton orderId={order.id} hidden={!!order.hidden_at} />
+            </div>
           </div>
 
           <RefundForm orderId={order.id} maxAmount={refundableAmount} currency={order.currency_code} />

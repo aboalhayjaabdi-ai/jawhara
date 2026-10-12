@@ -90,6 +90,7 @@ export async function createFulfillment(
 
     await sendShippingConfirmationEmail({
       to: order.email,
+      orderId,
       orderNumber: order.order_number,
       items: requested.map((line) => {
         const item = itemById.get(line.orderItemId)!;
@@ -100,7 +101,6 @@ export async function createFulfillment(
         : null,
       trackingNumber: input.trackingNumber || null,
       carrier: input.trackingCompany || null,
-      trackingUrl: input.trackingUrl || null,
     });
   }
 
