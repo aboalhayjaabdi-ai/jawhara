@@ -241,7 +241,9 @@ export function StorefrontEditor({ initialSections, meta }: { initialSections: S
         {message && <div className="border-b border-gray-200 bg-white px-3 py-2 text-xs text-emerald-600">{message}</div>}
 
         <div className="flex-1 space-y-2 overflow-y-auto p-3">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          {/* Explicit id -- prevents dnd-kit's auto-generated aria-describedby id from drifting
+              between the server render and client hydration pass (a known dnd-kit SSR quirk). */}
+          <DndContext id="storefront-editor-sections" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
               {sections.map((s) => (
                 <SortableSectionRow

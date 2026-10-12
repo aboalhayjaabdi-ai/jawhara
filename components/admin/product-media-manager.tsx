@@ -132,7 +132,9 @@ export function ProductMediaManager({ productId, initialMedia, variants }: { pro
       {items.length === 0 ? (
         <p className="text-sm text-gray-400">Inga bilder uppladdade.</p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        // Explicit id -- prevents dnd-kit's auto-generated aria-describedby id from drifting
+        // between the server render and client hydration pass (a known dnd-kit SSR quirk).
+        <DndContext id="product-media-manager" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
               {items.map((item) => (

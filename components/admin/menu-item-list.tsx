@@ -113,7 +113,10 @@ export function MenuItemList({ menu }: { menu: Menu }) {
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
       <div className="mb-3 text-sm font-semibold text-gray-900">{menu.label}</div>
       <div className="space-y-2">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {/* Explicit id -- without it dnd-kit's auto-generated aria-describedby counter drifts
+            between the server render and the client hydration pass whenever more than one
+            DndContext mounts on a page (e.g. two menus here), causing a hydration warning. */}
+        <DndContext id={`menu-${menu.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             {items.map((item) =>
               editingId === item.id ? (

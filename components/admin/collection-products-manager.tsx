@@ -110,7 +110,9 @@ export function CollectionProductsManager({ collectionId, initialMembers }: { co
       {members.length === 0 ? (
         <p className="text-sm text-gray-400">Inga produkter i den här kollektionen.</p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        // Explicit id -- prevents dnd-kit's auto-generated aria-describedby id from drifting
+        // between the server render and client hydration pass (a known dnd-kit SSR quirk).
+        <DndContext id="collection-products-manager" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={members.map((m) => m.id)} strategy={verticalListSortingStrategy}>
             <div className="rounded-md border border-gray-100">
               {members.map((m) => (
