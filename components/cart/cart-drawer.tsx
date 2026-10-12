@@ -132,7 +132,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                 className="h-4 w-4 flex-shrink-0"
               />
               <span>
-                Vill du lägga till en presentask för {formatSek(giftBoxOffer.price)}?
+                Lägg till en presentask för {formatSek(giftBoxOffer.price)}
               </span>
             </label>
           )}
