@@ -14,6 +14,10 @@ const API_BASE = "https://api.17track.net/track/v2.4";
 // "Tracking number {0} is already registered." -- treated as success so a cache refresh that
 // races a previous registration (or re-registers after a crashed run) never fails loudly.
 const ALREADY_REGISTERED_CODE = -18019901;
+// "Quota is not enough for use." -- the account's 17TRACK plan has a cap on actively-tracked
+// numbers. Not a bug when this happens; just means this number stays unregistered until quota
+// frees up (an old shipment ages out, or the plan is upgraded) and gets retried later.
+const QUOTA_EXCEEDED_CODE = -18019908;
 
 type SeventeenTrackEvent = {
   time_utc: string | null;
@@ -54,16 +58,30 @@ async function post(path: string, body: unknown): Promise<SeventeenTrackResponse
 
 /** Registers a tracking number so 17TRACK starts polling the carrier for it. `carrier` is the
  * numeric code from shipping_carriers.tracking_api_carrier_code -- omitted (auto-detect) when a
- * carrier hasn't had its code looked up yet in the admin. */
+ * carrier hasn't had its code looked up yet in the admin. Returns false on any failure (quota
+ * exceeded included) without writing anything -- the caller (refreshTrackingCache) leaves the
+ * fulfillment exactly as "not yet registered" so it's retried next time, rather than ever being
+ * marked registered when it wasn't. Every failure is logged so a quota ceiling is visible in
+ * server logs instead of silently stalling orders. */
 export async function registerTracking(number: string, carrier: number | null): Promise<boolean> {
   const body: Record<string, unknown> = { number };
   if (carrier != null) body.carrier = carrier;
 
   const res = await post("/register", [body]);
-  if (res.code !== 0) return false;
+  if (res.code !== 0) {
+    console.error(`17TRACK register failed for ${number}: API returned code ${res.code}`);
+    return false;
+  }
   if (res.data?.accepted?.some((a) => a.number === number)) return true;
+
   const rejected = res.data?.rejected?.find((r) => r.number === number);
-  return rejected?.error?.code === ALREADY_REGISTERED_CODE;
+  if (rejected?.error?.code === ALREADY_REGISTERED_CODE) return true;
+  if (rejected?.error?.code === QUOTA_EXCEEDED_CODE) {
+    console.error(`17TRACK register quota exceeded, ${number} left unregistered until quota frees up.`);
+  } else if (rejected) {
+    console.error(`17TRACK register rejected ${number}: [${rejected.error?.code}] ${rejected.error?.message}`);
+  }
+  return false;
 }
 
 /** Reads back 17TRACK's current stored status/events for an already-registered number -- this
