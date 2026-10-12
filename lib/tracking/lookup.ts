@@ -1,4 +1,6 @@
+import { after } from "next/server";
 import { supabaseService } from "@/lib/supabase/service-client";
+import { refreshTrackingCache } from "@/lib/tracking/seventeentrack";
 
 export type TrackingEvent = { timestamp: string; status: string; location?: string; description?: string };
 
@@ -21,6 +23,9 @@ export type OrderTrackingResult =
 
 const RATE_LIMIT_WINDOW_MINUTES = 15;
 const RATE_LIMIT_MAX_ATTEMPTS = 10;
+// gettrackinfo re-reads are free (17TRACK already polls the carrier on its own schedule), so this
+// just caps how often we hit their API, not a cost concern.
+const CACHE_STALE_AFTER_MINUTES = 15;
 
 /** Caps lookups per IP (not per order number -- an attacker trying many order numbers against
  * one email, or many emails against one order number, is capped the same way either direction). */
@@ -59,20 +64,54 @@ export async function lookupOrderTracking(orderNumber: string, email: string, ip
   const { data: fulfillments } = await supabaseService
     .from("fulfillments")
     .select(
-      "id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(events, tracking_api_registered_at)"
+      "id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(events, tracking_api_registered_at, last_polled_at)"
     )
     .eq("order_id", order.id)
     .order("created_at");
 
-  const shipments: ShipmentTracking[] = (fulfillments ?? []).map((f: any) => ({
-    fulfillmentId: f.id,
-    carrier: f.tracking_company ?? null,
-    trackingNumber: f.tracking_number ?? null,
-    trackingUrl: f.tracking_url ?? null,
-    status: f.status,
-    events: (f.tracking_cache?.events ?? []) as TrackingEvent[],
-    registered: Boolean(f.tracking_cache?.tracking_api_registered_at),
-  }));
+  const carrierCodeByName = await loadCarrierCodesByName();
+
+  const shipments: ShipmentTracking[] = (fulfillments ?? []).map((f: any) => {
+    const cache = f.tracking_cache;
+    const alreadyRegistered = Boolean(cache?.tracking_api_registered_at);
+
+    if (f.tracking_number && isCacheStale(cache?.last_polled_at)) {
+      const carrierCode = f.tracking_company ? carrierCodeByName.get(normalizeCarrierName(f.tracking_company)) ?? null : null;
+      after(() => refreshTrackingCache(f.id, f.tracking_number, carrierCode, alreadyRegistered));
+    }
+
+    return {
+      fulfillmentId: f.id,
+      carrier: f.tracking_company ?? null,
+      trackingNumber: f.tracking_number ?? null,
+      trackingUrl: f.tracking_url ?? null,
+      status: f.status,
+      events: (cache?.events ?? []) as TrackingEvent[],
+      registered: alreadyRegistered,
+    };
+  });
 
   return { ok: true, orderNumber: order.order_number, notYetShipped: shipments.length === 0, shipments };
+}
+
+function isCacheStale(lastPolledAt: string | null | undefined): boolean {
+  if (!lastPolledAt) return true;
+  return Date.now() - new Date(lastPolledAt).getTime() > CACHE_STALE_AFTER_MINUTES * 60_000;
+}
+
+function normalizeCarrierName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** shipping_carriers.tracking_api_carrier_code is set per-carrier in the admin (once the real
+ * 17TRACK code is looked up) -- fulfillments.tracking_company is free text copied at fulfillment
+ * creation (see components/admin/fulfillment-form.tsx), not a foreign key, so carriers are
+ * matched by name. Unmatched or uncoded carriers fall back to 17TRACK's own auto-detection. */
+async function loadCarrierCodesByName(): Promise<Map<string, number>> {
+  const { data } = await supabaseService.from("shipping_carriers").select("name, tracking_api_carrier_code");
+  const map = new Map<string, number>();
+  for (const c of data ?? []) {
+    if (c.tracking_api_carrier_code != null) map.set(normalizeCarrierName(c.name), c.tracking_api_carrier_code);
+  }
+  return map;
 }
