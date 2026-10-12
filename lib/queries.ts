@@ -357,6 +357,24 @@ export async function isEligibleForWalletPromo(productShopifyId: string | null):
   return (data ?? []).some((d) => (d.buy_item_ids as string[] | null)?.includes(productShopifyId));
 }
 
+/** "Passar med" -- manually curated complementary products (product_complementary), entirely
+ * separate from getRelatedProductCards' automatic recommendations above. Only the admin's own
+ * manual selections are ever returned, in the admin's own chosen order; excludes unpublished
+ * products. */
+export async function getComplementaryProductCards(productId: string, limit = 8): Promise<ProductCard[]> {
+  const { data } = await supabase
+    .from("product_complementary")
+    .select(
+      "position, products!product_complementary_complementary_product_id_fkey!inner(title, handle, status, media(storage_path, position), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+    )
+    .eq("product_id", productId)
+    .eq("products.status", "active")
+    .order("position", { ascending: true })
+    .limit(limit);
+
+  return (data ?? []).map((row: any) => toCard(row.products));
+}
+
 export async function searchProductCards(query: string, limit = 24): Promise<ProductCard[]> {
   if (!query.trim()) return [];
   const { data } = await supabase

@@ -4,6 +4,7 @@ import { getProductByHandle, isEligibleForWalletPromo } from "@/lib/queries";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
+import { ComplementaryProducts } from "@/components/product/complementary-products";
 
 export const revalidate = 60;
 
@@ -48,6 +49,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       reviews={product.reviews}
       content={content}
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
+      complementaryProducts={<ComplementaryProducts productId={product.id} />}
       variantImageIndex={product.variantImageIndex}
       walletPromoEligible={walletPromoEligible}
     />

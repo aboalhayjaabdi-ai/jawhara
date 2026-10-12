@@ -7,6 +7,7 @@ import { ProductCoreForm } from "@/components/admin/product-core-form";
 import { ProductSeoForm } from "@/components/admin/product-seo-form";
 import { ProductVariantsTable } from "@/components/admin/product-variants-table";
 import { ProductMediaManager } from "@/components/admin/product-media-manager";
+import { ProductComplementaryManager } from "@/components/admin/product-complementary-manager";
 import { ProductSidebarActions } from "@/components/admin/product-sidebar-actions";
 import { VariantStockHistory } from "@/components/admin/variant-stock-history";
 
@@ -23,7 +24,7 @@ export default async function AdminProductDetailPage({ params }: { params: Promi
     .maybeSingle();
   if (!product) notFound();
 
-  const [{ data: variants }, { data: media }, { data: templates }, deleteImpact] = await Promise.all([
+  const [{ data: variants }, { data: media }, { data: templates }, deleteImpact, { data: complementary }] = await Promise.all([
     supabase
       .from("product_variants")
       .select("id, title, sku, barcode, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy, weight, weight_unit, option1, option2, option3")
@@ -32,7 +33,21 @@ export default async function AdminProductDetailPage({ params }: { params: Promi
     supabase.from("media").select("id, storage_path, alt_text, variant_id, position").eq("product_id", id).order("position"),
     supabase.from("product_templates").select("key, name").order("name"),
     getProductDeleteImpact(id),
+    supabase
+      .from("product_complementary")
+      .select("complementary_product_id, products!product_complementary_complementary_product_id_fkey(id, title, media(storage_path, position))")
+      .eq("product_id", id)
+      .order("position"),
   ]);
+
+  const complementaryItems = (complementary ?? []).map((row: any) => {
+    const sortedMedia = [...(row.products?.media ?? [])].sort((a: any, b: any) => a.position - b.position);
+    return {
+      id: row.products.id,
+      title: row.products.title,
+      thumbnailUrl: sortedMedia[0] ? mediaUrl(sortedMedia[0].storage_path) : null,
+    };
+  });
 
   const variantOptions = (variants ?? []).map((v) => ({
     id: v.id,
@@ -70,6 +85,8 @@ export default async function AdminProductDetailPage({ params }: { params: Promi
           />
 
           <ProductVariantsTable productId={product.id} productStatus={product.status} initialVariants={variants ?? []} />
+
+          <ProductComplementaryManager productId={product.id} initial={complementaryItems} />
 
           <VariantStockHistory variants={variantOptions} />
 

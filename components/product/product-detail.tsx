@@ -77,6 +77,7 @@ export function ProductDetail({
   reviews,
   content,
   relatedProducts,
+  complementaryProducts,
   variantImageIndex,
   walletPromoEligible,
 }: {
@@ -93,6 +94,8 @@ export function ProductDetail({
    * call that directly. */
   content: ProductTemplateContent | null;
   relatedProducts: React.ReactNode;
+  /** "Passar med" -- manually curated, separate from relatedProducts' automatic recommendations. */
+  complementaryProducts: React.ReactNode;
   /** Real per-variant image links (Shopify's own variant.image), keyed by variant id. */
   variantImageIndex: Record<string, number>;
   /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForWalletPromo --
@@ -314,6 +317,8 @@ export function ProductDetail({
           </div>
         </div>
       )}
+
+      {complementaryProducts}
 
       {relatedProducts}
 
