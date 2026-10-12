@@ -10,6 +10,7 @@ const ENTITY_TYPES = [
   "customer_saved_view",
   "discount",
   "email_template",
+  "marketing_settings",
   "order",
   "product",
   "product_template",

@@ -270,6 +270,46 @@ export async function getFeaturedProduct(handle: string) {
   return getProductByHandle(handle);
 }
 
+export type ProductFeedItem = {
+  id: string;
+  handle: string;
+  title: string;
+  descriptionHtml: string | null;
+  image: string | null;
+  price: number;
+  compareAtPrice: number | null;
+  currency: string;
+  available: boolean;
+};
+
+/** Real, active catalog data for the public Google Shopping/Meta-catalog-compatible product feed
+ * (app/feed/products.xml). Every value here is already-real Supabase data -- nothing is invented
+ * for the feed. */
+export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
+  const { data } = await supabase
+    .from("products")
+    .select(
+      "id, title, handle, description_html, status, media(storage_path, position), product_variants(price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)"
+    )
+    .eq("status", "active")
+    .order("title", { ascending: true });
+
+  return (data ?? []).map((p: any) => {
+    const card = toCard(p);
+    return {
+      id: p.id,
+      handle: card.handle,
+      title: card.title,
+      descriptionHtml: p.description_html ?? null,
+      image: card.image,
+      price: card.price,
+      compareAtPrice: card.compareAtPrice,
+      currency: "SEK",
+      available: card.available,
+    };
+  });
+}
+
 export async function getProductByHandle(handle: string) {
   const { data: product } = await supabase
     .from("products")

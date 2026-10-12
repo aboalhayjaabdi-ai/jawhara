@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { trackAddToCart } from "@/lib/marketing/events";
 
 export type CartItem = {
   variantId: string;
@@ -68,6 +69,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [...prev, { ...item, qty }];
     });
     setBump((b) => b + 1);
+    trackAddToCart({ id: item.variantId, title: item.title, price: item.price, currency: "SEK", quantity: qty });
   }
 
   function removeItem(variantId: string) {

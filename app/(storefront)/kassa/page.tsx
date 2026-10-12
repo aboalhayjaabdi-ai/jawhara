@@ -1,15 +1,25 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { useCart } from "@/components/cart/cart-provider";
+import { trackInitiateCheckout } from "@/lib/marketing/events";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 export default function KassaPage() {
   const { items, hydrated } = useCart();
+  const trackedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hydrated || items.length === 0 || trackedRef.current) return;
+    trackedRef.current = true;
+    const value = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const itemCount = items.reduce((sum, i) => sum + i.qty, 0);
+    trackInitiateCheckout({ value, currency: "SEK", itemCount });
+  }, [hydrated, items]);
 
   const fetchClientSecret = useCallback(async () => {
     const res = await fetch("/api/checkout", {

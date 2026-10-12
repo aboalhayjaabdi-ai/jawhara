@@ -18,6 +18,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/payments" className="text-gray-500 underline hover:text-gray-900">
             Betalningar
           </Link>
+          <Link href="/admin/settings/marketing" className="text-gray-500 underline hover:text-gray-900">
+            Marknadsföring
+          </Link>
           <Link href="/admin/settings/redirects" className="text-gray-500 underline hover:text-gray-900">
             Omdirigeringar
           </Link>

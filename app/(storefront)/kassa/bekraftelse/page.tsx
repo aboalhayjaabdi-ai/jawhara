@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "@/components/cart/cart-provider";
+import { trackPurchase } from "@/lib/marketing/events";
 
 type Status = "loading" | "paid" | "pending" | "voided" | "error";
 
@@ -19,6 +20,7 @@ function Confirmation() {
   const [total, setTotal] = useState<number | null>(null);
   const { items, removeItem } = useCart();
   const clearedRef = useRef(false);
+  const trackedPurchaseRef = useRef(false);
 
   useEffect(() => {
     if (!sessionId) {
@@ -70,6 +72,22 @@ function Confirmation() {
       items.forEach((i) => removeItem(i.variantId));
     }
   }, [status, items, removeItem]);
+
+  // Fire the Purchase event (client pixel + server CAPI) exactly once, using the real confirmed
+  // order data. The Stripe Checkout session ID doubles as the shared event ID so Meta dedupes the
+  // browser pixel event against the server-side CAPI event instead of double-counting one sale.
+  useEffect(() => {
+    if (status !== "paid" || !sessionId || !orderNumber || total == null || trackedPurchaseRef.current) return;
+    trackedPurchaseRef.current = true;
+    trackPurchase({ eventId: sessionId, orderNumber, value: total, currency: "SEK" });
+    fetch("/api/marketing/capi-purchase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    }).catch(() => {
+      // Best-effort server-side event -- never blocks or affects the confirmation page.
+    });
+  }, [status, sessionId, orderNumber, total]);
 
   return (
     <div className="mx-auto max-w-xl px-6 py-24 text-center">

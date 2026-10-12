@@ -7,6 +7,7 @@ import { isVariantAvailable } from "@/lib/inventory";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import type { ProductTemplateContent } from "@/lib/product-templates";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
+import { trackViewContent } from "@/lib/marketing/events";
 import { ProductGallery } from "@/components/product/product-gallery";
 
 type Variant = {
@@ -127,6 +128,12 @@ export function ProductDetail({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
+
+  useEffect(() => {
+    if (!variant) return;
+    trackViewContent({ id: variant.id, title, price: variant.price, currency: "SEK" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, variant?.id]);
 
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-7 lg:px-14">

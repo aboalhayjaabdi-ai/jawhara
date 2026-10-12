@@ -7,7 +7,9 @@ import { Footer } from "@/components/layout/footer";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
+import { CookieConsentAndTracking } from "@/components/marketing/cookie-consent-and-tracking";
 import { getSiteMenus, getLogoUrl } from "@/lib/queries";
+import { getPublicMarketingIds } from "@/lib/admin/marketing-settings";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -28,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [menus, logoUrl] = await Promise.all([getSiteMenus(), getLogoUrl()]);
+  const [menus, logoUrl, marketingIds] = await Promise.all([getSiteMenus(), getLogoUrl(), getPublicMarketingIds()]);
   return (
     <html lang="sv">
       <body className={`${newsreader.variable} ${redHatText.variable} font-sans`}>
@@ -39,6 +41,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer />
           <AddToCartToast />
+          <CookieConsentAndTracking metaPixelId={marketingIds.metaPixelId} ga4MeasurementId={marketingIds.ga4MeasurementId} />
         </CartProvider>
       </body>
     </html>
