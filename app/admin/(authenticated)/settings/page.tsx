@@ -11,7 +11,13 @@ export default async function AdminSettingsPage() {
     <div className="max-w-xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Inställningar</h1>
-        <div className="flex gap-4 text-xs">
+        <div className="flex flex-wrap gap-4 text-xs">
+          <Link href="/admin/settings/shipping" className="text-gray-500 underline hover:text-gray-900">
+            Frakt
+          </Link>
+          <Link href="/admin/settings/payments" className="text-gray-500 underline hover:text-gray-900">
+            Betalningar
+          </Link>
           <Link href="/admin/settings/redirects" className="text-gray-500 underline hover:text-gray-900">
             Omdirigeringar
           </Link>
