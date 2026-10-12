@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { stripe } from "@/lib/stripe/server";
 import { getStripeRefundablePayment } from "@/lib/orders/refund-guard";
@@ -22,6 +22,8 @@ export async function createRefund(
   input: { amount: number; reason?: string; lineItems?: RefundLineInput[]; returnId?: string }
 ): Promise<RefundResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (input.amount <= 0) return { ok: false, error: "Beloppet måste vara större än noll." };
 
   const { data: order } = await supabaseService

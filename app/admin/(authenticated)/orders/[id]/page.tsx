@@ -2,6 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
+import { requireAdmin } from "@/lib/admin/auth";
+import { t } from "@/lib/admin/i18n";
 import { OrderNotesCard } from "@/components/admin/order-notes-card";
 import { FulfillmentForm } from "@/components/admin/fulfillment-form";
 import { RefundForm } from "@/components/admin/refund-form";
@@ -24,9 +26,18 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+const FULFILLMENT_STATUS_LABEL: Record<string, "orders.status.FULFILLED" | "orders.status.PARTIALLY_FULFILLED" | "orders.status.UNFULFILLED"> = {
+  FULFILLED: "orders.status.FULFILLED",
+  PARTIALLY_FULFILLED: "orders.status.PARTIALLY_FULFILLED",
+  UNFULFILLED: "orders.status.UNFULFILLED",
+};
+
 export default async function AdminOrderDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
   const { id } = await params;
   const { from } = await searchParams;
+  const admin = await requireAdmin();
+  const isFulfillmentStaff = admin.role === "fulfillment_staff";
+  const locale = admin.locale;
   const supabase = await createAuthServerClient();
 
   const { data: order } = await supabase
@@ -63,14 +74,16 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
     (items ?? []).map((i) => ({ id: i.id, variantId: i.variant_id, productId: i.product_id }))
   );
 
+  const currencyCode = order.currency_code;
   const customer = order.customers as any;
   const customerName = customer ? [customer.first_name, customer.last_name].filter(Boolean).join(" ") : null;
   const provider = order.source === "shopify" ? "Shopify" : order.source === "stripe" ? "Stripe" : "Manuell";
 
   // Guest orders (the vast majority -- customer_id is only ever set for Shopify-imported orders)
-  // can still resolve to a real customer profile by email, read-only, purely for navigation.
+  // can still resolve to a real customer profile by email, read-only, purely for navigation. Not
+  // offered to fulfillment_staff (no customer-section access), so skip the extra query for it.
   let linkedCustomerId: string | null = order.customer_id;
-  if (!linkedCustomerId && order.email) {
+  if (!isFulfillmentStaff && !linkedCustomerId && order.email) {
     const { data: matchedCustomer } = await supabase.from("customers").select("id").ilike("email", order.email).maybeSingle();
     linkedCustomerId = matchedCustomer?.id ?? null;
   }
@@ -82,6 +95,158 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const alreadyRefunded = (refunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
   const refundableAmount = Math.max(0, Number(order.total_price) - alreadyRefunded);
   const backHref = from ? `/admin/orders?${from}` : "/admin/orders";
+
+  // Shared by both the full admin view and the fulfillment_staff view: the product image/title are
+  // clickable, carrying the exact purchased variant through to the product page (?variant=<id>) so
+  // the right color/size row is highlighted there rather than just landing on the product generically.
+  // A deleted product (order_items.product_id is set null on delete, never cascaded) renders the
+  // same info as plain text instead of a dead link.
+  function ItemRow({ item, showPrice }: { item: NonNullable<typeof items>[number]; showPrice: boolean }) {
+    const variantTitle = normalizeVariantTitle((item.product_variants as any)?.title);
+    const image = itemImages[item.id];
+    const href = item.product_id ? `/admin/products/${item.product_id}${item.variant_id ? `?variant=${item.variant_id}` : ""}` : null;
+    const thumb = (
+      <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
+        {image?.imageUrl ? (
+          <Image src={image.imageUrl} alt={item.title} fill sizes="64px" className="object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-center text-[10px] text-gray-400">{t(locale, "order.noImage")}</div>
+        )}
+      </div>
+    );
+    const info = (
+      <div>
+        <div className="font-medium text-gray-900">{item.title}</div>
+        {variantTitle && <div className="text-xs text-gray-500">{variantTitle}</div>}
+        {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
+        {!href && <div className="mt-0.5 text-xs italic text-gray-400">{t(locale, "order.productDeleted")}</div>}
+      </div>
+    );
+    return (
+      <tr key={item.id} className="border-b border-gray-100 last:border-0">
+        <td className="px-5 py-3">
+          {href ? (
+            <Link href={href} className="flex items-center gap-4 hover:opacity-80">
+              {thumb}
+              {info}
+            </Link>
+          ) : (
+            <div className="flex items-center gap-4">
+              {thumb}
+              {info}
+            </div>
+          )}
+        </td>
+        <td className="px-5 py-3 text-right text-gray-500">× {item.quantity}</td>
+        {showPrice && (
+          <td className="px-5 py-3 text-right font-medium text-gray-900">
+            {formatMoney((item.discounted_unit_price ?? item.unit_price) * item.quantity, currencyCode)}
+          </td>
+        )}
+      </tr>
+    );
+  }
+
+  if (isFulfillmentStaff) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-6">
+          <Link href={backHref} className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
+            {t(locale, "order.back")}
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+          <div className="mt-1 text-sm text-gray-500">{formatDate(order.created_at)}</div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="space-y-6">
+            <div className="rounded-lg border border-gray-200 bg-white">
+              <div className="border-b border-gray-200 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {t(locale, "order.items")}
+              </div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {(items ?? []).map((item) => <ItemRow key={item.id} item={item} showPrice={false} />)}
+                  {(items ?? []).length === 0 && (
+                    <tr>
+                      <td className="px-5 py-6 text-center text-sm text-gray-400" colSpan={2}>
+                        {t(locale, "order.noItems")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {(fulfillments ?? []).length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-white">
+                <div className="border-b border-gray-200 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {t(locale, "order.shipments")}
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {(fulfillments ?? []).map((f) => (
+                    <div key={f.id} className="px-5 py-3 text-sm">
+                      <div className="font-medium text-gray-900">{FULFILLMENT_STATUS_LABEL[f.status] ? t(locale, FULFILLMENT_STATUS_LABEL[f.status]) : f.status || "—"}</div>
+                      {f.tracking_number && (
+                        <div className="mt-0.5 text-xs text-gray-500">
+                          {f.tracking_company ? `${f.tracking_company}: ` : ""}
+                          {f.tracking_number}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!order.cancelled_at ? (
+              <FulfillmentForm orderId={order.id} items={unfulfilledItems} locale={locale} />
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-white p-5 text-sm text-gray-500">{t(locale, "order.alreadyCancelled")}</div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-lg border border-gray-200 bg-white p-5">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t(locale, "order.fulfillmentStatus")}</div>
+              <div className="text-sm font-medium text-gray-900">
+                {FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""] ? t(locale, FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""]) : order.fulfillment_status || "—"}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-white p-5">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t(locale, "order.customer")}</div>
+              <div className="text-sm text-gray-900">{customerName || t(locale, "order.guest")}</div>
+              {(customer?.phone ?? order.phone) && (
+                <div className="mt-2 text-sm text-gray-500">
+                  <span className="text-xs uppercase tracking-wide text-gray-400">{t(locale, "order.phone")}: </span>
+                  {customer?.phone ?? order.phone}
+                </div>
+              )}
+            </div>
+
+            {shippingAddress && (
+              <div className="rounded-lg border border-gray-200 bg-white p-5">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t(locale, "order.shippingAddress")}</div>
+                <div className="space-y-0.5 text-sm text-gray-900">
+                  <div>
+                    {shippingAddress.first_name} {shippingAddress.last_name}
+                  </div>
+                  <div>{shippingAddress.address1}</div>
+                  {shippingAddress.address2 && <div>{shippingAddress.address2}</div>}
+                  <div>
+                    {shippingAddress.zip} {shippingAddress.city}
+                  </div>
+                  <div>{shippingAddress.country}</div>
+                  {shippingAddress.phone && <div className="mt-1 text-gray-500">{shippingAddress.phone}</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl">
@@ -118,34 +283,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
             </div>
             <table className="w-full text-sm">
               <tbody>
-                {(items ?? []).map((item) => {
-                  const variantTitle = normalizeVariantTitle((item.product_variants as any)?.title);
-                  const image = itemImages[item.id];
-                  return (
-                    <tr key={item.id} className="border-b border-gray-100 last:border-0">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-4">
-                          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
-                            {image?.imageUrl ? (
-                              <Image src={image.imageUrl} alt={item.title} fill sizes="64px" className="object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[10px] text-gray-400">Ingen bild</div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{item.title}</div>
-                            {variantTitle && <div className="text-xs text-gray-500">{variantTitle}</div>}
-                            {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-right text-gray-500">× {item.quantity}</td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-900">
-                        {formatMoney((item.discounted_unit_price ?? item.unit_price) * item.quantity, order.currency_code)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {(items ?? []).map((item) => <ItemRow key={item.id} item={item} showPrice />)}
                 {(items ?? []).length === 0 && (
                   <tr>
                     <td className="px-5 py-6 text-center text-sm text-gray-400" colSpan={3}>
@@ -234,7 +372,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
             </div>
           )}
 
-          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} />}
+          {!order.cancelled_at && <FulfillmentForm orderId={order.id} items={unfulfilledItems} locale={locale} />}
           <ReturnForm orderId={order.id} items={returnableItems} />
           <OrderActivityTimeline orderId={order.id} />
         </div>

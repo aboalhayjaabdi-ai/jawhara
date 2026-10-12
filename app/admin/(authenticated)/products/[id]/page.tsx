@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { mediaUrl } from "@/lib/supabase/media";
+import { requireAdmin } from "@/lib/admin/auth";
+import { t } from "@/lib/admin/i18n";
 import { getProductDeleteImpact } from "@/lib/admin/product-delete-impact";
 import { ProductCoreForm } from "@/components/admin/product-core-form";
 import { ProductSeoForm } from "@/components/admin/product-seo-form";
@@ -10,11 +12,16 @@ import { ProductMediaManager } from "@/components/admin/product-media-manager";
 import { ProductComplementaryManager } from "@/components/admin/product-complementary-manager";
 import { ProductSidebarActions } from "@/components/admin/product-sidebar-actions";
 import { VariantStockHistory } from "@/components/admin/variant-stock-history";
+import { FulfillmentProductDetail } from "@/components/admin/fulfillment-product-detail";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminProductDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ variant?: string }> }) {
   const { id } = await params;
+  const { variant: highlightVariantId } = await searchParams;
+  const admin = await requireAdmin();
+  const isFulfillmentStaff = admin.role === "fulfillment_staff";
+  const locale = admin.locale;
   const supabase = await createAuthServerClient();
 
   const { data: product } = await supabase
@@ -22,7 +29,19 @@ export default async function AdminProductDetailPage({ params }: { params: Promi
     .select("id, title, handle, status, vendor, product_type, description_html, tags, seo_title, seo_description, template_suffix, source")
     .eq("id", id)
     .maybeSingle();
-  if (!product) notFound();
+  if (!product) {
+    if (isFulfillmentStaff) {
+      return (
+        <div className="max-w-6xl">
+          <Link href="/admin/products" className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
+            {t(locale, "product.back")}
+          </Link>
+          <p className="mt-4 text-sm text-gray-500">{t(locale, "product.notFound")}</p>
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const [{ data: variants }, { data: media }, { data: templates }, deleteImpact, { data: complementary }] = await Promise.all([
     supabase
@@ -53,6 +72,38 @@ export default async function AdminProductDetailPage({ params }: { params: Promi
     id: v.id,
     label: [v.option1, v.option2, v.option3].filter(Boolean).join(" / ") || v.title,
   }));
+
+  if (isFulfillmentStaff) {
+    const images = [...(media ?? [])].sort((a, b) => a.position - b.position).map((m) => ({ id: m.id, url: mediaUrl(m.storage_path) }));
+    const plainDescription = product.description_html ? product.description_html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : null;
+    return (
+      <div className="max-w-6xl">
+        <div className="mb-6">
+          <Link href="/admin/products" className="text-xs uppercase tracking-wide text-gray-500 hover:text-gray-900">
+            {t(locale, "product.back")}
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold text-gray-900">{product.title}</h1>
+        </div>
+        <FulfillmentProductDetail
+          images={images}
+          description={plainDescription}
+          variants={(variants ?? []).map((v) => ({
+            id: v.id,
+            sku: v.sku,
+            price: Number(v.price),
+            inventoryQuantity: v.inventory_quantity,
+            inventoryTracked: v.inventory_tracked,
+            inventoryPolicy: v.inventory_policy,
+            option1: v.option1,
+            option2: v.option2,
+            option3: v.option3,
+          }))}
+          highlightVariantId={highlightVariantId}
+          locale={locale}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl">

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { restockOrderItems } from "@/lib/inventory/restock";
 
@@ -9,6 +9,8 @@ export type ActionResult = { ok: true } | { ok: false; error: string; needsConfi
 
 export async function cancelOrder(orderId: string, reason: string, force: boolean): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
 
   const { data: order } = await supabaseService.from("orders").select("id, cancelled_at, fulfillment_status").eq("id", orderId).maybeSingle();
   if (!order) return { ok: false, error: "Ordern hittades inte." };

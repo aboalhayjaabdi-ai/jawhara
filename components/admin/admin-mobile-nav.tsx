@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ADMIN_NAV } from "./admin-nav";
+import type { AdminLocale, AdminRole } from "@/lib/admin/auth";
+import { getAdminNav } from "./admin-nav";
 import { AdminSearchField } from "./admin-search";
+import { t } from "@/lib/admin/i18n";
 
 // Fixed bottom-left floating trigger opening a full-height dark drawer -- matches the reference
 // Shopify-mobile-admin screenshots (not a conventional top-left hamburger).
-export function AdminMobileNav({ email }: { email: string | null }) {
+export function AdminMobileNav({ email, role, locale }: { email: string | null; role: AdminRole; locale: AdminLocale }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const navItems = getAdminNav(role, locale);
 
   useEffect(() => {
     setOpen(false);
@@ -64,12 +67,14 @@ export function AdminMobileNav({ email }: { email: string | null }) {
 
         {email && <div className="flex-shrink-0 px-5 pt-3 text-xs text-gray-500">{email}</div>}
 
-        <div className="flex-shrink-0 px-5 pt-5">
-          <AdminSearchField dark onNavigate={() => setOpen(false)} />
-        </div>
+        {role !== "fulfillment_staff" && (
+          <div className="flex-shrink-0 px-5 pt-5">
+            <AdminSearchField dark onNavigate={() => setOpen(false)} />
+          </div>
+        )}
 
         <nav className="mt-5 flex-1 space-y-0.5 overflow-y-auto px-3">
-          {ADMIN_NAV.map((item) => {
+          {navItems.map((item) => {
             const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
             return (
               <Link
@@ -89,7 +94,7 @@ export function AdminMobileNav({ email }: { email: string | null }) {
         <div className="flex-shrink-0 border-t border-gray-800 p-5">
           <form action="/admin/signout" method="POST">
             <button type="submit" className="text-sm text-gray-400 hover:text-white">
-              Logga ut
+              {t(locale, "nav.signOut")}
             </button>
           </form>
         </div>

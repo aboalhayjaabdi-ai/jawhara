@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult = { ok: true } | { ok: false; error: string; needsConfirmation?: boolean };
@@ -11,6 +11,8 @@ export async function updateProductCore(
   input: { title: string; vendor: string | null; productType: string | null; descriptionHtml: string | null; tags: string[]; templateSuffix: string | null }
 ): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (!input.title.trim()) return { ok: false, error: "Titel krävs." };
 
   const { data: product } = await supabaseService.from("products").select("handle").eq("id", productId).maybeSingle();
@@ -38,6 +40,8 @@ export async function updateProductCore(
 
 export async function updateProductSeo(productId: string, input: { seoTitle: string | null; seoDescription: string | null }): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const { data: product } = await supabaseService.from("products").select("handle").eq("id", productId).maybeSingle();
   if (!product) return { ok: false, error: "Produkten hittades inte." };
 
@@ -58,6 +62,8 @@ export async function updateProductSeo(productId: string, input: { seoTitle: str
  * with no referential-integrity check -- silently renaming one could break a hardcoded section. */
 export async function updateProductHandle(productId: string, newHandle: string, confirmed: boolean): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const handle = newHandle.trim().toLowerCase();
   if (!handle) return { ok: false, error: "Handle krävs." };
 
@@ -86,6 +92,8 @@ export async function updateProductHandle(productId: string, newHandle: string, 
 
 export async function setProductStatus(productId: string, status: "active" | "draft" | "archived"): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const patch: Record<string, unknown> = { status };
   if (status === "active") {
     const { data: current } = await supabaseService.from("products").select("published_at").eq("id", productId).maybeSingle();

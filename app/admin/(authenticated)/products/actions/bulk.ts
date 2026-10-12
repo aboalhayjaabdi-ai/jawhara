@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { checkCollectionDiscountImpact } from "@/lib/admin/discount-guard";
 import { getProductDeleteImpact } from "@/lib/admin/product-delete-impact";
@@ -10,6 +10,8 @@ export type BulkResult = { ok: true; count: number; skipped: string[] } | { ok: 
 
 export async function bulkSetStatus(productIds: string[], status: "active" | "draft" | "archived"): Promise<BulkResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
 
   const patch: Record<string, unknown> = { status };
@@ -24,6 +26,8 @@ export async function bulkSetStatus(productIds: string[], status: "active" | "dr
 
 export async function bulkAddTags(productIds: string[], tags: string[]): Promise<BulkResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const cleaned = tags.map((t) => t.trim()).filter(Boolean);
   if (productIds.length === 0 || cleaned.length === 0) return { ok: false, error: "Inga produkter eller taggar valda." };
 
@@ -39,6 +43,8 @@ export async function bulkAddTags(productIds: string[], tags: string[]): Promise
 
 export async function bulkRemoveTags(productIds: string[], tags: string[]): Promise<BulkResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const toRemove = new Set(tags.map((t) => t.trim()).filter(Boolean));
   if (productIds.length === 0 || toRemove.size === 0) return { ok: false, error: "Inga produkter eller taggar valda." };
 
@@ -54,6 +60,8 @@ export async function bulkRemoveTags(productIds: string[], tags: string[]): Prom
 
 export async function bulkAddToCollection(productIds: string[], collectionId: string): Promise<BulkResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
 
   const { data: existing } = await supabaseService.from("collection_products").select("product_id").eq("collection_id", collectionId);
@@ -81,6 +89,8 @@ export async function bulkAddToCollection(productIds: string[], collectionId: st
 
 export async function bulkRemoveFromCollection(productIds: string[], collectionId: string): Promise<BulkResult & { discountWarning?: string[] }> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
 
   const { data: collection } = await supabaseService.from("collections").select("shopify_id").eq("id", collectionId).maybeSingle();
@@ -100,6 +110,8 @@ export async function bulkAdjustPrice(
   input: { mode: "percent" | "amount"; value: number; applyToCompareAt: boolean }
 ): Promise<BulkResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
 
   const { data: variants } = await supabaseService.from("product_variants").select("id, price, compare_at_price").in("product_id", productIds);
@@ -125,6 +137,8 @@ export async function bulkAdjustPrice(
 
 export async function bulkDelete(productIds: string[], confirmed: boolean): Promise<BulkResult & { impactSummary?: { reviewCount: number; orderItemCount: number } }> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
 
   if (!confirmed) {

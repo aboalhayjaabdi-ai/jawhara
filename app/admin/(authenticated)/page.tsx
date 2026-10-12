@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
+import { requireAdmin } from "@/lib/admin/auth";
 import { getDashboardMetrics, getDashboardTasks, type DashboardRange } from "@/lib/admin/analytics";
 import { DateRangePicker } from "@/components/admin/date-range-picker";
 import { SalesTrendChart } from "@/components/admin/sales-trend-chart";
@@ -27,6 +29,13 @@ export default async function AdminDashboardPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
+  // The dashboard shows sales/financial totals -- outside the restricted "fulfillment_staff"
+  // role's allowed sections (orders + products only, see lib/admin/permissions.ts). middleware.ts
+  // already redirects direct URL hits away from "/admin" for this role; this covers the one case
+  // that can't (logging in / navigating to the bare root from inside the app).
+  const admin = await requireAdmin();
+  if (admin.role === "fulfillment_staff") redirect("/admin/orders");
+
   const { range: rangeParam, from, to } = await searchParams;
   const range = (rangeParam as DashboardRange) || "30d";
 

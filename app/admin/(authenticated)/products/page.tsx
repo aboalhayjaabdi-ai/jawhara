@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { mediaUrl } from "@/lib/supabase/media";
+import { requireAdmin } from "@/lib/admin/auth";
+import { t } from "@/lib/admin/i18n";
 import { parseProductsListFilters, applyProductsListFilters } from "@/lib/admin/products-filters";
 import { ProductsFilterBar } from "@/components/admin/products-filter-bar";
 import { ProductsTable, type ProductRow } from "@/components/admin/products-table";
+import { FulfillmentProductsTable, type FulfillmentProductRow } from "@/components/admin/fulfillment-products-table";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +15,9 @@ const LOW_STOCK_THRESHOLD = 5;
 
 export default async function AdminProductsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
+  const admin = await requireAdmin();
+  const isFulfillmentStaff = admin.role === "fulfillment_staff";
+  const locale = admin.locale;
   const filters = parseProductsListFilters(sp);
   const page = Math.max(1, Number(Array.isArray(sp.page) ? sp.page[0] : sp.page ?? "1") || 1);
   const offset = (page - 1) * PAGE_SIZE;
@@ -67,6 +73,57 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   });
 
   const exportParams = new URLSearchParams(Object.entries(sp).filter(([k]) => k !== "page").map(([k, v]) => [k, Array.isArray(v) ? v[0] ?? "" : v ?? ""]));
+
+  if (isFulfillmentStaff) {
+    const fulfillmentRows: FulfillmentProductRow[] = rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      thumbnailUrl: r.thumbnailUrl,
+      minPrice: r.minPrice,
+      maxPrice: r.maxPrice,
+    }));
+
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-900">{t(locale, "products.title")}</h1>
+        </div>
+
+        <p className="mb-4 text-xs text-gray-400">{t(locale, "common.viewOnlyNotice")}</p>
+
+        <form method="GET" className="mb-4 flex flex-wrap gap-3">
+          <input
+            type="text"
+            name="q"
+            defaultValue={filters.q ?? ""}
+            placeholder={t(locale, "products.searchPlaceholder")}
+            className="min-w-[220px] flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm"
+          />
+          <button type="submit" className="rounded-md bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800">
+            {t(locale, "common.search")}
+          </button>
+        </form>
+
+        <FulfillmentProductsTable products={fulfillmentRows} locale={locale} />
+
+        {(page > 1 || hasNextPage) && (
+          <div className="mt-6 flex justify-center gap-6 text-xs font-semibold uppercase tracking-wide">
+            {page > 1 && (
+              <Link href={`/admin/products?${new URLSearchParams({ ...Object.fromEntries(exportParams), page: String(page - 1) }).toString()}`} className="text-gray-500 hover:text-gray-900">
+                ←
+              </Link>
+            )}
+            {hasNextPage && (
+              <Link href={`/admin/products?${new URLSearchParams({ ...Object.fromEntries(exportParams), page: String(page + 1) }).toString()}`} className="text-gray-500 hover:text-gray-900">
+                →
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>

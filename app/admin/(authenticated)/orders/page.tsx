@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { supabaseService } from "@/lib/supabase/service-client";
+import { requireAdmin } from "@/lib/admin/auth";
+import { t } from "@/lib/admin/i18n";
 import { parseOrdersListFilters, applyOrdersListFilters, resolveCarrierOrderIds } from "@/lib/admin/orders-filters";
 import { OrdersFilterBar } from "@/components/admin/orders-filter-bar";
 import { OrdersTable, type OrderRow } from "@/components/admin/orders-table";
 import { OrdersExportPanel } from "@/components/admin/orders-export-panel";
 import { SyncShopifyButton } from "@/components/admin/sync-shopify-button";
+import { FulfillmentOrdersTable, type FulfillmentOrderRow } from "@/components/admin/fulfillment-orders-table";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,19 @@ const PAGE_SIZE = 50;
 
 export default async function AdminOrdersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
+  const admin = await requireAdmin();
+  const isFulfillmentStaff = admin.role === "fulfillment_staff";
+  const locale = admin.locale;
+  // The restricted role never sees hidden/cancelled-order management, exports, syncing, or manual
+  // order creation (see lib/admin/permissions.ts + the per-action requireFullAdmin() guards) --
+  // "view" is forced to the default "active" list regardless of any query string, even though the
+  // simplified UI below never offers a hidden-view control to begin with.
   const filters = parseOrdersListFilters(sp);
+  if (isFulfillmentStaff) {
+    filters.view = "active";
+    filters.carrier = undefined;
+    filters.provider = undefined;
+  }
   const page = Math.max(1, Number(Array.isArray(sp.page) ? sp.page[0] : sp.page ?? "1") || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -52,6 +67,60 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
 
   const returnQuery = new URLSearchParams(Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] ?? "" : v ?? ""])).toString();
   const pageParams = new URLSearchParams(Object.entries(sp).filter(([k]) => k !== "page").map(([k, v]) => [k, Array.isArray(v) ? v[0] ?? "" : v ?? ""]));
+
+  if (isFulfillmentStaff) {
+    const fulfillmentRows: FulfillmentOrderRow[] = rows.map((r) => ({
+      id: r.id,
+      order_number: r.order_number,
+      created_at: r.created_at,
+      fulfillment_status: r.fulfillment_status,
+      customerName: r.customerName,
+    }));
+
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-900">{t(locale, "orders.title")}</h1>
+        </div>
+
+        <form method="GET" className="mb-4 flex flex-wrap gap-3">
+          <input
+            type="text"
+            name="q"
+            defaultValue={filters.q ?? ""}
+            placeholder={t(locale, "orders.searchPlaceholder")}
+            className="min-w-[220px] flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm"
+          />
+          <select name="fulfillment" defaultValue={filters.fulfillment ?? ""} className="rounded-md border border-gray-200 px-3 py-2 text-sm">
+            <option value="">{t(locale, "orders.filter.all")}</option>
+            <option value="UNFULFILLED">{t(locale, "orders.filter.unfulfilled")}</option>
+            <option value="PARTIALLY_FULFILLED">{t(locale, "orders.filter.partiallyFulfilled")}</option>
+            <option value="FULFILLED">{t(locale, "orders.filter.fulfilled")}</option>
+          </select>
+          <button type="submit" className="rounded-md bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800">
+            {t(locale, "common.search")}
+          </button>
+        </form>
+
+        <FulfillmentOrdersTable orders={fulfillmentRows} locale={locale} returnQuery={returnQuery} />
+
+        {(page > 1 || hasNextPage) && (
+          <div className="mt-6 flex justify-center gap-6 text-xs font-semibold uppercase tracking-wide">
+            {page > 1 && (
+              <Link href={`/admin/orders?${new URLSearchParams({ ...Object.fromEntries(pageParams), page: String(page - 1) }).toString()}`} className="text-gray-500 hover:text-gray-900">
+                ←
+              </Link>
+            )}
+            {hasNextPage && (
+              <Link href={`/admin/orders?${new URLSearchParams({ ...Object.fromEntries(pageParams), page: String(page + 1) }).toString()}`} className="text-gray-500 hover:text-gray-900">
+                →
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>

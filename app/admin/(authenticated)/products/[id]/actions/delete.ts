@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { getProductDeleteImpact, type ProductDeleteImpact } from "@/lib/admin/product-delete-impact";
 
@@ -11,6 +11,8 @@ export { getProductDeleteImpact, type ProductDeleteImpact };
 
 export async function deleteProduct(productId: string, confirmed: boolean): Promise<DeleteResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (!confirmed) return { ok: false, error: "Bekräfta för att radera permanent." };
 
   const { data: product } = await supabaseService.from("products").select("handle, title").eq("id", productId).maybeSingle();

@@ -15,21 +15,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // inside every mutating Server Action/route -- see lib/admin/auth.ts), kept even though
   // middleware now covers the same ground, since a page-load check costs nothing extra here and
   // a single layer is never trusted alone.
+  let role: "admin" | "staff" | "fulfillment_staff" = "admin";
+  let locale: "sv" | "zh" = "sv";
   if (user) {
-    const { data: adminRow } = await supabase.from("admin_users").select("id, disabled").eq("auth_user_id", user.id).maybeSingle();
+    const { data: adminRow } = await supabase.from("admin_users").select("id, role, locale, disabled").eq("auth_user_id", user.id).maybeSingle();
     if (!adminRow || adminRow.disabled) {
       redirect("/admin/login");
     }
+    role = adminRow.role;
+    locale = adminRow.locale ?? "sv";
   }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AdminSidebar />
+      <AdminSidebar role={role} locale={locale} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar email={user?.email ?? null} />
+        <AdminTopbar email={user?.email ?? null} role={role} />
         <main className="flex-1 px-5 py-6 pb-24 lg:px-8 lg:py-8 lg:pb-8">{children}</main>
       </div>
-      <AdminMobileNav email={user?.email ?? null} />
+      <AdminMobileNav email={user?.email ?? null} role={role} locale={locale} />
     </div>
   );
 }

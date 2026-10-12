@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type CreateProductResult = { ok: true; productId: string } | { ok: false; error: string };
@@ -18,6 +18,8 @@ function slugify(title: string): string {
  * zero variants (lib/queries.ts's toCard() and the storefront PDP both expect at least one). */
 export async function createProduct(input: { title: string; handle?: string; status: "active" | "draft" | "archived" }): Promise<CreateProductResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const title = input.title.trim();
   if (!title) return { ok: false, error: "Titel krävs." };
 

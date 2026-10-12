@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -25,6 +25,8 @@ export type VariantPatch = {
 
 export async function saveVariants(productId: string, patches: VariantPatch[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (patches.length === 0) return { ok: false, error: "Minst en variant krävs." };
 
   const { data: product } = await supabaseService.from("products").select("handle").eq("id", productId).maybeSingle();
@@ -65,6 +67,8 @@ export async function saveVariants(productId: string, patches: VariantPatch[]): 
 
 export async function deleteVariant(productId: string, variantId: string): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
 
   const { count } = await supabaseService.from("product_variants").select("id", { count: "exact", head: true }).eq("product_id", productId);
   if ((count ?? 0) <= 1) return { ok: false, error: "En produkt måste ha minst en variant." };

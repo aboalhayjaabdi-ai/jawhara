@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { isAdminPathAllowedForFulfillmentStaff } from "@/lib/admin/permissions";
 
 // Requires the Node.js runtime (see next.config.mjs's experimental.nodeMiddleware) -- the default
 // Edge runtime can neither bundle undici nor have its fetch proxied this way.
@@ -57,19 +58,61 @@ async function handleAdminAuth(request: NextRequest): Promise<NextResponse> {
   // Resolved once and reused by both branches below -- a disabled account's session must never
   // bounce between "signed in, redirect away from login" and "not a real active admin, redirect
   // to login" (that pair of checks disagreeing on disabled status would be a redirect loop).
-  const adminRow = user ? (await supabase.from("admin_users").select("id, disabled").eq("auth_user_id", user.id).maybeSingle()).data : null;
+  const adminRow = user ? (await supabase.from("admin_users").select("id, role, disabled").eq("auth_user_id", user.id).maybeSingle()).data : null;
   const isActiveAdmin = !!adminRow && !adminRow.disabled;
 
   if (pathname.startsWith("/admin") && !isLoginPage && !isResetPasswordPage) {
     if (!isActiveAdmin) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
+    // The restricted "fulfillment_staff" role (orders + products view only, no customer/financial/
+    // settings access) is confined to an explicit page allowlist -- enforced here so a direct URL
+    // to any other section redirects away, regardless of what the sidebar links to. This is a
+    // section-level gate only; the finer-grained "view but don't edit" restriction *within*
+    // Orders/Products is enforced separately, at the point of mutation, via requireFullAdmin().
+    if (adminRow!.role === "fulfillment_staff" && !isAdminPathAllowedForFulfillmentStaff(pathname)) {
+      return NextResponse.redirect(new URL("/admin/orders", request.url));
+    }
   }
   if (isLoginPage && isActiveAdmin) {
-    return NextResponse.redirect(new URL("/admin", request.url));
+    return NextResponse.redirect(new URL(adminRow!.role === "fulfillment_staff" ? "/admin/orders" : "/admin", request.url));
   }
 
   return response;
+}
+
+/**
+ * /api/admin/* route handlers are not covered by handleAdminAuth's page-level checks (this
+ * project's middleware matcher historically excluded /api/* entirely -- see the matcher below).
+ * None of them are needed for fulfillment_staff's allowed workflow (viewing orders/products and
+ * updating fulfillment status/tracking are both Server Actions on the page itself, not separate
+ * API routes), so this denies the whole surface by default for that role rather than maintaining
+ * a per-route allowlist. requireAdmin() inside each route is still the deeper, independent check.
+ */
+async function handleAdminApiAuth(request: NextRequest): Promise<NextResponse> {
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll() {
+        // Route handlers manage their own response/cookies; this check never needs to write any.
+      },
+    },
+  });
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Inte inloggad." }, { status: 401 });
+
+  const { data: adminRow } = await supabase.from("admin_users").select("role, disabled").eq("auth_user_id", user.id).maybeSingle();
+  if (!adminRow || adminRow.disabled) return NextResponse.json({ error: "Inte behörig." }, { status: 403 });
+  if (adminRow.role === "fulfillment_staff") {
+    return NextResponse.json({ error: "Den här åtgärden är inte tillåten för den här rollen." }, { status: 403 });
+  }
+
+  return NextResponse.next();
 }
 
 export async function middleware(request: NextRequest) {
@@ -77,6 +120,14 @@ export async function middleware(request: NextRequest) {
 
   if (pathname.startsWith("/admin")) {
     return handleAdminAuth(request);
+  }
+  if (pathname.startsWith("/api/admin")) {
+    return handleAdminApiAuth(request);
+  }
+  // Every other API route (checkout, webhooks, tracking, marketing) is untouched by this
+  // middleware -- only /admin/* pages and /api/admin/* routes need the auth/role checks above.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
   }
 
   // Static assets (images, fonts, etc.) always have a file extension in their last segment --
@@ -97,5 +148,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

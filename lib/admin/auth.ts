@@ -6,13 +6,15 @@ if (typeof window !== "undefined") {
   throw new Error("lib/admin/auth.ts must never be imported into client code");
 }
 
-export type AdminRole = "admin" | "staff";
+export type AdminRole = "admin" | "staff" | "fulfillment_staff";
+export type AdminLocale = "sv" | "zh";
 
 export type AdminSession = {
   userId: string;
   adminId: string;
   email: string | null;
   role: AdminRole;
+  locale: AdminLocale;
 };
 
 /**
@@ -30,10 +32,16 @@ export async function requireAdmin(): Promise<AdminSession> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: adminRow } = await supabase.from("admin_users").select("id, role, disabled").eq("auth_user_id", user.id).maybeSingle();
+  const { data: adminRow } = await supabase.from("admin_users").select("id, role, disabled, locale").eq("auth_user_id", user.id).maybeSingle();
   if (!adminRow || adminRow.disabled) throw new Error("Not authorized: no active admin_users row for this account.");
 
-  return { userId: user.id, adminId: adminRow.id, email: user.email ?? null, role: adminRow.role as AdminRole };
+  return {
+    userId: user.id,
+    adminId: adminRow.id,
+    email: user.email ?? null,
+    role: adminRow.role as AdminRole,
+    locale: (adminRow.locale as AdminLocale) ?? "sv",
+  };
 }
 
 /**
@@ -48,6 +56,21 @@ export async function requireAdmin(): Promise<AdminSession> {
 export function requireRole(admin: AdminSession, role: AdminRole): { ok: true } | { ok: false; error: string } {
   if (admin.role !== role) return { ok: false, error: `Endast rollen "${role}" kan göra detta.` };
   return { ok: true };
+}
+
+/**
+ * Blocks the restricted "fulfillment_staff" role (view orders/products, update fulfillment
+ * status + tracking only -- see lib/admin/permissions.ts) from every other mutation: price/
+ * inventory/content edits, product delete/duplicate, refunds, cancellations, returns, order
+ * notes/tags, hide/restore. Call this as the first line after requireAdmin() in any such action
+ * and return its result if non-null. 'admin' and 'staff' are unaffected -- this role is the only
+ * one with narrower-than-"any admin_users row" capabilities today.
+ */
+export function requireFullAdmin(admin: AdminSession): { ok: false; error: string } | null {
+  if (admin.role === "fulfillment_staff") {
+    return { ok: false, error: "Den här åtgärden är inte tillåten för den här rollen." };
+  }
+  return null;
 }
 
 /**

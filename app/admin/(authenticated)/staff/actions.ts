@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireRole, logAdminAction, type AdminRole } from "@/lib/admin/auth";
+import { requireAdmin, requireRole, logAdminAction, type AdminRole, type AdminLocale } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult<T = undefined> = (T extends undefined ? { ok: true } : { ok: true; data: T }) | { ok: false; error: string };
@@ -16,14 +16,18 @@ async function countOtherActiveAdmins(excludeAdminId?: string): Promise<number> 
   return (data ?? []).filter((r) => r.id !== excludeAdminId).length;
 }
 
-export async function inviteStaff(email: string, role: AdminRole): Promise<ActionResult<{ id: string }>> {
+const VALID_ROLES: AdminRole[] = ["admin", "staff", "fulfillment_staff"];
+const VALID_LOCALES: AdminLocale[] = ["sv", "zh"];
+
+export async function inviteStaff(email: string, role: AdminRole, locale: AdminLocale = "sv"): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
   const roleCheck = requireRole(admin, "admin");
   if (!roleCheck.ok) return roleCheck;
 
   const trimmed = email.trim().toLowerCase();
   if (!EMAIL_RE.test(trimmed)) return { ok: false, error: "Ange en giltig e-postadress." };
-  if (role !== "admin" && role !== "staff") return { ok: false, error: "Okänd roll." };
+  if (!VALID_ROLES.includes(role)) return { ok: false, error: "Okänd roll." };
+  if (!VALID_LOCALES.includes(locale)) return { ok: false, error: "Okänt språk." };
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
   const { data: invited, error: inviteError } = await supabaseService.auth.admin.inviteUserByEmail(trimmed, {
@@ -35,14 +39,14 @@ export async function inviteStaff(email: string, role: AdminRole): Promise<Actio
 
   const { data: row, error: insertError } = await supabaseService
     .from("admin_users")
-    .insert({ auth_user_id: invited.user.id, role, invited_by: admin.adminId })
+    .insert({ auth_user_id: invited.user.id, role, locale, invited_by: admin.adminId })
     .select("id")
     .single();
   if (insertError || !row) {
     return { ok: false, error: insertError?.message ?? "Kunde inte skapa admin-kontot." };
   }
 
-  await logAdminAction(admin.adminId, "staff.invite", "admin_user", row.id, { email: trimmed, role });
+  await logAdminAction(admin.adminId, "staff.invite", "admin_user", row.id, { email: trimmed, role, locale });
   revalidatePath("/admin/staff");
   return { ok: true, data: { id: row.id } };
 }
@@ -51,12 +55,12 @@ export async function updateStaffRole(adminUserId: string, role: AdminRole): Pro
   const admin = await requireAdmin();
   const roleCheck = requireRole(admin, "admin");
   if (!roleCheck.ok) return roleCheck;
-  if (role !== "admin" && role !== "staff") return { ok: false, error: "Okänd roll." };
+  if (!VALID_ROLES.includes(role)) return { ok: false, error: "Okänd roll." };
 
   if (adminUserId === admin.adminId) {
     return { ok: false, error: "Du kan inte ändra din egen roll." };
   }
-  if (role === "staff") {
+  if (role !== "admin") {
     const { data: target } = await supabaseService.from("admin_users").select("role").eq("id", adminUserId).maybeSingle();
     if (target?.role === "admin" && (await countOtherActiveAdmins(adminUserId)) === 0) {
       return { ok: false, error: "Det måste finnas minst en aktiv administratör kvar." };
@@ -67,6 +71,20 @@ export async function updateStaffRole(adminUserId: string, role: AdminRole): Pro
   if (error) return { ok: false, error: error.message };
 
   await logAdminAction(admin.adminId, "staff.update_role", "admin_user", adminUserId, { role });
+  revalidatePath("/admin/staff");
+  return { ok: true };
+}
+
+export async function updateStaffLocale(adminUserId: string, locale: AdminLocale): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  const roleCheck = requireRole(admin, "admin");
+  if (!roleCheck.ok) return roleCheck;
+  if (!VALID_LOCALES.includes(locale)) return { ok: false, error: "Okänt språk." };
+
+  const { error } = await supabaseService.from("admin_users").update({ locale }).eq("id", adminUserId);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminAction(admin.adminId, "staff.update_locale", "admin_user", adminUserId, { locale });
   revalidatePath("/admin/staff");
   return { ok: true };
 }

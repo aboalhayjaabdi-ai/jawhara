@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function addComplementaryProducts(productId: string, complementaryProductIds: string[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const ids = complementaryProductIds.filter((id) => id !== productId);
   if (ids.length === 0) return { ok: false, error: "Inga produkter valda." };
 
@@ -35,6 +37,8 @@ export async function addComplementaryProducts(productId: string, complementaryP
 
 export async function removeComplementaryProduct(productId: string, complementaryProductId: string): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const { error } = await supabaseService.from("product_complementary").delete().eq("product_id", productId).eq("complementary_product_id", complementaryProductId);
   if (error) return { ok: false, error: error.message };
 
@@ -45,6 +49,8 @@ export async function removeComplementaryProduct(productId: string, complementar
 
 export async function reorderComplementaryProducts(productId: string, orderedComplementaryProductIds: string[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   for (let i = 0; i < orderedComplementaryProductIds.length; i++) {
     await supabaseService.from("product_complementary").update({ position: i }).eq("product_id", productId).eq("complementary_product_id", orderedComplementaryProductIds[i]);
   }

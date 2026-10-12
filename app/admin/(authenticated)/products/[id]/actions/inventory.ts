@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { adjustInventory, type InventoryAdjustmentReason } from "@/lib/admin/inventory-ledger";
 
@@ -13,6 +13,8 @@ export async function adjustVariantInventory(
   input: { mode: "set" | "delta"; value: number; reason: InventoryAdjustmentReason; note?: string }
 ): Promise<AdjustResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
 
   const result = await adjustInventory({ variantId, ...input }, admin.adminId);
   if (!result.ok) return result;

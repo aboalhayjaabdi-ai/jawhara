@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { createFulfillment } from "@/app/admin/(authenticated)/orders/[id]/actions/fulfillment";
+import type { AdminLocale } from "@/lib/admin/auth";
+import { t } from "@/lib/admin/i18n";
 
 type UnfulfilledItem = { id: string; title: string; sku: string | null; remaining: number };
 
-export function FulfillmentForm({ orderId, items }: { orderId: string; items: UnfulfilledItem[] }) {
+export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: string; items: UnfulfilledItem[]; locale?: AdminLocale }) {
   const [selected, setSelected] = useState<Record<string, number>>(
     Object.fromEntries(items.map((i) => [i.id, i.remaining]))
   );
@@ -20,7 +22,7 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
     setError(null);
     const lines = items.filter((i) => checked[i.id] && selected[i.id] > 0).map((i) => ({ orderItemId: i.id, quantity: selected[i.id] }));
     if (lines.length === 0) {
-      setError("Välj minst en artikel.");
+      setError(t(locale, "fulfillment.selectAtLeastOne"));
       return;
     }
     startTransition(async () => {
@@ -38,7 +40,7 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Skapa leverans</div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t(locale, "fulfillment.title")}</div>
       <div className="space-y-2">
         {items.map((item) => (
           <label key={item.id} className="flex items-center gap-3 text-sm">
@@ -59,7 +61,9 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
               onChange={(e) => setSelected((s) => ({ ...s, [item.id]: Math.min(item.remaining, Math.max(0, Number(e.target.value))) }))}
               className="w-16 rounded-md border border-gray-200 px-2 py-1 text-right text-sm"
             />
-            <span className="w-16 text-xs text-gray-400">av {item.remaining}</span>
+            <span className="w-16 text-xs text-gray-400">
+              {t(locale, "fulfillment.remaining")} {item.remaining}
+            </span>
           </label>
         ))}
       </div>
@@ -68,23 +72,21 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
         <input
           value={trackingNumber}
           onChange={(e) => setTrackingNumber(e.target.value)}
-          placeholder="Spårningsnummer"
+          placeholder={t(locale, "fulfillment.trackingNumber")}
           className="rounded-md border border-gray-200 px-3 py-2 text-sm"
         />
         <input
           value={trackingCompany}
           onChange={(e) => setTrackingCompany(e.target.value)}
-          placeholder="Transportör (valfritt)"
+          placeholder={t(locale, "fulfillment.carrier")}
           className="rounded-md border border-gray-200 px-3 py-2 text-sm"
         />
       </div>
-      <p className="mt-1.5 text-xs text-gray-400">
-        Kunden får en spårningslänk till Jawhara direkt -- ingen transportör krävs för att spara.
-      </p>
+      <p className="mt-1.5 text-xs text-gray-400">{t(locale, "fulfillment.notifyHint")}</p>
 
       <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
         <input type="checkbox" checked={notifyCustomer} onChange={(e) => setNotifyCustomer(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-        Meddela kund via e-post
+        {t(locale, "fulfillment.notify")}
       </label>
 
       {error && <div className="mt-2 text-sm text-rose-600">{error}</div>}
@@ -95,7 +97,7 @@ export function FulfillmentForm({ orderId, items }: { orderId: string; items: Un
         disabled={isPending}
         className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
       >
-        {isPending ? "Skapar leverans…" : "Markera som levererad"}
+        {isPending ? t(locale, "fulfillment.submitting") : t(locale, "fulfillment.submit")}
       </button>
     </div>
   );

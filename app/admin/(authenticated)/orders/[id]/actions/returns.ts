@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { restockOrderItems } from "@/lib/inventory/restock";
 
@@ -19,6 +19,8 @@ export async function createReturn(
   input: { reason?: string; resolution: "refund" | "exchange" | "none"; items: ReturnLineInput[] }
 ): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const lines = input.items.filter((i) => i.quantity > 0);
   if (lines.length === 0) return { ok: false, error: "Välj minst en artikel att returnera." };
 

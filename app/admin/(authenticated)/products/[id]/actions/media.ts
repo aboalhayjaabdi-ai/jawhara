@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function reorderMedia(productId: string, orderedMediaIds: string[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   for (let i = 0; i < orderedMediaIds.length; i++) {
     await supabaseService.from("media").update({ position: i }).eq("id", orderedMediaIds[i]).eq("product_id", productId);
   }
@@ -18,6 +20,8 @@ export async function reorderMedia(productId: string, orderedMediaIds: string[])
 
 export async function setAltText(productId: string, mediaId: string, altText: string): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const { error } = await supabaseService.from("media").update({ alt_text: altText || null }).eq("id", mediaId).eq("product_id", productId);
   if (error) return { ok: false, error: error.message };
   await logAdminAction(admin.adminId, "products.set_media_alt", "product", productId, { mediaId });
@@ -29,6 +33,8 @@ export async function setAltText(productId: string, mediaId: string, altText: st
  * other media row's prior claim on this variant before assigning the new one. */
 export async function assignVariantImage(productId: string, mediaId: string, variantId: string | null): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (variantId) {
     await supabaseService.from("media").update({ variant_id: null }).eq("product_id", productId).eq("variant_id", variantId);
   }
@@ -44,6 +50,8 @@ export async function assignVariantImage(productId: string, mediaId: string, var
  * this). Stale-object cleanup is a deliberate, low-risk scope-cut. */
 export async function deleteMedia(productId: string, mediaId: string): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   const { error } = await supabaseService.from("media").delete().eq("id", mediaId).eq("product_id", productId);
   if (error) return { ok: false, error: error.message };
   await logAdminAction(admin.adminId, "products.delete_media", "product", productId, { mediaId });

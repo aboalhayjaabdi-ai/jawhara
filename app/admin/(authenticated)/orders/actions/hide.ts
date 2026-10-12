@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type ActionResult = { ok: true; count: number } | { ok: false; error: string };
@@ -14,6 +14,8 @@ export type ActionResult = { ok: true; count: number } | { ok: false; error: str
  */
 export async function hideOrders(orderIds: string[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (orderIds.length === 0) return { ok: false, error: "Inga ordrar valda." };
 
   const { error, data } = await supabaseService
@@ -33,6 +35,8 @@ export async function hideOrders(orderIds: string[]): Promise<ActionResult> {
 
 export async function unhideOrders(orderIds: string[]): Promise<ActionResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
   if (orderIds.length === 0) return { ok: false, error: "Inga ordrar valda." };
 
   const { error, data } = await supabaseService

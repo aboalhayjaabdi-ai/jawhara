@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
+import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
 export type DuplicateResult = { ok: true; newProductId: string } | { ok: false; error: string };
@@ -14,6 +14,8 @@ function randomSuffix(): string {
  * own duplicate-modal defaults. */
 export async function duplicateProduct(productId: string, options: { copyImages: boolean; copyQuantities: boolean }): Promise<DuplicateResult> {
   const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
 
   const { data: original } = await supabaseService.from("products").select("*").eq("id", productId).maybeSingle();
   if (!original) return { ok: false, error: "Produkten hittades inte." };

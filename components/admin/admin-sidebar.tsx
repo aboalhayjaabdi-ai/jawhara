@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ADMIN_NAV } from "./admin-nav";
+import type { AdminLocale, AdminRole } from "@/lib/admin/auth";
+import { getAdminNav } from "./admin-nav";
+import { t } from "@/lib/admin/i18n";
 
-export function AdminSidebar() {
+export function AdminSidebar({ role, locale }: { role: AdminRole; locale: AdminLocale }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const navItems = getAdminNav(role, locale);
 
   return (
     <aside
@@ -30,7 +33,7 @@ export function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {ADMIN_NAV.map((item) => {
+        {navItems.map((item) => {
           const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
           return (
             <Link
@@ -59,7 +62,7 @@ export function AdminSidebar() {
               <path d="M16 17l5-5-5-5" />
               <path d="M21 12H9" />
             </svg>
-            {!collapsed && "Logga ut"}
+            {!collapsed && t(locale, "nav.signOut")}
           </button>
         </form>
       </div>
