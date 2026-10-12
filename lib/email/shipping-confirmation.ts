@@ -1,5 +1,6 @@
 import { sendEmail } from "./send";
 import { shippingConfirmationTemplate, type OrderLineItem, type ShippingAddress } from "./templates";
+import { getLiveEmailTemplate } from "@/lib/admin/email-templates";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/email/shipping-confirmation.ts must never be imported into client code");
@@ -15,6 +16,7 @@ export async function sendShippingConfirmationEmail(params: {
   trackingUrl?: string | null;
 }) {
   const { to, ...templateParams } = params;
-  const { subject, html } = shippingConfirmationTemplate(templateParams);
+  const content = await getLiveEmailTemplate("shipping_confirmation");
+  const { subject, html } = shippingConfirmationTemplate(content, templateParams);
   await sendEmail({ to, subject, html });
 }

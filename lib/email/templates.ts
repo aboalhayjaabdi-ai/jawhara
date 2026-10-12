@@ -1,7 +1,9 @@
-// Pure template builders -- no sending, no Resend import. Kept separate so these can be
-// previewed/reviewed (e.g. rendered to a file for approval) independent of the send path.
-// This is new customer-facing copy: Shopify's own transactional email templates were never part
-// of the export, so there is nothing "real" to extract here -- flagged for approval before use.
+// Pure template builders -- no sending, no Resend import, no database access. Kept separate so
+// these can be previewed/reviewed independent of the send path. The genuinely editable prose
+// (subject/heading/intro/outro) is passed in by the caller (fetched from the email_templates
+// table, admin-editable at /admin/email-templates since Phase 5 of the admin-completion roadmap)
+// -- the structured, data-driven parts below (order number, line items, totals, address, tracking)
+// are never editable free text, so an admin edit can never corrupt a real order's numbers.
 
 export type OrderLineItem = { title: string; variantTitle?: string | null; qty: number; unitPrice: number };
 export type ShippingAddress = {
@@ -13,17 +15,25 @@ export type ShippingAddress = {
   country?: string | null;
 } | null;
 
+/** The editable portion of a template, as stored in email_templates (either its live or draft
+ * columns) -- {{orderNumber}} in `subject` is substituted by each builder below. */
+export type EmailTemplateContent = { subject: string; heading: string; introHtml: string; outroHtml: string | null };
+
 function formatSek(amount: number) {
   return `${Math.round(amount).toLocaleString("sv-SE")} kr`;
 }
 
-function layout(title: string, bodyHtml: string) {
+function substitute(text: string, orderNumber: string) {
+  return text.replace(/\{\{\s*orderNumber\s*\}\}/g, orderNumber);
+}
+
+function layout(heading: string, bodyHtml: string) {
   return `
     <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #111;">
       <div style="text-align: center; padding: 24px 0 8px;">
         <span style="font-size: 20px; letter-spacing: 0.1em; font-weight: 600;">JAWHARA</span>
       </div>
-      <h1 style="font-size: 18px; font-weight: 600; margin: 24px 0 8px;">${title}</h1>
+      <h1 style="font-size: 18px; font-weight: 600; margin: 24px 0 8px;">${heading}</h1>
       ${bodyHtml}
       <p style="margin-top: 32px; color: #666; font-size: 13px;">
         Frågor? Kontakta oss på <a href="mailto:support@jawhara.se" style="color: #111;">support@jawhara.se</a>.<br/>
@@ -61,19 +71,22 @@ function addressBlock(address: ShippingAddress) {
   `;
 }
 
-export function orderConfirmationTemplate(params: {
-  orderNumber: string;
-  items: OrderLineItem[];
-  subtotal: number;
-  discountTotal: number;
-  vat: number;
-  shipping: number;
-  total: number;
-  shippingAddress: ShippingAddress;
-}) {
+export function orderConfirmationTemplate(
+  content: EmailTemplateContent,
+  params: {
+    orderNumber: string;
+    items: OrderLineItem[];
+    subtotal: number;
+    discountTotal: number;
+    vat: number;
+    shipping: number;
+    total: number;
+    shippingAddress: ShippingAddress;
+  }
+) {
   const { orderNumber, items, subtotal, discountTotal, vat, shipping, total, shippingAddress } = params;
   const body = `
-    <p style="font-size: 14px;">Tack för din beställning! Vi har tagit emot din betalning och din order behandlas nu.</p>
+    ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}</p>
     ${lineItemsTable(items)}
     <table style="width: 100%; font-size: 14px; margin-top: 8px;">
@@ -84,22 +97,25 @@ export function orderConfirmationTemplate(params: {
       <tr style="font-weight: 600;"><td style="padding-top: 8px;">Totalt</td><td style="text-align: right; padding-top: 8px;">${formatSek(total)}</td></tr>
     </table>
     ${addressBlock(shippingAddress)}
-    <p style="font-size: 14px; margin-top: 16px;">Du får ett nytt mejl med spårningsinformation när din order har skickats.</p>
+    ${content.outroHtml ?? ""}
   `;
-  return { subject: `Orderbekräftelse ${orderNumber} — Jawhara`, html: layout("Tack för din beställning!", body) };
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
 
-export function shippingConfirmationTemplate(params: {
-  orderNumber: string;
-  items: OrderLineItem[];
-  shippingAddress: ShippingAddress;
-  trackingNumber?: string | null;
-  carrier?: string | null;
-  trackingUrl?: string | null;
-}) {
+export function shippingConfirmationTemplate(
+  content: EmailTemplateContent,
+  params: {
+    orderNumber: string;
+    items: OrderLineItem[];
+    shippingAddress: ShippingAddress;
+    trackingNumber?: string | null;
+    carrier?: string | null;
+    trackingUrl?: string | null;
+  }
+) {
   const { orderNumber, items, shippingAddress, trackingNumber, carrier, trackingUrl } = params;
   const body = `
-    <p style="font-size: 14px;">Goda nyheter — din order är på väg!</p>
+    ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}</p>
     ${lineItemsTable(items)}
     ${
@@ -109,18 +125,19 @@ export function shippingConfirmationTemplate(params: {
         : ""
     }
     ${addressBlock(shippingAddress)}
+    ${content.outroHtml ?? ""}
   `;
-  return { subject: `Din order ${orderNumber} har skickats — Jawhara`, html: layout("Din order är på väg!", body) };
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
 
-export function refundNotificationTemplate(params: { orderNumber: string; refundAmount: number; reason?: string | null }) {
+export function refundNotificationTemplate(content: EmailTemplateContent, params: { orderNumber: string; refundAmount: number; reason?: string | null }) {
   const { orderNumber, refundAmount, reason } = params;
   const body = `
-    <p style="font-size: 14px;">Vi har återbetalat din order.</p>
+    ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}<br/>
     <strong>Återbetalt belopp:</strong> ${formatSek(refundAmount)}</p>
     ${reason ? `<p style="font-size: 14px;">${reason}</p>` : ""}
-    <p style="font-size: 14px;">Beloppet återförs till din ursprungliga betalningsmetod inom några bankdagar.</p>
+    ${content.outroHtml ?? ""}
   `;
-  return { subject: `Återbetalning för order ${orderNumber} — Jawhara`, html: layout("Din återbetalning är bekräftad", body) };
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }

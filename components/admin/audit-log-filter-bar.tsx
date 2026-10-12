@@ -9,6 +9,7 @@ const ENTITY_TYPES = [
   "customer",
   "customer_saved_view",
   "discount",
+  "email_template",
   "order",
   "product",
   "product_template",
