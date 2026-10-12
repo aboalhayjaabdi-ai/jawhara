@@ -16,8 +16,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // middleware now covers the same ground, since a page-load check costs nothing extra here and
   // a single layer is never trusted alone.
   if (user) {
-    const { data: adminRow } = await supabase.from("admin_users").select("id").eq("auth_user_id", user.id).maybeSingle();
-    if (!adminRow) {
+    const { data: adminRow } = await supabase.from("admin_users").select("id, disabled").eq("auth_user_id", user.id).maybeSingle();
+    if (!adminRow || adminRow.disabled) {
       redirect("/admin/login");
     }
   }

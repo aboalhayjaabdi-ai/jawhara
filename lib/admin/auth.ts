@@ -30,8 +30,8 @@ export async function requireAdmin(): Promise<AdminSession> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const { data: adminRow } = await supabase.from("admin_users").select("id, role").eq("auth_user_id", user.id).maybeSingle();
-  if (!adminRow) throw new Error("Not authorized: no admin_users row for this account.");
+  const { data: adminRow } = await supabase.from("admin_users").select("id, role, disabled").eq("auth_user_id", user.id).maybeSingle();
+  if (!adminRow || adminRow.disabled) throw new Error("Not authorized: no active admin_users row for this account.");
 
   return { userId: user.id, adminId: adminRow.id, email: user.email ?? null, role: adminRow.role as AdminRole };
 }

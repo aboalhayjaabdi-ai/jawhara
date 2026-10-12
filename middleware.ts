@@ -54,16 +54,18 @@ async function handleAdminAuth(request: NextRequest): Promise<NextResponse> {
   // ever gets a chance to exchange the token.
   const isResetPasswordPage = pathname === "/admin/reset-password";
 
+  // Resolved once and reused by both branches below -- a disabled account's session must never
+  // bounce between "signed in, redirect away from login" and "not a real active admin, redirect
+  // to login" (that pair of checks disagreeing on disabled status would be a redirect loop).
+  const adminRow = user ? (await supabase.from("admin_users").select("id, disabled").eq("auth_user_id", user.id).maybeSingle()).data : null;
+  const isActiveAdmin = !!adminRow && !adminRow.disabled;
+
   if (pathname.startsWith("/admin") && !isLoginPage && !isResetPasswordPage) {
-    if (!user) {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
-    }
-    const { data: adminRow } = await supabase.from("admin_users").select("id").eq("auth_user_id", user.id).maybeSingle();
-    if (!adminRow) {
+    if (!isActiveAdmin) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
   }
-  if (isLoginPage && user) {
+  if (isLoginPage && isActiveAdmin) {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 
