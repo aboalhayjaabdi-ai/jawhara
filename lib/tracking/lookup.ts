@@ -103,6 +103,26 @@ function normalizeCarrierName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/** Registers tracking numbers with 17TRACK as soon as a fulfillment gets one -- at fulfillment
+ * creation or Shopify sync, not at a customer's first lookup. Without this, the customer who
+ * happens to be the first to check an order's tracking is also the one who hits 17TRACK's first-
+ * sync lag (it needs a few minutes after registration to backfill carrier history). Call this
+ * right after the fulfillment rows are written so that gap is already closed by the time anyone
+ * actually looks. Safe to call for fulfillments that are already registered -- 17TRACK's own
+ * register endpoint treats that as a no-op, and refreshTrackingCache never throws. */
+export async function registerFulfillmentsForTracking(
+  fulfillments: Array<{ id: string; trackingNumber: string | null; trackingCompany: string | null }>
+): Promise<void> {
+  const withTracking = fulfillments.filter((f) => f.trackingNumber);
+  if (withTracking.length === 0) return;
+
+  const carrierCodeByName = await loadCarrierCodesByName();
+  for (const f of withTracking) {
+    const carrierCode = f.trackingCompany ? carrierCodeByName.get(normalizeCarrierName(f.trackingCompany)) ?? null : null;
+    after(() => refreshTrackingCache(f.id, f.trackingNumber!, carrierCode, false));
+  }
+}
+
 /** shipping_carriers.tracking_api_carrier_code is set per-carrier in the admin (once the real
  * 17TRACK code is looked up) -- fulfillments.tracking_company is free text copied at fulfillment
  * creation (see components/admin/fulfillment-form.tsx), not a foreign key, so carriers are
