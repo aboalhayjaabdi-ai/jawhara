@@ -23,19 +23,25 @@ async function main() {
   const ids: string[] = JSON.parse(readFileSync(process.argv[2], "utf-8"));
   console.log(`Deleting ${ids.length} falsely-marked tracking_cache rows...`);
 
-  // Sanity check before deleting: every row must carry the exact timestamp the buggy run wrote,
-  // and empty events -- refuse to touch anything that looks like real data.
+  // Sanity check before deleting: every row must fall within the buggy run's write window (it
+  // wrote in several batches, each with its own `now`, a fraction of a second apart) and have
+  // empty events -- refuse to touch anything that looks like real data.
+  const WINDOW_START = new Date("2026-10-12T13:40:00Z").getTime();
+  const WINDOW_END = new Date("2026-10-12T13:41:00Z").getTime();
   const { data: rows, error: readErr } = await supabase
     .from("tracking_cache")
     .select("fulfillment_id, tracking_api_registered_at, events")
     .in("fulfillment_id", ids);
   if (readErr) throw readErr;
-  const bad = (rows ?? []).filter((r) => r.tracking_api_registered_at !== "2026-10-12T13:40:32.965+00:00" || (r.events as unknown[]).length > 0);
+  const bad = (rows ?? []).filter((r) => {
+    const t = new Date(r.tracking_api_registered_at as string).getTime();
+    return t < WINDOW_START || t > WINDOW_END || (r.events as unknown[]).length > 0;
+  });
   if (bad.length) {
     console.error(`Refusing to proceed: ${bad.length} rows don't match the expected buggy signature.`, bad.slice(0, 5));
     process.exit(1);
   }
-  console.log(`Verified all ${rows?.length ?? 0} rows match the buggy signature exactly.`);
+  console.log(`Verified all ${rows?.length ?? 0} rows match the buggy signature (registered within the buggy run's window, empty events).`);
 
   const { error: delErr, count } = await supabase.from("tracking_cache").delete({ count: "exact" }).in("fulfillment_id", ids);
   if (delErr) throw delErr;
