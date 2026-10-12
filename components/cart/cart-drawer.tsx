@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
+import type { GiftBoxOffer } from "@/lib/gift-box";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -12,9 +13,35 @@ function formatSek(amount: number) {
 
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
-export function CartDrawer() {
-  const { items, isOpen, close, removeItem, setQty, subtotal } = useCart();
+export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
+  const { items, isOpen, close, addItem, removeItem, setQty, subtotal } = useCart();
   const router = useRouter();
+
+  // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks
+  // qty on repeat calls for the same variant), so checking presence first prevents a double-add
+  // if this handler ever fires more than once for the same check.
+  const giftBoxInCart = giftBoxOffer ? items.some((i) => i.variantId === giftBoxOffer.variantId) : false;
+  function toggleGiftBox(checked: boolean) {
+    if (!giftBoxOffer) return;
+    if (checked) {
+      if (!items.some((i) => i.variantId === giftBoxOffer.variantId)) {
+        addItem(
+          {
+            variantId: giftBoxOffer.variantId,
+            productHandle: giftBoxOffer.productHandle,
+            title: giftBoxOffer.title,
+            variantTitle: "",
+            price: giftBoxOffer.price,
+            compareAtPrice: null,
+            image: giftBoxOffer.image,
+          },
+          1
+        );
+      }
+    } else {
+      removeItem(giftBoxOffer.variantId);
+    }
+  }
 
   return (
     <>
@@ -96,6 +123,19 @@ export function CartDrawer() {
 
       <div className="flex-shrink-0 border-t border-line bg-bg">
         <div className="mx-auto max-w-xl px-6 py-5">
+          {giftBoxOffer && items.length > 0 && (
+            <label className="mb-4 flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={giftBoxInCart}
+                onChange={(e) => toggleGiftBox(e.target.checked)}
+                className="h-4 w-4 flex-shrink-0"
+              />
+              <span>
+                Vill du lägga till en presentask för {formatSek(giftBoxOffer.price)}?
+              </span>
+            </label>
+          )}
           <div className="mb-4 flex items-center justify-between text-sm">
             <span className="text-muted">Delsumma</span>
             <span className="font-semibold">{formatSek(subtotal)}</span>
