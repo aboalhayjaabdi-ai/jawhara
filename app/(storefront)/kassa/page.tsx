@@ -92,16 +92,10 @@ export default function KassaPage() {
                     <div className="text-sm font-medium">{line.title}</div>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
                     <div className="text-xs text-muted">Antal: {line.qty}</div>
-                    {line.isFree ? (
+                    {line.isFree && (
                       <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
                       </div>
-                    ) : (
-                      line.eligibleLabels.length > 0 && (
-                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
-                          {line.eligibleLabels.join(", ")}
-                        </div>
-                      )
                     )}
                   </div>
                   <div className="whitespace-nowrap text-right">

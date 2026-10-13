@@ -163,16 +163,10 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
-                    {line.isFree ? (
+                    {line.isFree && (
                       <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
                       </div>
-                    ) : (
-                      line.eligibleLabels.length > 0 && (
-                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
-                          {line.eligibleLabels.join(", ")}
-                        </div>
-                      )
                     )}
                   </div>
                   <div className="flex items-center justify-between">
