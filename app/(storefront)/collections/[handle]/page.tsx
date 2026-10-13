@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import {
   getAllProductCards,
@@ -120,7 +121,11 @@ function CollectionGrid({
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
       </div>
 
-      <SubcategoryTiles templateSuffix={templateSuffix} />
+      {/* Its own separate async query -- streamed in via Suspense so it never holds up the main
+          product grid (the same fix applied to the product page's related/complementary sections). */}
+      <Suspense fallback={null}>
+        <SubcategoryTiles templateSuffix={templateSuffix} />
+      </Suspense>
 
       <div className="mb-8">
         <SortFilterBar />
