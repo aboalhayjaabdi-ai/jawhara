@@ -89,11 +89,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
   const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
   const displayLines = buildDisplayLines(items, totals);
-  // The quantity stepper/remove control for a variant lives on its paid row when one exists, or on
-  // its free row when the whole quantity for that variant is free -- either way it's one control
-  // per real CartItem, so splitting into paid/free display rows never creates a second physical
-  // line or lets a free row be adjusted independently of its paid sibling.
-  const paidVariantIds = new Set(displayLines.filter((l) => !l.isFree).map((l) => l.variantId));
 
   return (
     <>
@@ -124,8 +119,18 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           {items.length === 0 && <p className="text-sm text-muted">Din varukorg är tom.</p>}
           {displayLines.map((line) => {
             const variantTitle = normalizeVariantTitle(line.variantTitle);
-            const showControls = line.isFree ? !paidVariantIds.has(line.variantId) : true;
             const onSale = line.compareAtPrice != null && line.compareAtPrice > line.unitPrice;
+            // There is exactly one real CartItem per variant -- splitting it into a paid row and a
+            // free row is purely a display transform (lib/cart-display.ts). Every row still gets
+            // its own fully working +/-/remove controls, all reading and writing that same one
+            // underlying quantity, so the split can never create a second physical line item:
+            // - "+"/"-" on EITHER row adjust the variant's total quantity by 1 (there's only one
+            //   quantity to adjust); the paid/free split is then recomputed automatically from the
+            //   new total on the next totals fetch.
+            // - "Ta bort" on a given row removes exactly that row's own displayed quantity from the
+            //   total -- removing the free row of a 2-paid+1-free split takes 3 -> 2 and drops the
+            //   promotion, exactly matching removing the whole item when a row already represents
+            //   the full quantity (qty <= 0 falls through to a real removeItem via setQty).
             const realQty = items.find((i) => i.variantId === line.variantId)?.qty ?? line.qty;
             return (
               <div key={line.key} className="flex gap-4 border-b border-line pb-6">
@@ -142,26 +147,28 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
-                    {line.isFree && (
+                    {line.isFree ? (
                       <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
                       </div>
+                    ) : (
+                      line.eligibleLabels.length > 0 && (
+                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          {line.eligibleLabels.join(", ")}
+                        </div>
+                      )
                     )}
                   </div>
                   <div className="flex items-center justify-between">
-                    {showControls ? (
-                      <div className="flex items-center gap-2 border border-line">
-                        <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty - 1)}>
-                          −
-                        </button>
-                        <span className="text-xs">{realQty}</span>
-                        <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty + 1)}>
-                          +
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted">× {line.qty}</span>
-                    )}
+                    <div className="flex items-center gap-2 border border-line">
+                      <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty - 1)}>
+                        −
+                      </button>
+                      <span className="text-xs">{line.qty}</span>
+                      <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty + 1)}>
+                        +
+                      </button>
+                    </div>
                     <div className="text-right">
                       <div className="flex items-baseline justify-end gap-2">
                         <span className="text-sm font-semibold">{formatSek(line.lineTotal)}</span>
@@ -175,11 +182,12 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                     </div>
                   </div>
                 </div>
-                {showControls && (
-                  <button onClick={() => removeItem(line.variantId)} className="self-start text-xs text-muted underline">
-                    Ta bort
-                  </button>
-                )}
+                <button
+                  onClick={() => setQty(line.variantId, realQty - line.qty)}
+                  className="self-start text-xs text-muted underline"
+                >
+                  Ta bort
+                </button>
               </div>
             );
           })}

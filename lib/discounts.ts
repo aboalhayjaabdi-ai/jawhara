@@ -63,6 +63,10 @@ export type CheckoutTotals = {
   // appliedDiscounts into "automatic promotions" vs "the code I just typed" without guessing
   // from title text, which isn't guaranteed to equal the code string in general.
   codeDiscountId: string | null;
+  // variantId -> titles of active BXGY promotions this product/variant is eligible for (e.g.
+  // "3 för 2"), independent of whether this cart currently earns a free unit from it. Display
+  // only -- never used for pricing. See computeCheckoutTotals for how it's derived.
+  eligibleDiscountsByVariant: Record<string, string[]>;
 };
 
 /**
@@ -176,6 +180,21 @@ export async function computeCheckoutTotals(
 
   const discounts = await loadActiveDiscounts();
   const automatic = discounts.filter((d) => d.kind === "automatic");
+
+  // Which cart variants are eligible for which active BXGY promotion -- display-only, for the
+  // cart/checkout UI's per-row "3 för 2" label. Independent of whether this cart currently has
+  // enough units to actually earn a free item (that's appliedDiscounts/freeVariantIds below) --
+  // this only answers "is this product/variant the kind of item this promotion cares about,"
+  // straight from the same real buy/get item lists the actual discount math uses.
+  const eligibleDiscountsByVariant: Record<string, string[]> = {};
+  for (const d of automatic) {
+    if (d.buy_quantity == null || d.get_quantity == null) continue; // only BXGY-style discounts
+    for (const [variantId, v] of variantMap) {
+      const isEligible = qualifies(v, d.buy_item_type, d.buy_item_ids) || qualifies(v, d.get_item_type, d.get_item_ids);
+      if (isEligible) (eligibleDiscountsByVariant[variantId] ??= []).push(d.title);
+    }
+  }
+
   const codeMatch = discountCode
     ? discounts.find((d) => d.kind === "code" && d.code?.toLowerCase() === discountCode.trim().toLowerCase())
     : undefined;
@@ -283,6 +302,7 @@ export async function computeCheckoutTotals(
     total,
     errors,
     discountNotices,
+    eligibleDiscountsByVariant,
     codeDiscountId: codeMatch?.id ?? null,
   };
 }

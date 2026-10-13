@@ -23,6 +23,10 @@ export type DisplayLine = {
   lineTotal: number;
   isFree: boolean;
   freeLabel: string | null; // e.g. "Gratis (3 för 2)" -- which promotion made this line free
+  // Active BXGY promotions (e.g. "3 för 2") this row's variant participates in, whether or not
+  // this specific row ended up free -- e.g. the paid row of a split pair still shows "3 för 2"
+  // so the customer sees why the group is being tracked. Empty when not eligible for any.
+  eligibleLabels: string[];
 };
 
 export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | null): DisplayLine[] {
@@ -50,6 +54,7 @@ export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | nu
     const unitPrice = serverLine?.unitPrice ?? item.price;
     const freeQty = Math.min(freeCounts.get(item.variantId) ?? 0, qty);
     const paidQty = qty - freeQty;
+    const eligibleLabels = totals?.eligibleDiscountsByVariant[item.variantId] ?? [];
 
     if (paidQty > 0) {
       lines.push({
@@ -65,6 +70,7 @@ export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | nu
         lineTotal: unitPrice * paidQty,
         isFree: false,
         freeLabel: null,
+        eligibleLabels,
       });
     }
     if (freeQty > 0) {
@@ -81,6 +87,7 @@ export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | nu
         lineTotal: 0,
         isFree: true,
         freeLabel: freeLabels.get(item.variantId) ?? null,
+        eligibleLabels,
       });
     }
   }
