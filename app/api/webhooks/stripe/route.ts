@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendOrderConfirmationEmail } from "@/lib/email/order-confirmation";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
+import { buildEmailLineItems } from "@/lib/email/build-line-items";
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
@@ -172,16 +173,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .select("order_number, email, subtotal_price, total_discounts, total_tax, total_shipping, total_price")
     .eq("id", orderId)
     .single();
-  const { data: items } = await supabaseService.from("order_items").select("title, quantity, unit_price").eq("order_id", orderId);
+  const { data: items } = await supabaseService
+    .from("order_items")
+    .select("id, title, quantity, unit_price, variant_id, product_id, product_variants(title)")
+    .eq("order_id", orderId);
   const { data: addressRow } = shippingAddressId
     ? await supabaseService.from("addresses").select("first_name, address1, address2, city, zip, country_code").eq("id", shippingAddressId).single()
     : { data: null };
 
   if (order?.email) {
+    const lineItems = await buildEmailLineItems(
+      (items ?? []).map((i: any) => ({
+        id: i.id,
+        title: i.title,
+        quantity: i.quantity,
+        unitPrice: Number(i.unit_price),
+        variantId: i.variant_id,
+        productId: i.product_id,
+        variantTitle: i.product_variants?.title ?? null,
+      }))
+    );
     await sendOrderConfirmationEmail({
       to: order.email,
       orderNumber: order.order_number,
-      items: (items ?? []).map((i) => ({ title: i.title, qty: i.quantity, unitPrice: Number(i.unit_price) })),
+      items: lineItems,
       subtotal: Number(order.subtotal_price ?? 0),
       discountTotal: Number(order.total_discounts ?? 0),
       vat: Number(order.total_tax ?? 0),
@@ -215,7 +230,25 @@ async function handleRefund(charge: Stripe.Charge) {
 
     const { data: order } = await supabaseService.from("orders").select("order_number, email").eq("id", payment.order_id).single();
     if (order?.email) {
-      await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: Number(payment.amount) });
+      // A charge.refunded event from Stripe (e.g. a refund issued directly from the Stripe
+      // Dashboard rather than this admin's own refund action) refunds the whole charge with no
+      // line-item breakdown -- show every item on the order, same as a full order-level refund.
+      const { data: orderItems } = await supabaseService
+        .from("order_items")
+        .select("id, title, quantity, unit_price, variant_id, product_id, product_variants(title)")
+        .eq("order_id", payment.order_id);
+      const lineItems = await buildEmailLineItems(
+        (orderItems ?? []).map((i: any) => ({
+          id: i.id,
+          title: i.title,
+          quantity: i.quantity,
+          unitPrice: Number(i.unit_price),
+          variantId: i.variant_id,
+          productId: i.product_id,
+          variantTitle: i.product_variants?.title ?? null,
+        }))
+      );
+      await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: Number(payment.amount), items: lineItems });
     }
   }
 }

@@ -13,7 +13,7 @@ import { CancelOrderButton } from "@/components/admin/cancel-order-button";
 import { OrderHideButton } from "@/components/admin/order-hide-button";
 import { ReturnForm } from "@/components/admin/return-form";
 import { OrderActivityTimeline } from "@/components/admin/order-activity-timeline";
-import { getOrderItemImages } from "@/lib/admin/order-images";
+import { getOrderItemImages } from "@/lib/order-images";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 
 export const dynamic = "force-dynamic";

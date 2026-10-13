@@ -6,6 +6,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
+import { buildEmailLineItems } from "@/lib/email/build-line-items";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -37,7 +38,7 @@ export async function createFulfillment(
 
   const { data: items } = await supabaseService
     .from("order_items")
-    .select("id, title, sku, quantity, fulfilled_quantity, unit_price, discounted_unit_price, variant_id")
+    .select("id, title, sku, quantity, fulfilled_quantity, unit_price, discounted_unit_price, variant_id, product_id, product_variants(title)")
     .eq("order_id", orderId);
   const itemById = new Map((items ?? []).map((i) => [i.id, i]));
 
@@ -96,14 +97,26 @@ export async function createFulfillment(
           .maybeSingle()
       : { data: null };
 
+    const lineItems = await buildEmailLineItems(
+      requested.map((line) => {
+        const item = itemById.get(line.orderItemId)! as any;
+        return {
+          id: item.id,
+          title: item.title,
+          quantity: line.quantity,
+          unitPrice: Number(item.discounted_unit_price ?? item.unit_price),
+          variantId: item.variant_id,
+          productId: item.product_id,
+          variantTitle: item.product_variants?.title ?? null,
+        };
+      })
+    );
+
     await sendShippingConfirmationEmail({
       to: order.email,
       orderId,
       orderNumber: order.order_number,
-      items: requested.map((line) => {
-        const item = itemById.get(line.orderItemId)!;
-        return { title: item.title, qty: line.quantity, unitPrice: Number(item.discounted_unit_price ?? item.unit_price) };
-      }),
+      items: lineItems,
       shippingAddress: address
         ? { name: [address.first_name, address.last_name].filter(Boolean).join(" "), address1: address.address1, address2: address.address2, city: address.city, zip: address.zip, country: address.country }
         : null,

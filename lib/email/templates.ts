@@ -5,7 +5,7 @@
 // -- the structured, data-driven parts below (order number, line items, totals, address, tracking)
 // are never editable free text, so an admin edit can never corrupt a real order's numbers.
 
-export type OrderLineItem = { title: string; variantTitle?: string | null; qty: number; unitPrice: number };
+export type OrderLineItem = { title: string; variantTitle?: string | null; qty: number; unitPrice: number; imageUrl?: string | null };
 export type ShippingAddress = {
   name?: string | null;
   address1?: string | null;
@@ -43,20 +43,41 @@ function layout(heading: string, bodyHtml: string) {
   `;
 }
 
+function escapeAttr(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Fixed 64x64 image (or an identically-sized text placeholder when no real image is available)
+// -- plain <img width/height> + a table-based placeholder rather than CSS object-fit/background
+// images, since Outlook's desktop renderer (Word engine) ignores most CSS and some clients strip
+// <style> blocks entirely; this markup renders correctly with only inline styles and HTML
+// width/height attributes, which both Outlook and Gmail honor.
+function itemImageCell(i: OrderLineItem) {
+  const alt = escapeAttr([i.title, i.variantTitle].filter(Boolean).join(" – "));
+  if (i.imageUrl) {
+    return `<img src="${escapeAttr(i.imageUrl)}" width="64" height="64" alt="${alt}" style="display:block; width:64px; height:64px; border:0; outline:none; text-decoration:none; border-radius:2px;" />`;
+  }
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:64px; height:64px;">
+      <tr><td width="64" height="64" bgcolor="#f4f4f4" align="center" valign="middle" style="width:64px; height:64px; background-color:#f4f4f4; border:1px solid #eee; font-family: Arial, Helvetica, sans-serif; font-size:9px; letter-spacing:0.05em; color:#999;">JAWHARA</td></tr>
+    </table>`;
+}
+
 function lineItemsTable(items: OrderLineItem[]) {
   const rows = items
     .map(
       (i) => `
       <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 8px 0;">
+        <td style="padding: 8px 10px 8px 0; width: 64px;" valign="top">${itemImageCell(i)}</td>
+        <td style="padding: 8px 0;" valign="top">
           ${i.title}${i.variantTitle ? `<br/><span style="color:#666; font-size: 12px;">${i.variantTitle}</span>` : ""}
           <br/><span style="color:#666; font-size: 12px;">Antal: ${i.qty}</span>
         </td>
-        <td style="padding: 8px 0; text-align: right; white-space: nowrap;">${formatSek(i.unitPrice * i.qty)}</td>
+        <td style="padding: 8px 0; text-align: right; white-space: nowrap;" valign="top">${formatSek(i.unitPrice * i.qty)}</td>
       </tr>`
     )
     .join("");
-  return `<table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">${rows}</table>`;
+  return `<table role="presentation" style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">${rows}</table>`;
 }
 
 function addressBlock(address: ShippingAddress) {
@@ -136,13 +157,32 @@ export function shippingConfirmationTemplate(
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
 
-export function refundNotificationTemplate(content: EmailTemplateContent, params: { orderNumber: string; refundAmount: number; reason?: string | null }) {
-  const { orderNumber, refundAmount, reason } = params;
+export function refundNotificationTemplate(
+  content: EmailTemplateContent,
+  params: { orderNumber: string; refundAmount: number; reason?: string | null; items?: OrderLineItem[] }
+) {
+  const { orderNumber, refundAmount, reason, items } = params;
   const body = `
     ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}<br/>
     <strong>Återbetalt belopp:</strong> ${formatSek(refundAmount)}</p>
+    ${items && items.length > 0 ? lineItemsTable(items) : ""}
     ${reason ? `<p style="font-size: 14px;">${reason}</p>` : ""}
+    ${content.outroHtml ?? ""}
+  `;
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
+}
+
+export function orderCancellationTemplate(
+  content: EmailTemplateContent,
+  params: { orderNumber: string; items: OrderLineItem[]; reason?: string | null }
+) {
+  const { orderNumber, items, reason } = params;
+  const body = `
+    ${content.introHtml}
+    <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}</p>
+    ${items.length > 0 ? lineItemsTable(items) : ""}
+    ${reason ? `<p style="font-size: 14px;"><strong>Anledning:</strong> ${reason}</p>` : ""}
     ${content.outroHtml ?? ""}
   `;
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };

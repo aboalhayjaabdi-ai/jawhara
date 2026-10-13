@@ -6,6 +6,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { stripe } from "@/lib/stripe/server";
 import { getStripeRefundablePayment } from "@/lib/orders/refund-guard";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
+import { buildEmailLineItems } from "@/lib/email/build-line-items";
 
 export type RefundLineInput = { orderItemId: string; quantity: number; amount: number };
 export type RefundResult = { ok: true; refundId: string; mode: "stripe" | "manual" } | { ok: false; error: string };
@@ -107,7 +108,29 @@ export async function createRefund(
   await supabaseService.from("orders").update({ financial_status: isFull ? "REFUNDED" : "PARTIALLY_REFUNDED" }).eq("id", orderId);
 
   if (order.email) {
-    await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: input.amount, reason: input.reason });
+    let lineItems: Awaited<ReturnType<typeof buildEmailLineItems>> = [];
+    if (input.lineItems?.length) {
+      const { data: refundedItems } = await supabaseService
+        .from("order_items")
+        .select("id, title, variant_id, product_id, product_variants(title)")
+        .in("id", input.lineItems.map((li) => li.orderItemId));
+      const byId = new Map((refundedItems ?? []).map((i: any) => [i.id, i]));
+      lineItems = await buildEmailLineItems(
+        input.lineItems.map((li) => {
+          const item = byId.get(li.orderItemId) as any;
+          return {
+            id: li.orderItemId,
+            title: item?.title ?? "Produkt",
+            quantity: li.quantity,
+            unitPrice: li.quantity > 0 ? li.amount / li.quantity : li.amount,
+            variantId: item?.variant_id ?? null,
+            productId: item?.product_id ?? null,
+            variantTitle: item?.product_variants?.title ?? null,
+          };
+        })
+      );
+    }
+    await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: input.amount, reason: input.reason, items: lineItems });
   }
 
   await logAdminAction(admin.adminId, mode === "stripe" ? "orders.refund_stripe" : "orders.refund_manual", "order", orderId, {

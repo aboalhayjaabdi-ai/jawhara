@@ -2,7 +2,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
 
 if (typeof window !== "undefined") {
-  throw new Error("lib/admin/order-images.ts must never be imported into client code");
+  throw new Error("lib/order-images.ts must never be imported into client code");
 }
 
 export type OrderItemImage = { imageUrl: string | null; isVariantSpecific: boolean };
