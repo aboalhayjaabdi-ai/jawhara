@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <CartProvider>
           <AnnouncementBar />
           <Header navItems={menus.mainMenu} logoUrl={logoUrl} />
-          {children}
+          <main>{children}</main>
           <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer giftBoxOffer={giftBoxOffer} />
           <AddToCartToast />

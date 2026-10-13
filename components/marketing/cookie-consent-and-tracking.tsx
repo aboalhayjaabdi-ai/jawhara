@@ -70,8 +70,8 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
             <p className="text-xs text-muted sm:text-sm">
               Vi använder cookies för att förbättra din upplevelse och, om du godkänner, för marknadsförings- och
               analysändamål.{" "}
-              <a href="/pages/aterbetalningspolicy" className="underline">
-                Läs mer
+              <a href="/pages/anvandarvillkor" className="underline">
+                Läs mer i vår integritetspolicy
               </a>
               .
             </p>

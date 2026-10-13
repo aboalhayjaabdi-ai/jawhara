@@ -31,7 +31,12 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const meta = await getCollectionMeta(handle);
   if (!meta) return {};
   const title = meta.seo_title || meta.title;
-  const description = meta.seo_description || (meta.description_html ? meta.description_html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) : undefined);
+  // Falls back to the site's own real description (app/(storefront)/layout.tsx) rather than
+  // omitting the tag -- some collections have neither seo_description nor description_html set.
+  const description =
+    meta.seo_description ||
+    (meta.description_html ? meta.description_html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) : undefined) ||
+    "Jawhara — smycken och accessoarer";
   return { title, description, alternates: { canonical: `/collections/${handle}` } };
 }
 
