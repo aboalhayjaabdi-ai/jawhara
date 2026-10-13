@@ -78,9 +78,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                 <Link
                   href={`/products/${item.productHandle}`}
                   onClick={close}
-                  className="relative h-24 w-20 flex-shrink-0 bg-[#f4f4f4]"
+                  className="relative aspect-square h-24 w-24 flex-shrink-0 bg-[#f4f4f4]"
                 >
-                  {item.image && <Image src={item.image} alt={item.title} fill sizes="80px" className="object-contain" />}
+                  {item.image && <Image src={item.image} alt={item.title} fill sizes="96px" className="object-contain" />}
                 </Link>
                 <div className="flex flex-1 flex-col justify-between">
                   <div>

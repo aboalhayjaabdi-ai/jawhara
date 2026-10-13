@@ -51,7 +51,7 @@ export function ProductGallery({
       <div
         ref={trackRef}
         onScroll={handleScroll}
-        className="flex aspect-[1/1.25] w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+        className="flex aspect-square w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
         style={{ scrollbarWidth: "none" }}
       >
         {images.map((img, i) => (
@@ -96,7 +96,7 @@ export function ProductGallery({
       {carousel}
       <div className="hidden w-full gap-3 lg:grid lg:grid-cols-2">
         {images.map((img, i) => (
-          <div key={img + i} className="relative aspect-[1/1.25] overflow-hidden bg-[#f4f4f4]">
+          <div key={img + i} className="relative aspect-square overflow-hidden bg-[#f4f4f4]">
             <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-contain" />
           </div>
         ))}
