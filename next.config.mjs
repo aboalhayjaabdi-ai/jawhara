@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const supabaseHostname = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co").hostname;
-
 const nextConfig = {
   // middleware.ts needs the Node.js runtime (not the default Edge runtime) because it imports
   // undici to route through this environment's required outbound proxy -- Edge Runtime's fetch
@@ -19,26 +17,15 @@ const nextConfig = {
     ];
   },
   images: {
-    // Product/collection photos change rarely (an admin edit, not a storefront event) -- the
-    // default 60s cache TTL meant Vercel's image-optimization CDN was re-deriving each size/format
-    // variant far more often than the underlying source ever actually changes. A day is a safe,
-    // purely-beneficial bump (serves stale images for at most this long after an admin swaps one,
-    // same tradeoff the 60s default already made, just a longer window).
-    minimumCacheTTL: 86400,
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: supabaseHostname,
-        pathname: "/storage/v1/object/public/**",
-      },
-      {
-        // Collection images (collections.image_url) still point at Shopify's CDN --
-        // product images are re-hosted in Supabase Storage, but collection banner
-        // images were not re-hosted during migration (see docs/migration-verification.md).
-        protocol: "https",
-        hostname: "cdn.shopify.com",
-      },
-    ],
+    // A custom loader (lib/image-loader.ts) means next/image never calls Vercel's own Image
+    // Optimization endpoint at all -- this is what keeps the Hobby plan's 5,000/month
+    // transformation limit from ever being hit again, regardless of traffic. remotePatterns/
+    // minimumCacheTTL only apply to Next's built-in optimizer, so they're unused (and unneeded)
+    // once a custom loader is set; real caching now happens via the far-future Cache-Control the
+    // images themselves are uploaded with (lib/supabase/upload-with-variants.ts) and Shopify's
+    // own CDN for the handful of not-yet-rehosted collection banners.
+    loader: "custom",
+    loaderFile: "./lib/image-loader.ts",
   },
 };
 

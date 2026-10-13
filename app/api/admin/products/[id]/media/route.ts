@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
+import { uploadImageWithVariants } from "@/lib/supabase/upload-with-variants";
 
 // Upload is a Route Handler, not a Server Action -- this project's existing convention for
 // anything resembling a file/binary operation (app/api/admin/orders/export,
@@ -22,8 +23,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const storagePath = `products/${productId}/${crypto.randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadError } = await supabaseService.storage.from("product-media").upload(storagePath, buffer, { contentType: file.type, upsert: false });
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  const { error: uploadError } = await uploadImageWithVariants(storagePath, buffer, file.type);
+  if (uploadError) return NextResponse.json({ error: uploadError }, { status: 500 });
 
   const { data: maxRow } = await supabaseService.from("media").select("position").eq("product_id", productId).order("position", { ascending: false }).limit(1).maybeSingle();
   const position = (maxRow?.position ?? -1) + 1;

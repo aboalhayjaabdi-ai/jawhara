@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
-import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
+import { uploadImageWithVariants } from "@/lib/supabase/upload-with-variants";
 
 // Reuses the existing public product-media bucket under a new branding/ prefix -- same pattern
 // as app/api/admin/storefront/upload-image/route.ts.
@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
   const storagePath = `branding/${crypto.randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadError } = await supabaseService.storage.from("product-media").upload(storagePath, buffer, { contentType: file.type, upsert: false });
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  const { error: uploadError } = await uploadImageWithVariants(storagePath, buffer, file.type);
+  if (uploadError) return NextResponse.json({ error: uploadError }, { status: 500 });
 
   await logAdminAction(admin.adminId, "settings.upload_logo", undefined, undefined, { storagePath });
   return NextResponse.json({ ok: true, url: mediaUrl(storagePath) });

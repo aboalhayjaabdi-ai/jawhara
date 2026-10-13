@@ -56,7 +56,7 @@ export function ProductGallery({
       >
         {images.map((img, i) => (
           <div key={img + i} className="relative w-full shrink-0 snap-center bg-[#f4f4f4]">
-            <Image src={img} alt={title} fill priority={i === 0} sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover" />
+            <Image src={img} alt={title} fill priority={i === 0} sizes="(min-width: 1024px) 55vw, 100vw" className="object-contain" />
           </div>
         ))}
       </div>
@@ -97,7 +97,7 @@ export function ProductGallery({
       <div className="hidden w-full gap-3 lg:grid lg:grid-cols-2">
         {images.map((img, i) => (
           <div key={img + i} className="relative aspect-[1/1.25] overflow-hidden bg-[#f4f4f4]">
-            <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-cover" />
+            <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-contain" />
           </div>
         ))}
       </div>

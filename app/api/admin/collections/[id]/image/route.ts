@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
+import { uploadImageWithVariants } from "@/lib/supabase/upload-with-variants";
 
 // Stores the full public URL directly into collections.image_url (confirmed already the stored
 // format today, unlike media.storage_path) -- zero storefront read-path changes needed.
@@ -21,8 +22,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const storagePath = `collections/${collectionId}/${crypto.randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error: uploadError } = await supabaseService.storage.from("product-media").upload(storagePath, buffer, { contentType: file.type, upsert: false });
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  const { error: uploadError } = await uploadImageWithVariants(storagePath, buffer, file.type);
+  if (uploadError) return NextResponse.json({ error: uploadError }, { status: 500 });
 
   const url = mediaUrl(storagePath);
   const { error: updateError } = await supabaseService.from("collections").update({ image_url: url }).eq("id", collectionId);

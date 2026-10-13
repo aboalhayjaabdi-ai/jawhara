@@ -80,7 +80,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                   onClick={close}
                   className="relative h-24 w-20 flex-shrink-0 bg-[#f4f4f4]"
                 >
-                  {item.image && <Image src={item.image} alt={item.title} fill sizes="80px" className="object-cover" />}
+                  {item.image && <Image src={item.image} alt={item.title} fill sizes="80px" className="object-contain" />}
                 </Link>
                 <div className="flex flex-1 flex-col justify-between">
                   <div>

@@ -51,7 +51,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
     <Link href={`/products/${product.handle}`} className="block">
       <div className="relative aspect-[1/1.25] bg-[#f4f4f4]">
         <div className="absolute inset-0 overflow-hidden">
-          {product.image && <Image src={product.image} alt={product.title} fill className="object-cover" sizes="(min-width: 1024px) 25vw, 50vw" />}
+          {product.image && <Image src={product.image} alt={product.title} fill className="object-contain" sizes="(min-width: 1024px) 25vw, 50vw" />}
         </div>
         {!product.available && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/10">
