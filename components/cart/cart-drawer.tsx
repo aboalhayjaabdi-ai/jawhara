@@ -186,12 +186,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                           <span className="text-xs text-muted line-through">{formatSek(line.compareAtPrice! * line.qty)}</span>
                         )}
                       </div>
-                      {onSale && !line.isFree && (
-                        <div className="text-xs text-muted">Du sparar {formatSek((line.compareAtPrice! - line.unitPrice) * line.qty)}</div>
-                      )}
-                      {line.isFree && line.savedAmount > 0 && (
-                        <div className="text-xs text-muted">Du sparar {formatSek(line.savedAmount)}</div>
-                      )}
                     </div>
                   </div>
                 </div>

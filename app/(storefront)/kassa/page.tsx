@@ -103,9 +103,6 @@ export default function KassaPage() {
                     {onSale && (
                       <div className="text-xs text-muted line-through">{formatSek(line.compareAtPrice! * line.qty)}</div>
                     )}
-                    {line.isFree && line.savedAmount > 0 && (
-                      <div className="text-xs text-muted">Du sparar {formatSek(line.savedAmount)}</div>
-                    )}
                   </div>
                 </div>
               </div>
