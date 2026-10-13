@@ -31,11 +31,15 @@ const EXCEPTION_STATUSES = new Set(["Exception", "Alert", "Undelivered", "Expire
 
 function swedishStatusLabel(rawStatus: string): string {
   if (STATUS_SV[rawStatus]) return STATUS_SV[rawStatus];
+  // Per-event sub_status values carry a "<MajorStatus>_<Variant>" suffix in real 17TRACK data
+  // (e.g. "Delivered_Other", confirmed against a real delivered shipment -- same pattern already
+  // handled for "InTransit_*" below) -- match the family, not just the bare major status.
+  if (rawStatus.startsWith("Delivered")) return STATUS_SV.Delivered;
   return "Under transport"; // covers every InTransit_* sub-status variant
 }
 
 function stageForStatus(rawStatus: string): Stage {
-  if (rawStatus === "Delivered") return 3;
+  if (rawStatus.startsWith("Delivered")) return 3;
   if (rawStatus === "OutForDelivery" || rawStatus === "AvailableForPickup") return 2;
   return 1; // InfoReceived / PickedUp / Departure / Arrival / InTransit_* / unknown exceptions
 }
