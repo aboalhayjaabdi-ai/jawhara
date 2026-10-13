@@ -19,6 +19,12 @@ const nextConfig = {
     ];
   },
   images: {
+    // Product/collection photos change rarely (an admin edit, not a storefront event) -- the
+    // default 60s cache TTL meant Vercel's image-optimization CDN was re-deriving each size/format
+    // variant far more often than the underlying source ever actually changes. A day is a safe,
+    // purely-beneficial bump (serves stale images for at most this long after an admin swaps one,
+    // same tradeoff the 60s default already made, just a longer window).
+    minimumCacheTTL: 86400,
     remotePatterns: [
       {
         protocol: "https",
