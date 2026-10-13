@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
-import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
+import { buildDisplayLines } from "@/lib/cart-display";
 import type { GiftBoxOffer } from "@/lib/gift-box";
 
 function formatSek(amount: number) {
@@ -87,9 +87,13 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     setCodeMessage(null);
   }
 
-  const codeAppliedLine = totals?.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId);
-  const automaticDiscounts = totals?.appliedDiscounts.filter((d) => d.discountId !== totals?.codeDiscountId) ?? [];
   const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
+  const displayLines = buildDisplayLines(items, totals);
+  // The quantity stepper/remove control for a variant lives on its paid row when one exists, or on
+  // its free row when the whole quantity for that variant is free -- either way it's one control
+  // per real CartItem, so splitting into paid/free display rows never creates a second physical
+  // line or lets a free row be adjusted independently of its paid sibling.
+  const paidVariantIds = new Set(displayLines.filter((l) => !l.isFree).map((l) => l.variantId));
 
   return (
     <>
@@ -118,51 +122,64 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-xl flex-col gap-6 px-6 py-6">
           {items.length === 0 && <p className="text-sm text-muted">Din varukorg är tom.</p>}
-          {items.map((item) => {
-            const variantTitle = normalizeVariantTitle(item.variantTitle);
-            const onSale = item.compareAtPrice != null && item.compareAtPrice > item.price;
+          {displayLines.map((line) => {
+            const variantTitle = normalizeVariantTitle(line.variantTitle);
+            const showControls = line.isFree ? !paidVariantIds.has(line.variantId) : true;
+            const onSale = line.compareAtPrice != null && line.compareAtPrice > line.unitPrice;
+            const realQty = items.find((i) => i.variantId === line.variantId)?.qty ?? line.qty;
             return (
-              <div key={item.variantId} className="flex gap-4 border-b border-line pb-6">
+              <div key={line.key} className="flex gap-4 border-b border-line pb-6">
                 <Link
-                  href={`/products/${item.productHandle}`}
+                  href={`/products/${line.productHandle}`}
                   onClick={close}
                   className="relative aspect-square h-24 w-24 flex-shrink-0 bg-[#f4f4f4]"
                 >
-                  {item.image && <Image src={item.image} alt={item.title} fill sizes="96px" className="object-contain" />}
+                  {line.image && <Image src={line.image} alt={line.title} fill sizes="96px" className="object-contain" />}
                 </Link>
                 <div className="flex flex-1 flex-col justify-between">
                   <div>
-                    <Link href={`/products/${item.productHandle}`} onClick={close} className="text-sm font-medium">
-                      {item.title}
+                    <Link href={`/products/${line.productHandle}`} onClick={close} className="text-sm font-medium">
+                      {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
+                    {line.isFree && (
+                      <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
+                        Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 border border-line">
-                      <button className="px-2 py-1 text-xs" onClick={() => setQty(item.variantId, item.qty - 1)}>
-                        −
-                      </button>
-                      <span className="text-xs">{item.qty}</span>
-                      <button className="px-2 py-1 text-xs" onClick={() => setQty(item.variantId, item.qty + 1)}>
-                        +
-                      </button>
-                    </div>
+                    {showControls ? (
+                      <div className="flex items-center gap-2 border border-line">
+                        <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty - 1)}>
+                          −
+                        </button>
+                        <span className="text-xs">{realQty}</span>
+                        <button className="px-2 py-1 text-xs" onClick={() => setQty(line.variantId, realQty + 1)}>
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">× {line.qty}</span>
+                    )}
                     <div className="text-right">
                       <div className="flex items-baseline justify-end gap-2">
-                        <span className="text-sm font-semibold">{formatSek(item.price * item.qty)}</span>
+                        <span className="text-sm font-semibold">{formatSek(line.lineTotal)}</span>
                         {onSale && (
-                          <span className="text-xs text-muted line-through">{formatSek(item.compareAtPrice! * item.qty)}</span>
+                          <span className="text-xs text-muted line-through">{formatSek(line.compareAtPrice! * line.qty)}</span>
                         )}
                       </div>
-                      {onSale && (
-                        <div className="text-xs text-muted">Du sparar {formatSek((item.compareAtPrice! - item.price) * item.qty)}</div>
+                      {onSale && !line.isFree && (
+                        <div className="text-xs text-muted">Du sparar {formatSek((line.compareAtPrice! - line.unitPrice) * line.qty)}</div>
                       )}
                     </div>
                   </div>
                 </div>
-                <button onClick={() => removeItem(item.variantId)} className="self-start text-xs text-muted underline">
-                  Ta bort
-                </button>
+                {showControls && (
+                  <button onClick={() => removeItem(line.variantId)} className="self-start text-xs text-muted underline">
+                    Ta bort
+                  </button>
+                )}
               </div>
             );
           })}
@@ -242,50 +259,10 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </div>
           )}
 
-          {totals && items.length > 0 && (
-            <div className="mb-4 flex flex-col gap-1.5 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted">Delsumma</span>
-                <span>{formatSek(totals.subtotal)}</span>
-              </div>
-              {automaticDiscounts.map((d) => (
-                <div key={d.discountId} className="flex items-center justify-between text-muted">
-                  <span>{d.title}</span>
-                  <span>−{formatSek(d.amountOff)}</span>
-                </div>
-              ))}
-              {codeAppliedLine && (
-                <div className="flex items-center justify-between text-muted">
-                  <span>Rabattkod ({discountCode})</span>
-                  <span>−{formatSek(codeAppliedLine.amountOff)}</span>
-                </div>
-              )}
-              {totals.discountTotal > 0 && (
-                <div className="flex items-center justify-between font-medium">
-                  <span>Total rabatt</span>
-                  <span>−{formatSek(totals.discountTotal)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-muted">
-                <span>Frakt ({SHIPPING_METHOD_NAME})</span>
-                <span>{totals.shipping > 0 ? formatSek(totals.shipping) : "Gratis"}</span>
-              </div>
-              {totals.vat > 0 && (
-                <div className="flex items-center justify-between text-muted">
-                  <span>Moms</span>
-                  <span>{formatSek(totals.vat)}</span>
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
-                <span>Totalt</span>
-                <span>{formatSek(totals.total)}</span>
-              </div>
-            </div>
-          )}
-
-          {!totals && items.length > 0 && (
-            <div className="mb-4 flex items-center justify-between text-sm">
-              <span className="text-muted">{loading ? "Beräknar..." : fetchError ? fetchError : "Delsumma"}</span>
+          {items.length > 0 && (
+            <div className="mb-4 flex items-center justify-between text-base font-semibold">
+              <span>Totalt</span>
+              <span>{totals ? formatSek(totals.total) : loading ? "Beräknar..." : fetchError ?? "—"}</span>
             </div>
           )}
 

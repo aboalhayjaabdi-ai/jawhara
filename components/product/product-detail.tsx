@@ -239,7 +239,7 @@ export function ProductDetail({
                 variantTitle: normalizeVariantTitle(variant.title) ?? "",
                 price: variant.price,
                 compareAtPrice: variant.compare_at_price,
-                image: images[0] ?? null,
+                image: images[galleryJumpIndex ?? 0] ?? null,
               })
             }
             disabled={!variant || !isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)}

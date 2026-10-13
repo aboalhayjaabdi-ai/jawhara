@@ -7,6 +7,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { useCart, useCartTotals } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
+import { buildDisplayLines } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -67,6 +68,7 @@ export default function KassaPage() {
 
   const codeAppliedLine = totals?.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId);
   const automaticDiscounts = totals?.appliedDiscounts.filter((d) => d.discountId !== totals?.codeDiscountId) ?? [];
+  const displayLines = buildDisplayLines(items, totals);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -78,20 +80,31 @@ export default function KassaPage() {
           <h2 className="text-sm font-semibold uppercase tracking-widest">Ordersammanfattning</h2>
         </div>
         <div className="flex flex-col gap-4 px-5 py-5">
-          {items.map((item) => {
-            const variantTitle = normalizeVariantTitle(item.variantTitle);
+          {displayLines.map((line) => {
+            const variantTitle = normalizeVariantTitle(line.variantTitle);
+            const onSale = line.compareAtPrice != null && line.compareAtPrice > line.unitPrice;
             return (
-              <div key={item.variantId} className="flex gap-3">
+              <div key={line.key} className="flex gap-3">
                 <div className="relative aspect-square h-16 w-16 flex-shrink-0 bg-[#f4f4f4]">
-                  {item.image && <Image src={item.image} alt={item.title} fill sizes="64px" className="object-contain" />}
+                  {line.image && <Image src={line.image} alt={line.title} fill sizes="64px" className="object-contain" />}
                 </div>
                 <div className="flex flex-1 items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium">{item.title}</div>
+                    <div className="text-sm font-medium">{line.title}</div>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
-                    <div className="text-xs text-muted">Antal: {item.qty}</div>
+                    <div className="text-xs text-muted">Antal: {line.qty}</div>
+                    {line.isFree && (
+                      <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
+                        Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
+                      </div>
+                    )}
                   </div>
-                  <div className="whitespace-nowrap text-sm font-semibold">{formatSek(item.price * item.qty)}</div>
+                  <div className="whitespace-nowrap text-right">
+                    <div className="text-sm font-semibold">{formatSek(line.lineTotal)}</div>
+                    {onSale && (
+                      <div className="text-xs text-muted line-through">{formatSek(line.compareAtPrice! * line.qty)}</div>
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -33,7 +33,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
     };
   }, [pickerOpen]);
 
-  function addVariant(variantId: string, price: number, compareAtPrice: number | null, variantTitle: string) {
+  function addVariant(variantId: string, price: number, compareAtPrice: number | null, variantTitle: string, image: string | null) {
     addItem({
       variantId,
       productHandle: product.handle,
@@ -41,7 +41,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
       variantTitle: normalizeVariantTitle(variantTitle) ?? "",
       price,
       compareAtPrice,
-      image: product.image,
+      image,
     });
   }
 
@@ -72,7 +72,8 @@ export function ProductCard({ product }: { product: ProductCardType }) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (product.quickAddVariantId) {
-                  addVariant(product.quickAddVariantId, product.price, product.compareAtPrice, "Default Title");
+                  const soleVariant = product.variants.find((v) => v.id === product.quickAddVariantId);
+                  addVariant(product.quickAddVariantId, product.price, product.compareAtPrice, "Default Title", soleVariant?.image ?? product.image);
                 } else {
                   setPickerOpen((v) => !v);
                 }
@@ -97,7 +98,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        addVariant(v.id, v.price, v.compareAtPrice, label);
+                        addVariant(v.id, v.price, v.compareAtPrice, label, v.image ?? product.image);
                         setPickerOpen(false);
                       }}
                       className={`block w-full px-3 py-2 text-left text-xs ${
