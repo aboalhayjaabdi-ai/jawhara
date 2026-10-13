@@ -55,13 +55,12 @@ const DICTIONARY = {
   "fulfillment.title": { sv: "Skapa leverans", zh: "创建发货单" },
   "fulfillment.remaining": { sv: "av", zh: "/" },
   "fulfillment.trackingNumber": { sv: "Spårningsnummer", zh: "追踪号" },
-  "fulfillment.carrier": { sv: "Transportör (valfritt)", zh: "承运商（选填）" },
   "fulfillment.notify": { sv: "Meddela kund via e-post", zh: "通过电子邮件通知客户" },
   "fulfillment.notifyHint": {
     sv: "Kunden får en spårningslänk till Jawhara direkt -- ingen transportör krävs för att spara.",
     zh: "客户将直接收到 Jawhara 的追踪链接——保存时无需填写承运商。",
   },
-  "fulfillment.submit": { sv: "Markera som levererad", zh: "标记为已发货" },
+  "fulfillment.submit": { sv: "Markera som skickad", zh: "标记为已发货" },
   "fulfillment.submitting": { sv: "Skapar leverans…", zh: "创建发货中…" },
   "fulfillment.selectAtLeastOne": { sv: "Välj minst en artikel.", zh: "请至少选择一件商品。" },
 

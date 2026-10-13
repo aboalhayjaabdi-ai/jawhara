@@ -5,6 +5,7 @@ import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
+import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -15,12 +16,14 @@ export async function createFulfillment(
   input: {
     items: FulfillmentLineInput[];
     trackingNumber?: string;
-    trackingCompany?: string;
     trackingUrl?: string;
     notifyCustomer: boolean;
   }
 ): Promise<ActionResult> {
   const admin = await requireAdmin();
+  // Carrier is never entered by hand -- this store ships exclusively via 4PX/YunExpress,
+  // distinguishable by their tracking-number prefix (see lib/tracking/detect-carrier.ts).
+  const trackingCompany = input.trackingNumber ? detectCarrierFromTrackingNumber(input.trackingNumber) : null;
 
   const requested = input.items.filter((i) => i.quantity > 0);
   if (requested.length === 0) return { ok: false, error: "Välj minst en artikel att leverera." };
@@ -53,7 +56,7 @@ export async function createFulfillment(
       order_id: orderId,
       status: "SUCCESS",
       tracking_number: input.trackingNumber || null,
-      tracking_company: input.trackingCompany || null,
+      tracking_company: trackingCompany || null,
       tracking_url: input.trackingUrl || null,
       shipped_at: new Date().toISOString(),
       created_by: admin.adminId,
@@ -63,7 +66,7 @@ export async function createFulfillment(
   if (fulfillmentError || !fulfillment) return { ok: false, error: fulfillmentError?.message ?? "Kunde inte skapa leverans." };
 
   await registerFulfillmentsForTracking([
-    { id: fulfillment.id, trackingNumber: input.trackingNumber || null, trackingCompany: input.trackingCompany || null },
+    { id: fulfillment.id, trackingNumber: input.trackingNumber || null, trackingCompany: trackingCompany || null },
   ]);
 
   await supabaseService.from("fulfillment_items").insert(
@@ -105,7 +108,7 @@ export async function createFulfillment(
         ? { name: [address.first_name, address.last_name].filter(Boolean).join(" "), address1: address.address1, address2: address.address2, city: address.city, zip: address.zip, country: address.country }
         : null,
       trackingNumber: input.trackingNumber || null,
-      carrier: input.trackingCompany || null,
+      carrier: trackingCompany || null,
     });
   }
 
