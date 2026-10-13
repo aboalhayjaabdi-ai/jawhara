@@ -7,7 +7,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { useCart, useCartTotals } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
-import { buildDisplayLines } from "@/lib/cart-display";
+import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -66,9 +66,8 @@ export default function KassaPage() {
     );
   }
 
-  const codeAppliedLine = totals?.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId);
-  const automaticDiscounts = totals?.appliedDiscounts.filter((d) => d.discountId !== totals?.codeDiscountId) ?? [];
   const displayLines = buildDisplayLines(items, totals);
+  const summary = buildCartSummary(items, totals);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -110,6 +109,9 @@ export default function KassaPage() {
                     {onSale && (
                       <div className="text-xs text-muted line-through">{formatSek(line.compareAtPrice! * line.qty)}</div>
                     )}
+                    {line.isFree && line.savedAmount > 0 && (
+                      <div className="text-xs text-muted">Du sparar {formatSek(line.savedAmount)}</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -117,44 +119,29 @@ export default function KassaPage() {
           })}
         </div>
         <div className="flex flex-col gap-1.5 border-t border-line px-5 py-4 text-sm">
-          {totals ? (
+          {summary ? (
             <>
               <div className="flex items-center justify-between">
                 <span className="text-muted">Delsumma</span>
-                <span>{formatSek(totals.subtotal)}</span>
+                <span>{formatSek(summary.originalSubtotal)}</span>
               </div>
-              {automaticDiscounts.map((d) => (
-                <div key={d.discountId} className="flex items-center justify-between text-muted">
-                  <span>{d.title}</span>
-                  <span>−{formatSek(d.amountOff)}</span>
-                </div>
-              ))}
-              {codeAppliedLine && (
-                <div className="flex items-center justify-between text-muted">
-                  <span>Rabattkod ({discountCode})</span>
-                  <span>−{formatSek(codeAppliedLine.amountOff)}</span>
-                </div>
-              )}
-              {totals.discountTotal > 0 && (
+              {summary.totalSavings > 0 && (
                 <div className="flex items-center justify-between font-medium">
                   <span>Total rabatt</span>
-                  <span>−{formatSek(totals.discountTotal)}</span>
+                  <span>−{formatSek(summary.totalSavings)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between text-muted">
-                <span>Frakt ({SHIPPING_METHOD_NAME})</span>
-                <span>{totals.shipping > 0 ? formatSek(totals.shipping) : "Gratis"}</span>
-              </div>
-              {totals.vat > 0 && (
+              {totals && totals.vat > 0 && (
                 <div className="flex items-center justify-between text-muted">
                   <span>Moms</span>
                   <span>{formatSek(totals.vat)}</span>
                 </div>
               )}
               <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
-                <span>Totalt att betala</span>
-                <span>{formatSek(totals.total)}</span>
+                <span>Total</span>
+                <span>{formatSek(summary.total)}</span>
               </div>
+              <p className="mt-1 text-[11px] text-muted">Tullavgifter samt frakt och skatter ingår.</p>
             </>
           ) : (
             <div className="text-muted">{loading ? "Beräknar..." : ""}</div>
@@ -162,9 +149,21 @@ export default function KassaPage() {
         </div>
       </div>
 
-      <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
-        <EmbeddedCheckout />
-      </EmbeddedCheckoutProvider>
+      <div className="mb-8 border border-line">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-widest">Frakt</h2>
+        </div>
+        <div className="px-5 py-5 text-sm">
+          <p>{SHIPPING_METHOD_NAME} — 0 kr</p>
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest">Kassa</h2>
+        <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
+          <EmbeddedCheckout />
+        </EmbeddedCheckoutProvider>
+      </div>
     </div>
   );
 }

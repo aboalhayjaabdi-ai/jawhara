@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
-import { buildDisplayLines } from "@/lib/cart-display";
+import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import type { GiftBoxOffer } from "@/lib/gift-box";
 
 function formatSek(amount: number) {
@@ -89,6 +89,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
   const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
   const displayLines = buildDisplayLines(items, totals);
+  const summary = buildCartSummary(items, totals);
 
   return (
     <>
@@ -179,6 +180,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {onSale && !line.isFree && (
                         <div className="text-xs text-muted">Du sparar {formatSek((line.compareAtPrice! - line.unitPrice) * line.qty)}</div>
                       )}
+                      {line.isFree && line.savedAmount > 0 && (
+                        <div className="text-xs text-muted">Du sparar {formatSek(line.savedAmount)}</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -268,9 +272,31 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           )}
 
           {items.length > 0 && (
-            <div className="mb-4 flex items-center justify-between text-base font-semibold">
-              <span>Totalt</span>
-              <span>{totals ? formatSek(totals.total) : loading ? "Beräknar..." : fetchError ?? "—"}</span>
+            <div className="mb-4">
+              {summary ? (
+                <>
+                  <div className="flex items-center justify-between text-sm text-muted">
+                    <span>Delsumma</span>
+                    <span>{formatSek(summary.originalSubtotal)}</span>
+                  </div>
+                  {summary.totalSavings > 0 && (
+                    <div className="flex items-center justify-between text-sm text-muted">
+                      <span>Total rabatt</span>
+                      <span>−{formatSek(summary.totalSavings)}</span>
+                    </div>
+                  )}
+                  <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
+                    <span>Total</span>
+                    <span>{formatSek(summary.total)}</span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-muted">Tullavgifter samt frakt och skatter ingår.</p>
+                </>
+              ) : (
+                <div className="flex items-center justify-between text-base font-semibold">
+                  <span>Totalt</span>
+                  <span>{loading ? "Beräknar..." : fetchError ?? "—"}</span>
+                </div>
+              )}
             </div>
           )}
 
