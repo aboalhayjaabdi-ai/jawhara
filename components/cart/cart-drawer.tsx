@@ -164,7 +164,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
                     {line.isFree && (
-                      <div className="mt-1 inline-block bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
+                      <div className="mt-1 block w-fit bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
                       </div>
                     )}
