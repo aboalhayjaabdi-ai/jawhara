@@ -1,16 +1,24 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useRef } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { useCart } from "@/components/cart/cart-provider";
+import { useCart, useCartTotals } from "@/components/cart/cart-provider";
+import { normalizeVariantTitle } from "@/lib/variant-title";
+import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
+function formatSek(amount: number) {
+  return `${Math.round(amount)} kr`;
+}
+
 export default function KassaPage() {
-  const { items, hydrated } = useCart();
+  const { items, hydrated, discountCode } = useCart();
+  const { totals, loading } = useCartTotals();
   const trackedRef = useRef(false);
 
   useEffect(() => {
@@ -27,6 +35,7 @@ export default function KassaPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
+        discountCode,
       }),
     });
     const data = await res.json();
@@ -34,7 +43,7 @@ export default function KassaPage() {
       throw new Error(data.error ?? (Array.isArray(data.errors) ? data.errors.join(", ") : "Något gick fel."));
     }
     return data.clientSecret as string;
-  }, [items]);
+  }, [items, discountCode]);
 
   if (!hydrated) {
     return <div className="mx-auto max-w-2xl px-6 py-24" />;
@@ -56,8 +65,84 @@ export default function KassaPage() {
     );
   }
 
+  const codeAppliedLine = totals?.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId);
+  const automaticDiscounts = totals?.appliedDiscounts.filter((d) => d.discountId !== totals?.codeDiscountId) ?? [];
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
+      {/* Always-visible order summary -- no dropdown/accordion. Every figure here comes from the
+          same /api/cart/totals call (computeCheckoutTotals) that app/api/checkout/route.ts uses to
+          build the real Stripe session below, so this can never disagree with what's charged. */}
+      <div className="mb-8 border border-line">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-widest">Ordersammanfattning</h2>
+        </div>
+        <div className="flex flex-col gap-4 px-5 py-5">
+          {items.map((item) => {
+            const variantTitle = normalizeVariantTitle(item.variantTitle);
+            return (
+              <div key={item.variantId} className="flex gap-3">
+                <div className="relative aspect-square h-16 w-16 flex-shrink-0 bg-[#f4f4f4]">
+                  {item.image && <Image src={item.image} alt={item.title} fill sizes="64px" className="object-contain" />}
+                </div>
+                <div className="flex flex-1 items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium">{item.title}</div>
+                    {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
+                    <div className="text-xs text-muted">Antal: {item.qty}</div>
+                  </div>
+                  <div className="whitespace-nowrap text-sm font-semibold">{formatSek(item.price * item.qty)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex flex-col gap-1.5 border-t border-line px-5 py-4 text-sm">
+          {totals ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Delsumma</span>
+                <span>{formatSek(totals.subtotal)}</span>
+              </div>
+              {automaticDiscounts.map((d) => (
+                <div key={d.discountId} className="flex items-center justify-between text-muted">
+                  <span>{d.title}</span>
+                  <span>−{formatSek(d.amountOff)}</span>
+                </div>
+              ))}
+              {codeAppliedLine && (
+                <div className="flex items-center justify-between text-muted">
+                  <span>Rabattkod ({discountCode})</span>
+                  <span>−{formatSek(codeAppliedLine.amountOff)}</span>
+                </div>
+              )}
+              {totals.discountTotal > 0 && (
+                <div className="flex items-center justify-between font-medium">
+                  <span>Total rabatt</span>
+                  <span>−{formatSek(totals.discountTotal)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-muted">
+                <span>Frakt ({SHIPPING_METHOD_NAME})</span>
+                <span>{totals.shipping > 0 ? formatSek(totals.shipping) : "Gratis"}</span>
+              </div>
+              {totals.vat > 0 && (
+                <div className="flex items-center justify-between text-muted">
+                  <span>Moms</span>
+                  <span>{formatSek(totals.vat)}</span>
+                </div>
+              )}
+              <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
+                <span>Totalt att betala</span>
+                <span>{formatSek(totals.total)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="text-muted">{loading ? "Beräknar..." : ""}</div>
+          )}
+        </div>
+      </div>
+
       <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
         <EmbeddedCheckout />
       </EmbeddedCheckoutProvider>

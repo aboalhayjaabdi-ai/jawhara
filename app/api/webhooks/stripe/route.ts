@@ -170,7 +170,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const { data: order } = await supabaseService
     .from("orders")
-    .select("order_number, email, subtotal_price, total_discounts, total_tax, total_shipping, total_price")
+    .select("order_number, email, subtotal_price, total_discounts, applied_discounts, total_tax, total_shipping, total_price")
     .eq("id", orderId)
     .single();
   const { data: items } = await supabaseService
@@ -199,6 +199,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       items: lineItems,
       subtotal: Number(order.subtotal_price ?? 0),
       discountTotal: Number(order.total_discounts ?? 0),
+      appliedDiscounts: Array.isArray(order.applied_discounts)
+        ? order.applied_discounts.map((d: any) => ({ title: d.title, amountOff: Number(d.amountOff) }))
+        : undefined,
       vat: Number(order.total_tax ?? 0),
       shipping: Number(order.total_shipping ?? 0),
       total: Number(order.total_price),

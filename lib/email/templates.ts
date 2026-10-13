@@ -92,6 +92,8 @@ function addressBlock(address: ShippingAddress) {
   `;
 }
 
+export type AppliedDiscountSummary = { title: string; amountOff: number };
+
 export function orderConfirmationTemplate(
   content: EmailTemplateContent,
   params: {
@@ -99,22 +101,36 @@ export function orderConfirmationTemplate(
     items: OrderLineItem[];
     subtotal: number;
     discountTotal: number;
+    appliedDiscounts?: AppliedDiscountSummary[];
     vat: number;
     shipping: number;
+    shippingMethod?: string;
     total: number;
     shippingAddress: ShippingAddress;
   }
 ) {
-  const { orderNumber, items, subtotal, discountTotal, vat, shipping, total, shippingAddress } = params;
+  const { orderNumber, items, subtotal, discountTotal, appliedDiscounts, vat, shipping, shippingMethod, total, shippingAddress } = params;
+  // Each discount by name when the breakdown is available (new orders, from orders.applied_discounts);
+  // falls back to one combined "Rabatt" row for older orders that predate that column, so a
+  // historical order's email never breaks.
+  const discountRows =
+    appliedDiscounts && appliedDiscounts.length > 0
+      ? appliedDiscounts
+          .map((d) => `<tr><td>${d.title}</td><td style="text-align: right;">-${formatSek(d.amountOff)}</td></tr>`)
+          .join("")
+      : discountTotal > 0
+        ? `<tr><td>Rabatt</td><td style="text-align: right;">-${formatSek(discountTotal)}</td></tr>`
+        : "";
+  const shippingLabel = shippingMethod ? `Frakt (${shippingMethod})` : "Frakt";
   const body = `
     ${content.introHtml}
     <p style="font-size: 14px;"><strong>Ordernummer:</strong> ${orderNumber}</p>
     ${lineItemsTable(items)}
     <table style="width: 100%; font-size: 14px; margin-top: 8px;">
       <tr><td>Delsumma</td><td style="text-align: right;">${formatSek(subtotal)}</td></tr>
-      ${discountTotal > 0 ? `<tr><td>Rabatt</td><td style="text-align: right;">-${formatSek(discountTotal)}</td></tr>` : ""}
+      ${discountRows}
       ${vat > 0 ? `<tr><td>Moms</td><td style="text-align: right;">${formatSek(vat)}</td></tr>` : ""}
-      <tr><td>Frakt</td><td style="text-align: right;">${shipping > 0 ? formatSek(shipping) : "Fri frakt"}</td></tr>
+      <tr><td>${shippingLabel}</td><td style="text-align: right;">${shipping > 0 ? formatSek(shipping) : "Gratis"}</td></tr>
       <tr style="font-weight: 600;"><td style="padding-top: 8px;">Totalt</td><td style="text-align: right; padding-top: 8px;">${formatSek(total)}</td></tr>
     </table>
     ${addressBlock(shippingAddress)}

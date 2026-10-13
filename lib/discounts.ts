@@ -55,6 +55,14 @@ export type CheckoutTotals = {
   shipping: 0; // confirmed real store behavior: always free, no minimum
   total: number;
   errors: string[]; // e.g. invalid code, out of stock -- caller decides whether to block checkout
+  // Informational only (never blocks checkout) -- explains when an eligible discount was NOT
+  // applied because it isn't combinable with another one that took priority, so the customer
+  // isn't left silently wondering why a code/promo they qualify for didn't show up.
+  discountNotices: string[];
+  // The id of the discount a valid entered code resolved to (if any) -- lets a caller split
+  // appliedDiscounts into "automatic promotions" vs "the code I just typed" without guessing
+  // from title text, which isn't guaranteed to equal the code string in general.
+  codeDiscountId: string | null;
 };
 
 /**
@@ -200,6 +208,14 @@ export async function computeCheckoutTotals(
   const exclusive = eligible.find((d) => !d.combines_with_order || !d.combines_with_product);
   const toApply = exclusive ? [exclusive] : eligible;
 
+  const discountNotices: string[] = [];
+  if (exclusive) {
+    for (const d of eligible) {
+      if (d.id === exclusive.id) continue;
+      discountNotices.push(`"${d.title}" kan inte kombineras med "${exclusive.title}" och har därför inte lagts till.`);
+    }
+  }
+
   const appliedDiscounts: AppliedDiscountLine[] = [];
 
   for (const d of toApply) {
@@ -257,5 +273,16 @@ export async function computeCheckoutTotals(
   const vat = Math.round(taxableAmount * (vatRatePercent / 100) * 100) / 100;
   const total = Math.round((taxableAmount + vat) * 100) / 100;
 
-  return { lines, subtotal, appliedDiscounts, discountTotal, vat, shipping: 0, total, errors };
+  return {
+    lines,
+    subtotal,
+    appliedDiscounts,
+    discountTotal,
+    vat,
+    shipping: 0,
+    total,
+    errors,
+    discountNotices,
+    codeDiscountId: codeMatch?.id ?? null,
+  };
 }

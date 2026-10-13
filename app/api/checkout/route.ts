@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { computeCheckoutTotals, type CartLineInput } from "@/lib/discounts";
+import { getOrderItemImages } from "@/lib/order-images";
 
 export async function POST(req: NextRequest) {
   // Server-side gate, independent of the UI hiding the "Till kassan" button -- checkout
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest) {
       total_tax: totals.vat,
       total_discounts: totals.discountTotal,
       total_price: totals.total,
+      // Snapshot of which discounts applied and how much each saved, for display only (order
+      // confirmation email, admin) -- never read by any pricing/charge logic, which uses
+      // total_discounts above exactly as before.
+      applied_discounts: totals.appliedDiscounts,
     })
     .select("id")
     .single();
@@ -71,14 +76,28 @@ export async function POST(req: NextRequest) {
 
   await supabaseService.from("order_items").insert(orderItems);
 
-  const lineItems = totals.lines.map((line) => ({
-    quantity: line.qty,
-    price_data: {
-      currency: "sek",
-      unit_amount: Math.round(line.unitPrice * 100), // öre
-      product_data: { name: titleByProductId.get(line.productId) ?? "Jawhara-produkt" },
-    },
-  }));
+  // The exact purchased-variant image (e.g. the black bag, not whichever photo is first) for
+  // Stripe's own line-item display -- same resolver already proven correct for transactional
+  // emails (lib/order-images.ts), never a client-supplied URL. Keyed by variantId since each
+  // cart line is for a distinct variant.
+  const imagesByVariantId = await getOrderItemImages(
+    totals.lines.map((line) => ({ id: line.variantId, variantId: line.variantId, productId: line.productId }))
+  );
+
+  const lineItems = totals.lines.map((line) => {
+    const imageUrl = imagesByVariantId[line.variantId]?.imageUrl;
+    return {
+      quantity: line.qty,
+      price_data: {
+        currency: "sek",
+        unit_amount: Math.round(line.unitPrice * 100), // öre
+        product_data: {
+          name: titleByProductId.get(line.productId) ?? "Jawhara-produkt",
+          images: imageUrl ? [imageUrl] : undefined,
+        },
+      },
+    };
+  });
 
   // VAT (store_settings-configurable, 0% today) as its own positive line item, since Stripe
   // line items can't be negative-adjusted for it either.
@@ -88,7 +107,7 @@ export async function POST(req: NextRequest) {
       price_data: {
         currency: "sek",
         unit_amount: Math.round(totals.vat * 100),
-        product_data: { name: "Moms" },
+        product_data: { name: "Moms", images: undefined },
       },
     });
   }

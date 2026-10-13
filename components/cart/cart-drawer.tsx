@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCart } from "./cart-provider";
+import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
+import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
 import type { GiftBoxOffer } from "@/lib/gift-box";
 
 function formatSek(amount: number) {
@@ -14,8 +16,12 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, subtotal } = useCart();
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode } = useCart();
+  const { totals, loading, fetchError } = useCartTotals();
   const router = useRouter();
+
+  const [codeInput, setCodeInput] = useState("");
+  const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks
   // qty on repeat calls for the same variant), so checking presence first prevents a double-add
@@ -42,6 +48,48 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       removeItem(giftBoxOffer.variantId);
     }
   }
+
+  // Applies a code by handing it to the shared, authoritative totals fetch (setDiscountCode
+  // triggers useCartTotals to re-fetch) -- this function never decides acceptance/amount itself,
+  // it only reads back what the server already computed and reflects that in the UI.
+  async function applyCode() {
+    const code = codeInput.trim();
+    if (!code) return;
+    setCodeMessage(null);
+    try {
+      const res = await fetch("/api/cart/totals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: code }),
+      });
+      const data = await res.json();
+      const codeError = (data.errors as string[] | undefined)?.find((e) => e.toLowerCase().includes("rabattkod"));
+      if (codeError) {
+        setCodeMessage({ kind: "error", text: codeError });
+        return;
+      }
+      const applied = (data.appliedDiscounts as { discountId: string; amountOff: number }[] | undefined)?.find(
+        (d) => d.discountId === data.codeDiscountId
+      );
+      setDiscountCode(code);
+      setCodeInput("");
+      setCodeMessage({
+        kind: "ok",
+        text: applied ? `Rabattkod tillagd: -${formatSek(applied.amountOff)}` : "Rabattkod tillagd, men gav ingen rabatt på denna varukorg.",
+      });
+    } catch {
+      setCodeMessage({ kind: "error", text: "Kunde inte kontrollera rabattkoden. Försök igen." });
+    }
+  }
+
+  function removeCode() {
+    setDiscountCode(null);
+    setCodeMessage(null);
+  }
+
+  const codeAppliedLine = totals?.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId);
+  const automaticDiscounts = totals?.appliedDiscounts.filter((d) => d.discountId !== totals?.codeDiscountId) ?? [];
+  const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
 
   return (
     <>
@@ -118,6 +166,22 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               </div>
             );
           })}
+
+          {blockingErrors.length > 0 && (
+            <div className="border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              {blockingErrors.map((e, i) => (
+                <div key={i}>{e}</div>
+              ))}
+            </div>
+          )}
+
+          {totals && totals.discountNotices.length > 0 && (
+            <div className="border border-line bg-[#f4f4f4] px-3 py-2.5 text-xs text-muted">
+              {totals.discountNotices.map((n, i) => (
+                <div key={i}>{n}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -136,12 +200,97 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               </span>
             </label>
           )}
-          <div className="mb-4 flex items-center justify-between text-sm">
-            <span className="text-muted">Delsumma</span>
-            <span className="font-semibold">{formatSek(subtotal)}</span>
-          </div>
+
+          {items.length > 0 && (
+            <div className="mb-4">
+              {discountCode ? (
+                <div className="flex items-center justify-between border border-line px-3 py-2.5 text-sm">
+                  <span>
+                    Rabattkod: <strong>{discountCode}</strong>
+                  </span>
+                  <button onClick={removeCode} className="text-xs text-muted underline">
+                    Ta bort
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={codeInput}
+                    onChange={(e) => setCodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyCode();
+                      }
+                    }}
+                    placeholder="Rabattkod"
+                    className="h-11 flex-1 border border-line px-3 text-sm uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal"
+                  />
+                  <button
+                    onClick={applyCode}
+                    disabled={!codeInput.trim()}
+                    className="h-11 border border-fg px-4 text-xs font-semibold uppercase tracking-widest disabled:opacity-40"
+                  >
+                    Använd
+                  </button>
+                </div>
+              )}
+              {codeMessage && (
+                <p className={`mt-1.5 text-xs ${codeMessage.kind === "error" ? "text-red-700" : "text-muted"}`}>{codeMessage.text}</p>
+              )}
+            </div>
+          )}
+
+          {totals && items.length > 0 && (
+            <div className="mb-4 flex flex-col gap-1.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Delsumma</span>
+                <span>{formatSek(totals.subtotal)}</span>
+              </div>
+              {automaticDiscounts.map((d) => (
+                <div key={d.discountId} className="flex items-center justify-between text-muted">
+                  <span>{d.title}</span>
+                  <span>−{formatSek(d.amountOff)}</span>
+                </div>
+              ))}
+              {codeAppliedLine && (
+                <div className="flex items-center justify-between text-muted">
+                  <span>Rabattkod ({discountCode})</span>
+                  <span>−{formatSek(codeAppliedLine.amountOff)}</span>
+                </div>
+              )}
+              {totals.discountTotal > 0 && (
+                <div className="flex items-center justify-between font-medium">
+                  <span>Total rabatt</span>
+                  <span>−{formatSek(totals.discountTotal)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-muted">
+                <span>Frakt ({SHIPPING_METHOD_NAME})</span>
+                <span>{totals.shipping > 0 ? formatSek(totals.shipping) : "Gratis"}</span>
+              </div>
+              {totals.vat > 0 && (
+                <div className="flex items-center justify-between text-muted">
+                  <span>Moms</span>
+                  <span>{formatSek(totals.vat)}</span>
+                </div>
+              )}
+              <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
+                <span>Totalt</span>
+                <span>{formatSek(totals.total)}</span>
+              </div>
+            </div>
+          )}
+
+          {!totals && items.length > 0 && (
+            <div className="mb-4 flex items-center justify-between text-sm">
+              <span className="text-muted">{loading ? "Beräknar..." : fetchError ? fetchError : "Delsumma"}</span>
+            </div>
+          )}
+
           <button
-            disabled={items.length === 0 || !CHECKOUT_ENABLED}
+            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0}
             onClick={() => {
               close();
               router.push("/kassa");
