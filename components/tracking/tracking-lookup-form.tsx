@@ -15,8 +15,10 @@ const STATUS_SV: Record<string, string> = {
   PickedUp: "Hämtat av transportör",
   Departure: "Avgått från terminal",
   Arrival: "Ankommit till terminal",
+  InTransit: "Under transport",
   AvailableForPickup: "Klart för upphämtning",
   OutForDelivery: "Ute för leverans",
+  DeliveryFailure: "Leveransförsök misslyckades",
   Delivered: "Levererat",
   Exception: "Avvikelse upptäckt",
   Alert: "Avvikelse upptäckt",
@@ -27,21 +29,37 @@ const STATUS_SV: Record<string, string> = {
   Returned: "Returnerad",
 };
 
-const EXCEPTION_STATUSES = new Set(["Exception", "Alert", "Undelivered", "Expired", "NotFound", "Returning", "Returned"]);
+const EXCEPTION_STATUSES = new Set([
+  "Exception",
+  "Alert",
+  "Undelivered",
+  "Expired",
+  "NotFound",
+  "Returning",
+  "Returned",
+  "DeliveryFailure",
+]);
+
+// Every per-event status 17TRACK sends is either a bare major status ("Delivered") or a
+// "<MajorStatus>_<Variant>" suffixed sub-status ("Delivered_Other", "Exception_Returned",
+// "AvailableForPickup_Other", ...) -- confirmed against real data across every registered order
+// in this store (not just one). Matching on the major-status prefix, rather than hand-listing
+// every suffix variant we happen to have seen so far, makes every lookup below correct for any
+// sub-status 17TRACK sends now or in the future, not just the ones already observed.
+function majorStatus(rawStatus: string): string {
+  const idx = rawStatus.indexOf("_");
+  return idx === -1 ? rawStatus : rawStatus.slice(0, idx);
+}
 
 function swedishStatusLabel(rawStatus: string): string {
-  if (STATUS_SV[rawStatus]) return STATUS_SV[rawStatus];
-  // Per-event sub_status values carry a "<MajorStatus>_<Variant>" suffix in real 17TRACK data
-  // (e.g. "Delivered_Other", confirmed against a real delivered shipment -- same pattern already
-  // handled for "InTransit_*" below) -- match the family, not just the bare major status.
-  if (rawStatus.startsWith("Delivered")) return STATUS_SV.Delivered;
-  return "Under transport"; // covers every InTransit_* sub-status variant
+  return STATUS_SV[majorStatus(rawStatus)] ?? "Under transport";
 }
 
 function stageForStatus(rawStatus: string): Stage {
-  if (rawStatus.startsWith("Delivered")) return 3;
-  if (rawStatus === "OutForDelivery" || rawStatus === "AvailableForPickup") return 2;
-  return 1; // InfoReceived / PickedUp / Departure / Arrival / InTransit_* / unknown exceptions
+  const major = majorStatus(rawStatus);
+  if (major === "Delivered") return 3;
+  if (major === "OutForDelivery" || major === "AvailableForPickup") return 2;
+  return 1; // InfoReceived / PickedUp / Departure / Arrival / InTransit / unknown
 }
 
 // Known, literal carrier strings observed in real 17TRACK responses, mapped by hand -- never a
@@ -99,7 +117,7 @@ function formatEventDate(iso: string): { date: string; time: string } {
 function shipmentPresentation(shipment: ShipmentTracking): { label: string; stage: Stage | null } {
   const latest = shipment.events[0];
   if (!latest) return { label: "Skickad", stage: 0 };
-  const isException = EXCEPTION_STATUSES.has(latest.status);
+  const isException = EXCEPTION_STATUSES.has(majorStatus(latest.status));
   return { label: swedishStatusLabel(latest.status), stage: isException ? null : stageForStatus(latest.status) };
 }
 
