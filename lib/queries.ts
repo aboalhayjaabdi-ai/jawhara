@@ -252,6 +252,16 @@ export async function getFilteredAllProducts(options: CollectionFilterOptions, l
 
 export { hasActiveFilter };
 
+// Powers generateStaticParams for /collections/[handle] -- a tiny, single-column query. See
+// getAllProductHandles for why this matters: without generateStaticParams, Next.js treats a
+// dynamic segment as fully dynamic (no caching at all, `revalidate` silently inert) rather than
+// ISR-cached. "all" is a reserved, code-only handle (no real collections row) -- added by the
+// caller, not here.
+export async function getAllCollectionHandles(): Promise<string[]> {
+  const { data } = await supabase.from("collections").select("handle");
+  return (data ?? []).map((c) => c.handle as string);
+}
+
 export async function getCollectionsByHandles(handles: string[]) {
   const { data } = await supabase.from("collections").select("title, handle, image_url").in("handle", handles);
   const byHandle = new Map((data ?? []).map((c) => [c.handle, c]));
@@ -322,6 +332,23 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
       available: card.available,
     };
   });
+}
+
+// Powers generateStaticParams for /products/[handle]. Without generateStaticParams, Next.js 15
+// treats a dynamic route segment as fully dynamic -- confirmed via the real build output, which
+// showed /products/[handle] and /collections/[handle] both marked "ƒ (Dynamic)" with no
+// Revalidate/Expire column, unlike "/" (correctly "○ (Static)", revalidate: 1m). The existing
+// `export const revalidate = 60` on both pages was therefore never actually taking effect -- every
+// single product/collection view has been a full, uncached SSR render + Supabase round trip,
+// despite the code's own stated intent. Adding this (a tiny single-column query) is what actually
+// enables ISR caching for the two highest-traffic page types on the whole site. Only active
+// products are prerendered -- a draft/archived handle correctly still 404s via the page's own
+// notFound() check, this just controls which paths are warmed at build/deploy time (dynamicParams
+// stays true by default, so any other real handle is still generated -- and then cached -- on its
+// first real visit).
+export async function getAllProductHandles(): Promise<string[]> {
+  const { data } = await supabase.from("products").select("handle").eq("status", "active");
+  return (data ?? []).map((p) => p.handle as string);
 }
 
 // cache() dedupes this within a single request: the product page's generateMetadata() and its

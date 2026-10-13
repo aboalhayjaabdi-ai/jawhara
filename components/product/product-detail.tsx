@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useCart } from "@/components/cart/cart-provider";
+import { useCartActions } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import type { ProductTemplateContent } from "@/lib/product-templates";
@@ -105,7 +105,7 @@ export function ProductDetail({
   walletPromoEligible: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
-  const { addItem } = useCart();
+  const { addItem } = useCartActions();
 
   const variant = useMemo(() => {
     if (!sizeOptions.length) return variants[0];

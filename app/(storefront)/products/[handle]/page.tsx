@@ -1,12 +1,22 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, isEligibleForWalletPromo } from "@/lib/queries";
+import { getProductByHandle, getAllProductHandles, isEligibleForWalletPromo } from "@/lib/queries";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
 import { ComplementaryProducts } from "@/components/product/complementary-products";
 
 export const revalidate = 60;
+
+// Required for revalidate to actually take effect on this dynamic segment -- see
+// getAllProductHandles's comment in lib/queries.ts for the full story (confirmed via the real
+// build output: this route was always compiled "ƒ Dynamic", never respecting revalidate, without
+// this). dynamicParams defaults to true, so a product added after this build still generates (and
+// then caches) correctly on its own first visit.
+export async function generateStaticParams() {
+  const handles = await getAllProductHandles();
+  return handles.map((handle) => ({ handle }));
+}
 
 function stripHtml(html: string | null): string | undefined {
   if (!html) return undefined;

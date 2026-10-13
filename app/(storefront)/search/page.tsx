@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { searchProductCards } from "@/lib/queries";
 import { ProductCard } from "@/components/product/product-card";
 import { RecentlyViewed } from "@/components/search/recently-viewed";
+import { SearchForm } from "@/components/search/search-form";
 
 export const metadata: Metadata = { title: "Sök" };
 
@@ -12,16 +13,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-14 lg:px-14">
-      <form action="/search" className="mx-auto max-w-lg">
-        <input
-          type="search"
-          name="q"
-          defaultValue={query}
-          placeholder="Sök produkter..."
-          autoFocus
-          className="h-12 w-full border-b border-fg bg-transparent px-1 text-base outline-none"
-        />
-      </form>
+      <SearchForm initialQuery={query} />
 
       {query && (
         <div className="pb-8 pt-10 text-center text-xs font-semibold uppercase tracking-wide text-muted">

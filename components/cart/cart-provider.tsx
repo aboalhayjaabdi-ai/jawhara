@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trackAddToCart } from "@/lib/marketing/events";
 // Type-only import: compiled away entirely, never pulls lib/discounts.ts's server-only Supabase
 // client into the browser bundle -- this is purely the response shape of /api/cart/totals, which
@@ -18,14 +18,26 @@ export type CartItem = {
   qty: number;
 };
 
-type CartContextValue = {
-  items: CartItem[];
-  isOpen: boolean;
+// Split into two contexts (state vs. actions) so a component that only needs to call an action
+// (e.g. ProductCard's "Lägg till i varukorgen", which exists once per product card -- potentially
+// dozens on a single collection/search/related-products grid) doesn't re-render every time
+// unrelated cart STATE changes elsewhere on the page (opening the drawer, a qty bump, an add-to-
+// cart toast firing). Every action below has a referentially stable identity across renders (via
+// useCallback), so CartActionsContext's own value object is stable too -- a pure-actions consumer
+// re-renders only when the provider itself remounts, never on cart content changes. useCart()
+// below still combines both for the many existing call sites that genuinely need both.
+type CartActions = {
   open: () => void;
   close: () => void;
   addItem: (item: Omit<CartItem, "qty">, qty?: number) => void;
   removeItem: (variantId: string) => void;
   setQty: (variantId: string, qty: number) => void;
+  setDiscountCode: (code: string | null) => void;
+};
+
+type CartState = {
+  items: CartItem[];
+  isOpen: boolean;
   subtotal: number;
   count: number;
   hydrated: boolean;
@@ -38,10 +50,12 @@ type CartContextValue = {
   // of truth for its own validity/amount, only an input to the authoritative computeCheckoutTotals
   // call (see useCartTotals below and app/api/checkout/route.ts).
   discountCode: string | null;
-  setDiscountCode: (code: string | null) => void;
 };
 
-const CartContext = createContext<CartContextValue | null>(null);
+type CartContextValue = CartState & CartActions;
+
+const CartActionsContext = createContext<CartActions | null>(null);
+const CartStateContext = createContext<CartState | null>(null);
 
 const STORAGE_KEY = "jawhara_cart";
 const DISCOUNT_CODE_STORAGE_KEY = "jawhara_discount_code";
@@ -74,7 +88,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, hydrated]);
 
-  function setDiscountCode(code: string | null) {
+  const setDiscountCode = useCallback((code: string | null) => {
     setDiscountCodeState(code);
     try {
       if (code) localStorage.setItem(DISCOUNT_CODE_STORAGE_KEY, code);
@@ -82,9 +96,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }
+  }, []);
 
-  function addItem(item: Omit<CartItem, "qty">, qty = 1) {
+  const addItem = useCallback((item: Omit<CartItem, "qty">, qty = 1) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.variantId === item.variantId);
       if (existing) {
@@ -94,47 +108,57 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
     setBump((b) => b + 1);
     trackAddToCart({ id: item.variantId, title: item.title, price: item.price, currency: "SEK", quantity: qty });
-  }
+  }, []);
 
-  function removeItem(variantId: string) {
+  const removeItem = useCallback((variantId: string) => {
     setItems((prev) => prev.filter((i) => i.variantId !== variantId));
-  }
+  }, []);
 
-  function setQty(variantId: string, qty: number) {
-    if (qty <= 0) return removeItem(variantId);
-    setItems((prev) => prev.map((i) => (i.variantId === variantId ? { ...i, qty } : i)));
-  }
+  const setQty = useCallback(
+    (variantId: string, qty: number) => {
+      if (qty <= 0) return removeItem(variantId);
+      setItems((prev) => prev.map((i) => (i.variantId === variantId ? { ...i, qty } : i)));
+    },
+    [removeItem]
+  );
+
+  const open = useCallback(() => setIsOpen(true), []);
+  const close = useCallback(() => setIsOpen(false), []);
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
+  const actions = useMemo<CartActions>(
+    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode }),
+    [open, close, addItem, removeItem, setQty, setDiscountCode]
+  );
+  const state = useMemo<CartState>(
+    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode }),
+    [items, isOpen, subtotal, count, hydrated, bump, discountCode]
+  );
+
   return (
-    <CartContext.Provider
-      value={{
-        items,
-        isOpen,
-        open: () => setIsOpen(true),
-        close: () => setIsOpen(false),
-        addItem,
-        removeItem,
-        setQty,
-        subtotal,
-        count,
-        hydrated,
-        bump,
-        discountCode,
-        setDiscountCode,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+    <CartActionsContext.Provider value={actions}>
+      <CartStateContext.Provider value={state}>{children}</CartStateContext.Provider>
+    </CartActionsContext.Provider>
   );
 }
 
-export function useCart() {
-  const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart must be used within CartProvider");
+// Pure-actions hook -- use this instead of useCart() in any component that never reads cart
+// STATE (items/isOpen/count/etc.), so it never re-renders when that state changes. ProductCard and
+// ProductDetail's add-to-cart buttons are the main beneficiaries (see the comment above the
+// context definitions).
+export function useCartActions(): CartActions {
+  const ctx = useContext(CartActionsContext);
+  if (!ctx) throw new Error("useCartActions must be used within CartProvider");
   return ctx;
+}
+
+export function useCart(): CartContextValue {
+  const actions = useCartActions();
+  const state = useContext(CartStateContext);
+  if (!state) throw new Error("useCart must be used within CartProvider");
+  return { ...state, ...actions };
 }
 
 /**

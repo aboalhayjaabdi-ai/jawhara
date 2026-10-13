@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { ProductCard as ProductCardType } from "@/lib/queries";
-import { useCart } from "@/components/cart/cart-provider";
+import { useCartActions } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { LinkPendingIndicator } from "@/components/ui/link-pending-indicator";
 
@@ -13,7 +13,7 @@ function formatSek(amount: number) {
 }
 
 export function ProductCard({ product }: { product: ProductCardType }) {
-  const { addItem } = useCart();
+  const { addItem } = useCartActions();
   const onSale = product.compareAtPrice != null && product.compareAtPrice > product.price;
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);

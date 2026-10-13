@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import { Newsreader, Red_Hat_Text } from "next/font/google";
 import "../globals.css";
 import { AnnouncementBar } from "@/components/layout/announcement-bar";
@@ -30,12 +31,25 @@ export const metadata: Metadata = {
   description: "Jawhara — smycken och accessoarer",
 };
 
+// This layout wraps EVERY storefront route, including ones that can never be statically
+// cached (e.g. /search, /pages/[handle] -- they read request-specific data elsewhere on the
+// page). Without caching, that meant up to 4 live Supabase round trips (menus, logo, marketing
+// IDs, the gift-box product+variants+media) before the header/nav/footer/cart drawer could even
+// start rendering, on every single one of those requests. None of this data is per-visitor or
+// security-sensitive -- unstable_cache (Next's cross-request Data Cache, unlike React's cache()
+// which only dedupes within one request) lets every request reuse the same result for 60s,
+// matching the revalidate=60 convention already used throughout this codebase.
+const getCachedSiteMenus = unstable_cache(getSiteMenus, ["layout-site-menus"], { revalidate: 60 });
+const getCachedLogoUrl = unstable_cache(getLogoUrl, ["layout-logo-url"], { revalidate: 60 });
+const getCachedPublicMarketingIds = unstable_cache(getPublicMarketingIds, ["layout-public-marketing-ids"], { revalidate: 60 });
+const getCachedGiftBoxOffer = unstable_cache(getGiftBoxOffer, ["layout-gift-box-offer"], { revalidate: 60 });
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [menus, logoUrl, marketingIds, giftBoxOffer] = await Promise.all([
-    getSiteMenus(),
-    getLogoUrl(),
-    getPublicMarketingIds(),
-    getGiftBoxOffer(),
+    getCachedSiteMenus(),
+    getCachedLogoUrl(),
+    getCachedPublicMarketingIds(),
+    getCachedGiftBoxOffer(),
   ]);
   return (
     <html lang="sv">

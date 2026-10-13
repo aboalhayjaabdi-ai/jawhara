@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import {
+  getAllCollectionHandles,
   getAllProductCards,
   getCollectionMeta,
   getCollectionProductCards,
@@ -21,6 +22,18 @@ export const revalidate = 60;
 
 const PAGE_SIZE = 24;
 const VALID_SORTS: CollectionSort[] = ["manual", "price-asc", "price-desc", "title-asc", "title-desc", "created-desc", "created-asc"];
+
+// Same reasoning as the product page's generateStaticParams (see lib/queries.ts's
+// getAllProductHandles). "all" is Shopify's reserved catch-all route with no real collections
+// row, added explicitly since getAllCollectionHandles only returns real DB handles. Note: this
+// page also reads `searchParams` (sort/filter/pagination) below, which Next.js's own rules force
+// into fully dynamic rendering regardless of generateStaticParams -- that's correct, expected
+// behavior for a page with real per-request query-string filtering, not something this can (or
+// should) paper over; this still registers the route correctly and costs nothing.
+export async function generateStaticParams() {
+  const handles = await getAllCollectionHandles();
+  return [{ handle: "all" }, ...handles.map((handle) => ({ handle }))];
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
