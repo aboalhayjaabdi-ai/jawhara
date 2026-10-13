@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ProductCard as ProductCardType } from "@/lib/queries";
 import { useCart } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
+import { LinkPendingIndicator } from "@/components/ui/link-pending-indicator";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -61,6 +62,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
         {product.available && onSale && (
           <div className="absolute left-3 top-3 bg-fg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">Rea</div>
         )}
+        <LinkPendingIndicator />
         {showQuickAdd && (
           <div ref={pickerRef} className="absolute bottom-3 right-3">
             <button

@@ -326,23 +326,21 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
 
 // cache() dedupes this within a single request: the product page's generateMetadata() and its
 // page component both call this with the same handle -- without it, that's two full serial
-// round trips to Supabase (this function itself already does two: product, then reviews) before
-// the page can start rendering, which showed up directly as ~2s server-response-time in Lighthouse.
+// round trips to Supabase before the page can start rendering. Reviews are embedded directly in
+// this same query (a real FK, reviews.product_id -> products.id, so PostgREST can nest it) rather
+// than a second sequential round trip -- this alone used to add a full extra request to the
+// critical path of every product page.
 export const getProductByHandle = cache(async (handle: string) => {
   const { data: product } = await supabase
     .from("products")
     .select(
-      "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), reviews(rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at)"
     )
     .eq("handle", handle)
     .single();
   if (!product) return null;
 
-  const { data: reviews } = await supabase
-    .from("reviews")
-    .select("rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at")
-    .eq("product_id", product.id)
-    .order("created_at", { ascending: false });
+  const reviews = [...product.reviews].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
 
   const sortedMedia = [...product.media].sort((a, b) => a.position - b.position);
   const images = sortedMedia.map((m) => mediaUrl(m.storage_path));
@@ -444,22 +442,31 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
   );
   withCounts.sort((a, b) => a.count - b.count);
 
+  // Fetched in parallel (there are only ever a handful of candidate collections per product) --
+  // the dedup/pick logic below stays sequential (so results still prefer the most-specific
+  // collection first, exactly as before), but the network round trips themselves no longer wait
+  // on each other, which used to serialize 2-3+ extra round trips onto every product page load.
+  const perCollectionResults = await Promise.all(
+    withCounts.map((collection) =>
+      supabase
+        .from("collection_products")
+        .select(
+          "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+        )
+        .eq("collection_id", collection.id)
+        .eq("products.status", "active")
+        .order("position", { ascending: true })
+        .limit(limit * 2)
+        .then(({ data }) => (data ?? []) as any[])
+    )
+  );
+
   const picked: any[] = [];
   const seenHandles = new Set([excludeHandle]);
 
-  for (const collection of withCounts) {
+  for (const rows of perCollectionResults) {
     if (picked.length >= limit) break;
-    const { data } = await supabase
-      .from("collection_products")
-      .select(
-        "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
-      )
-      .eq("collection_id", collection.id)
-      .eq("products.status", "active")
-      .order("position", { ascending: true })
-      .limit(limit * 2);
-
-    for (const row of (data ?? []) as any[]) {
+    for (const row of rows) {
       const p = row.products;
       if (seenHandles.has(p.handle)) continue;
       seenHandles.add(p.handle);

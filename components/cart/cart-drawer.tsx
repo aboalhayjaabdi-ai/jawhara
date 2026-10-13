@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
@@ -22,6 +22,18 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
   const [codeInput, setCodeInput] = useState("");
   const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [applyingCode, setApplyingCode] = useState(false);
+  const [isNavigatingToCheckout, startCheckoutTransition] = useTransition();
+  // Keeps the drawer open (with its "Öppnar kassan..." pending state visible) until the /kassa
+  // route transition actually finishes, instead of closing immediately and leaving a blank flash
+  // of whatever page was behind it while the new page streams in.
+  const checkoutRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!isNavigatingToCheckout && checkoutRequestedRef.current) {
+      checkoutRequestedRef.current = false;
+      close();
+    }
+  }, [isNavigatingToCheckout, close]);
 
   // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks
   // qty on repeat calls for the same variant), so checking presence first prevents a double-add
@@ -54,8 +66,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   // it only reads back what the server already computed and reflects that in the UI.
   async function applyCode() {
     const code = codeInput.trim();
-    if (!code) return;
+    if (!code || applyingCode) return;
     setCodeMessage(null);
+    setApplyingCode(true);
     try {
       const res = await fetch("/api/cart/totals", {
         method: "POST",
@@ -79,6 +92,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       });
     } catch {
       setCodeMessage({ kind: "error", text: "Kunde inte kontrollera rabattkoden. Försök igen." });
+    } finally {
+      setApplyingCode(false);
     }
   }
 
@@ -253,15 +268,16 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                         applyCode();
                       }
                     }}
+                    disabled={applyingCode}
                     placeholder="Rabattkod"
-                    className="h-11 flex-1 border border-line px-3 text-sm uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal"
+                    className="h-11 flex-1 border border-line px-3 text-sm uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal disabled:opacity-60"
                   />
                   <button
                     onClick={applyCode}
-                    disabled={!codeInput.trim()}
+                    disabled={!codeInput.trim() || applyingCode}
                     className="h-11 border border-fg px-4 text-xs font-semibold uppercase tracking-widest disabled:opacity-40"
                   >
-                    Använd
+                    {applyingCode ? "..." : "Använd"}
                   </button>
                 </div>
               )}
@@ -301,14 +317,16 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           )}
 
           <button
-            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0}
+            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isNavigatingToCheckout}
             onClick={() => {
-              close();
-              router.push("/kassa");
+              checkoutRequestedRef.current = true;
+              startCheckoutTransition(() => {
+                router.push("/kassa");
+              });
             }}
             className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
-            {CHECKOUT_ENABLED ? "Till kassan" : "Kassan öppnar snart"}
+            {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isNavigatingToCheckout ? "Öppnar kassan..." : "Till kassan"}
           </button>
         </div>
       </div>

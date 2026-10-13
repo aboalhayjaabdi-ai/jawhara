@@ -57,7 +57,12 @@ export function buildCartSummary(items: CartItem[], totals: CheckoutTotals | nul
   let originalSubtotal = 0;
   for (const item of items) {
     const serverLine = totals.lines.find((l) => l.variantId === item.variantId);
-    const qty = serverLine?.qty ?? item.qty;
+    // qty always comes from the client's own cart state, never the (possibly stale, debounced)
+    // server line -- it's the user's own just-clicked input, not something the server computes,
+    // so there's nothing to wait on. Only unitPrice (which genuinely depends on server-side
+    // discount computation) defers to the server value when available. See buildDisplayLines for
+    // the same fix and the regression it corrects.
+    const qty = item.qty;
     const unitPrice = serverLine?.unitPrice ?? item.price;
     originalSubtotal += originalUnitPrice(item.compareAtPrice, unitPrice) * qty;
   }
@@ -83,11 +88,14 @@ export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | nu
 
   const lines: DisplayLine[] = [];
   for (const item of items) {
-    // Authoritative qty/price come from the server-recomputed totals.lines when loaded (never the
-    // client's own numbers); fall back to the client item only while totals is still loading, same
-    // convention as useCartTotals elsewhere in this codebase.
+    // qty is always the client's own cart state -- it's the user's own just-clicked +/-/remove
+    // input, never something to wait on a server round trip for (deferring to a stale server copy
+    // here used to make the qty steppers visibly lag behind every click until the debounced
+    // totals refetch resolved). unitPrice genuinely depends on server-side discount computation,
+    // so that still prefers the server-recomputed totals.lines when loaded, falling back to the
+    // client item only while totals is still loading, same convention as useCartTotals elsewhere.
     const serverLine = totals?.lines.find((l) => l.variantId === item.variantId);
-    const qty = serverLine?.qty ?? item.qty;
+    const qty = item.qty;
     const unitPrice = serverLine?.unitPrice ?? item.price;
     const freeQty = Math.min(freeCounts.get(item.variantId) ?? 0, qty);
     const paidQty = qty - freeQty;

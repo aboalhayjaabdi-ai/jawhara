@@ -136,15 +136,42 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const anon = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: { getAll: () => [], setAll: () => {} },
-  });
-  const { data: redirect } = await anon.from("url_redirects").select("destination_path").eq("source_path", pathname).maybeSingle();
-  if (redirect) {
-    return NextResponse.redirect(new URL(redirect.destination_path, request.url), 308);
+  const destination = (await getRedirectsMap()).get(pathname);
+  if (destination) {
+    return NextResponse.redirect(new URL(destination, request.url), 308);
   }
 
   return NextResponse.next();
+}
+
+// url_redirects is small (storefront URL redirects only) and changes rarely, through the admin
+// UI -- yet this middleware runs on EVERY non-admin page request, including every background
+// prefetch a <Link> in viewport issues, so a live Supabase round-trip per request here was real,
+// measured overhead on the single biggest-impact path in the whole app (every product/collection
+// click). Cached in module scope (persists across invocations on a warm Vercel instance) with a
+// short TTL instead -- the same staleness tradeoff already accepted elsewhere in this project via
+// revalidate = 60. A redirect added in the admin UI takes up to REDIRECTS_TTL_MS to take effect.
+const REDIRECTS_TTL_MS = 60_000;
+let redirectsCache: { map: Map<string, string>; expiresAt: number } | null = null;
+let redirectsFetchInFlight: Promise<Map<string, string>> | null = null;
+
+async function getRedirectsMap(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (redirectsCache && redirectsCache.expiresAt > now) return redirectsCache.map;
+  if (redirectsFetchInFlight) return redirectsFetchInFlight;
+
+  redirectsFetchInFlight = (async () => {
+    const anon = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: { getAll: () => [], setAll: () => {} },
+    });
+    const { data } = await anon.from("url_redirects").select("source_path, destination_path");
+    const map = new Map((data ?? []).map((r) => [r.source_path as string, r.destination_path as string]));
+    redirectsCache = { map, expiresAt: Date.now() + REDIRECTS_TTL_MS };
+    redirectsFetchInFlight = null;
+    return map;
+  })();
+
+  return redirectsFetchInFlight;
 }
 
 export const config = {

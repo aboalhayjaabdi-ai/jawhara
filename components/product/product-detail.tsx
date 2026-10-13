@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
 import { normalizeVariantTitle } from "@/lib/variant-title";
@@ -318,9 +318,12 @@ export function ProductDetail({
         </div>
       )}
 
-      {complementaryProducts}
+      {/* Suspense boundaries so these slower, separate async recommendation queries never hold up
+          the main product content (title/price/gallery/buy button/description/reviews) from
+          streaming to the browser first -- they pop in afterward instead of blocking the response. */}
+      <Suspense fallback={null}>{complementaryProducts}</Suspense>
 
-      {relatedProducts}
+      <Suspense fallback={null}>{relatedProducts}</Suspense>
 
       {content?.faq && (
         <div className="mt-16 border-t border-line pt-14">
