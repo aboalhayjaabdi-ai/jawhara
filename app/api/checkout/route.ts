@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       email: email ?? null,
       currency_code: "SEK",
       financial_status: "pending",
+      source: "stripe",
       subtotal_price: totals.subtotal,
       total_shipping: totals.shipping,
       total_tax: totals.vat,

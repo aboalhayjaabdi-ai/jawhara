@@ -126,6 +126,7 @@ const orderRows = orders.map((o: any) => {
   const sid = idTail(o.id)!;
   return {
     shopify_id: sid,
+    source: "shopify",
     customer_id: o.customer ? customerIdByShopify.get(idTail(o.customer.id)!) ?? null : null,
     order_number: o.name,
     email: o.email || null,
