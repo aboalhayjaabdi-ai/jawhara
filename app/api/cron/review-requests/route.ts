@@ -24,12 +24,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, enabled: false, sent: 0, skipped: 0 });
   }
 
-  const { data: due } = await supabaseService
+  const { data: due, error: dueError } = await supabaseService
     .from("review_request_schedule")
     .select("id, order_id, attempts")
     .eq("status", "scheduled")
     .lte("send_after", new Date().toISOString())
     .limit(BATCH_SIZE);
+  if (dueError) return NextResponse.json({ ok: false, debug: "due query error", error: dueError });
 
   let sent = 0;
   let skipped = 0;
@@ -118,5 +119,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, enabled: true, sent, skipped });
+  return NextResponse.json({ ok: true, enabled: true, sent, skipped, debugDueCount: (due ?? []).length });
 }
