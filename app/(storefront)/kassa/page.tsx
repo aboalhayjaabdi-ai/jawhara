@@ -144,8 +144,14 @@ export default function KassaPage() {
         <div className="border-b border-line px-5 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-widest">Frakt</h2>
         </div>
-        <div className="px-5 py-5 text-sm">
-          <p>{SHIPPING_METHOD_NAME} — 0 kr</p>
+        <div className="flex items-center justify-between gap-4 px-5 py-5">
+          <div className="flex items-center gap-3">
+            <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden border border-line">
+              <Image src="/brand/postnord-logo.png" alt="PostNord" fill sizes="40px" className="object-cover" />
+            </div>
+            <span className="text-sm font-medium">{SHIPPING_METHOD_NAME}</span>
+          </div>
+          <span className="text-sm font-semibold">Gratis</span>
         </div>
       </div>
 
