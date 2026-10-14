@@ -311,6 +311,12 @@ export type ProductFeedItem = {
   compareAtPrice: number | null;
   currency: string;
   available: boolean;
+  // Every real collection (by handle) this product belongs to -- a product can be in several,
+  // so this is an array, not a single value. Rendered into the feed as a comma-joined
+  // custom_label (Meta/Google's own recommended mechanism for product-set rules), never as
+  // separate duplicate feed rows -- one rule per collection with a "contains" match is how
+  // Commerce Manager recreates the old per-collection product sets from this.
+  collectionHandles: string[];
 };
 
 /** Real, active catalog data for the public Google Shopping/Meta-catalog-compatible product feed
@@ -319,17 +325,30 @@ export type ProductFeedItem = {
  * content_ids reference. Every value here is already-real Supabase data -- nothing is invented
  * for the feed. */
 export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
-  const { data } = await supabase
-    .from("products")
-    .select(
-      "id, title, handle, description_html, status, media(storage_path, position, variant_id), product_variants(id, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
-    )
-    .eq("status", "active")
-    .order("title", { ascending: true });
+  const [{ data }, { data: collectionLinks }] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, title, handle, description_html, status, media(storage_path, position, variant_id), product_variants(id, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
+      )
+      .eq("status", "active")
+      .order("title", { ascending: true }),
+    supabase.from("collection_products").select("product_id, collections(handle)"),
+  ]);
+
+  const collectionHandlesByProductId = new Map<string, string[]>();
+  for (const link of (collectionLinks ?? []) as any[]) {
+    const handle = link.collections?.handle;
+    if (!handle) continue;
+    const existing = collectionHandlesByProductId.get(link.product_id) ?? [];
+    existing.push(handle);
+    collectionHandlesByProductId.set(link.product_id, existing);
+  }
 
   const items: ProductFeedItem[] = [];
   for (const p of (data ?? []) as any[]) {
     const card = toCard(p);
+    const collectionHandles = collectionHandlesByProductId.get(p.id) ?? [];
     for (const v of card.variants) {
       const variantLabel = [v.option1, v.option2, v.option3].filter((o) => o && o !== "Default Title").join(" / ");
       items.push({
@@ -343,6 +362,7 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
         compareAtPrice: v.compareAtPrice,
         currency: "SEK",
         available: v.available,
+        collectionHandles,
       });
     }
   }
