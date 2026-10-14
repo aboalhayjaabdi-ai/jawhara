@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import {
@@ -17,10 +16,12 @@ import {
 import { ProductCard } from "@/components/product/product-card";
 import { SubcategoryTiles } from "@/components/collection/subcategory-tiles";
 import { SortFilterBar } from "@/components/collection/sort-filter-bar";
+import { Pagination } from "@/components/collection/pagination";
 
 export const revalidate = 60;
 
 const PAGE_SIZE = 24;
+const GRID_ANCHOR_ID = "produktrutnat";
 const VALID_SORTS: CollectionSort[] = ["manual", "price-asc", "price-desc", "title-asc", "title-desc", "created-desc", "created-asc"];
 
 // Same reasoning as the product page's generateStaticParams (see lib/queries.ts's
@@ -83,7 +84,7 @@ export default async function CollectionPage({
   if (handle === "all") {
     const { cards, total } = filtered ? await getFilteredAllProducts(filterOptions, PAGE_SIZE, offset) : await getAllProductCards(PAGE_SIZE, offset);
     if (cards.length === 0 && page === 1 && !filtered) notFound();
-    return <CollectionGrid title="Alla produkter" description={null} products={cards} total={total} page={page} handle={handle} />;
+    return <CollectionGrid title="Alla produkter" description={null} products={cards} total={total} page={page} />;
   }
 
   const meta = await getCollectionMeta(handle);
@@ -100,7 +101,6 @@ export default async function CollectionPage({
       products={products}
       total={total}
       page={page}
-      handle={handle}
       templateSuffix={meta.template_suffix}
     />
   );
@@ -112,7 +112,6 @@ function CollectionGrid({
   products,
   total,
   page,
-  handle,
   templateSuffix = null,
 }: {
   title: string;
@@ -120,10 +119,9 @@ function CollectionGrid({
   products: { handle: string }[];
   total: number;
   page: number;
-  handle: string;
   templateSuffix?: string | null;
 }) {
-  const hasNextPage = page * PAGE_SIZE < total;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-14 lg:px-14">
       <div className="pb-8 text-center">
@@ -144,7 +142,7 @@ function CollectionGrid({
         <SortFilterBar />
       </div>
 
-      <div className="grid grid-cols-2 gap-6 pt-2 lg:grid-cols-4 lg:gap-7">
+      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-6 pt-2 lg:grid-cols-4 lg:gap-7">
         {products.map((p: any) => (
           <ProductCard key={p.handle} product={p} />
         ))}
@@ -154,13 +152,7 @@ function CollectionGrid({
         <p className="pt-10 text-center text-sm text-muted">Inga produkter matchar valda filter.</p>
       )}
 
-      {hasNextPage && (
-        <div className="mt-14 text-center">
-          <Link href={`/collections/${handle}?page=${page + 1}`} className="border-b border-fg text-xs font-semibold uppercase tracking-wide">
-            Ladda fler produkter
-          </Link>
-        </div>
-      )}
+      <Pagination currentPage={page} totalPages={totalPages} gridAnchorId={GRID_ANCHOR_ID} />
     </div>
   );
 }
