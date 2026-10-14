@@ -17,6 +17,8 @@ export default async function AdminReviewDetailPage({ params }: { params: Promis
     .maybeSingle();
   if (!review) notFound();
 
+  const photoUrls: string[] = Array.isArray(review.photo_urls) ? review.photo_urls : [];
+
   const initial: ReviewFormInitial = {
     rating: review.rating,
     authorName: review.author_name,
@@ -48,6 +50,18 @@ export default async function AdminReviewDetailPage({ params }: { params: Promis
       )}
 
       <div className="mt-6 space-y-6">
+        {photoUrls.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Bilder från kunden</div>
+            <div className="flex flex-wrap gap-3">
+              {photoUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer">
+                  <img src={url} alt="" className="h-24 w-24 rounded-md border border-gray-200 object-cover" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
         <ReviewForm reviewId={id} initial={initial} />
         <ReviewReplyCard reviewId={id} initialReply={review.merchant_reply_body} />
       </div>

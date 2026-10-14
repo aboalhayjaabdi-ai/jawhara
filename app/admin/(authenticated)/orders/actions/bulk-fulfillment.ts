@@ -5,6 +5,7 @@ import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
+import { scheduleReviewRequest } from "@/lib/reviews/schedule";
 
 export type BulkFulfillResult = { ok: true; fulfilled: number; skipped: string[] } | { ok: false; error: string };
 
@@ -54,6 +55,7 @@ export async function bulkFulfillOrders(orderIds: string[]): Promise<BulkFulfill
       await supabaseService.from("order_items").update({ fulfilled_quantity: item.quantity }).eq("id", item.id);
     }
     await supabaseService.from("orders").update({ fulfillment_status: "FULFILLED" }).eq("id", orderId);
+    await scheduleReviewRequest(orderId);
 
     if (order.email) {
       const lineItems = await buildEmailLineItems(

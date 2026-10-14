@@ -10,7 +10,7 @@ export type ReviewFormInitial = {
   body: string | null;
   verifiedBuyer: boolean;
   status: "pending" | "approved" | "rejected";
-  source: "judgeme" | "manual";
+  source: "judgeme" | "manual" | "storefront";
   customerEmail: string | null;
   createdAt: string;
 };
@@ -62,7 +62,8 @@ export function ReviewForm({ reviewId, initial }: { reviewId: string; initial: R
         <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
           <span>Recension</span>
           <span className="text-gray-400">
-            {initial.source === "judgeme" ? "Importerad från Judge.me" : "Manuellt tillagd"} · {formatDate(initial.createdAt)}
+            {initial.source === "judgeme" ? "Importerad från Judge.me" : initial.source === "storefront" ? "Inskickad av kund" : "Manuellt tillagd"} ·{" "}
+            {formatDate(initial.createdAt)}
           </span>
         </div>
 

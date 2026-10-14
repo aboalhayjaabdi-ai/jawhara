@@ -9,6 +9,7 @@ import type { ProductTemplateContent } from "@/lib/product-templates";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { ProductGallery } from "@/components/product/product-gallery";
+import { ReviewSubmitSection } from "@/components/product/review-submit-section";
 
 type Variant = {
   id: string;
@@ -67,6 +68,7 @@ function AccordionRow({ heading, body, defaultOpen = false }: { heading: string;
 }
 
 export function ProductDetail({
+  productId,
   title,
   handle,
   status,
@@ -81,6 +83,7 @@ export function ProductDetail({
   variantImageIndex,
   walletPromoEligible,
 }: {
+  productId: string;
   title: string;
   handle: string;
   status: string;
@@ -272,20 +275,26 @@ export function ProductDetail({
         </div>
       </div>
 
-      {reviews.length > 0 && (
-        <div id="recensioner" className="mt-16 border-t border-line pt-16">
-          <div className="max-w-[760px]">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">Recensioner</div>
-            <h2 className="mt-2.5 text-[26px]">Vad kunder säger</h2>
-            {avgRating != null && (
-              <div className="mt-5 flex items-center gap-3">
-                <span className="text-xl">{stars(avgRating)}</span>
-                <span className="text-sm text-muted">
-                  {avgRating.toFixed(1)} av 5 — {reviews.length} {reviews.length === 1 ? "recension" : "recensioner"}
-                </span>
-              </div>
-            )}
-            {reviews.map((r, i) => (
+      <div id="recensioner" className="mt-16 border-t border-line pt-16">
+        <div className="max-w-[760px]">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Recensioner</div>
+          <h2 className="mt-2.5 text-[26px]">Vad kunder säger</h2>
+          {avgRating != null && (
+            <div className="mt-5 flex items-center gap-3">
+              <span className="text-xl">{stars(avgRating)}</span>
+              <span className="text-sm text-muted">
+                {avgRating.toFixed(1)} av 5 — {reviews.length} {reviews.length === 1 ? "recension" : "recensioner"}
+              </span>
+            </div>
+          )}
+          {reviews.length === 0 && <p className="mt-5 text-sm text-muted">Bli först med att recensera den här produkten.</p>}
+
+          <Suspense fallback={null}>
+            <ReviewSubmitSection productId={productId} />
+          </Suspense>
+
+          {reviews.length > 0 &&
+            reviews.map((r, i) => (
               <div key={i} className="mt-6 border-t border-line pt-6">
                 <div className="text-xs tracking-wide">{stars(r.rating)}</div>
                 {r.body && <p className="mt-3 text-sm leading-6">&ldquo;{r.body}&rdquo;</p>}
@@ -301,9 +310,8 @@ export function ProductDetail({
                 )}
               </div>
             ))}
-          </div>
         </div>
-      )}
+      </div>
 
       {content?.uspBlock && (
         <div className="mt-16 border-t border-line pt-14">

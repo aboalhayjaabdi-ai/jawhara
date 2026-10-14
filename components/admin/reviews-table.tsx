@@ -13,7 +13,7 @@ export type ReviewRow = {
   body: string | null;
   verifiedBuyer: boolean;
   status: "pending" | "approved" | "rejected";
-  source: "judgeme" | "manual";
+  source: "judgeme" | "manual" | "storefront";
   hasReply: boolean;
   createdAt: string;
 };
@@ -156,7 +156,7 @@ export function ReviewsTable({ reviews }: { reviews: ReviewRow[] }) {
                 <td className="px-5 py-3">
                   <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_COLOR[r.status]}`}>{STATUS_LABEL[r.status]}</span>
                 </td>
-                <td className="px-5 py-3 text-gray-500">{r.source === "judgeme" ? "Judge.me" : "Manuell"}</td>
+                <td className="px-5 py-3 text-gray-500">{r.source === "judgeme" ? "Judge.me" : r.source === "storefront" ? "Webbutik" : "Manuell"}</td>
                 <td className="px-5 py-3 text-gray-500">{formatDate(r.createdAt)}</td>
               </tr>
             ))}

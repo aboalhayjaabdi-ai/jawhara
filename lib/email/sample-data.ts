@@ -5,6 +5,7 @@ import {
   shippingConfirmationTemplate,
   refundNotificationTemplate,
   orderCancellationTemplate,
+  reviewRequestTemplate,
   type EmailTemplateContent,
 } from "@/lib/email/templates";
 import type { EmailTemplateKey } from "@/lib/admin/email-templates";
@@ -44,6 +45,12 @@ function sampleParamsFor(key: EmailTemplateKey) {
   if (key === "order_cancellation") {
     return { orderNumber: SAMPLE_ORDER_NUMBER, items, reason: "På kundens begäran." };
   }
+  if (key === "review_request") {
+    return {
+      orderNumber: SAMPLE_ORDER_NUMBER,
+      items: items.map((i) => ({ title: i.title, variantTitle: i.variantTitle, imageUrl: i.imageUrl, reviewUrl: "https://jawhara.se/produkter/exempel?review_token=exempel" })),
+    };
+  }
   return { orderNumber: SAMPLE_ORDER_NUMBER, refundAmount: 399, reason: "En av produkterna var slut i lager.", items: [items[0]] };
 }
 
@@ -52,5 +59,6 @@ export function renderSampleEmail(key: EmailTemplateKey, content: EmailTemplateC
   if (key === "order_confirmation") return orderConfirmationTemplate(content, params as any);
   if (key === "shipping_confirmation") return shippingConfirmationTemplate(content, params as any);
   if (key === "order_cancellation") return orderCancellationTemplate(content, params as any);
+  if (key === "review_request") return reviewRequestTemplate(content, params as any);
   return refundNotificationTemplate(content, params as any);
 }

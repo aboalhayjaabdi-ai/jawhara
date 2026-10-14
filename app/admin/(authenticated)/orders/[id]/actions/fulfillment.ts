@@ -7,6 +7,7 @@ import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
+import { scheduleReviewRequest } from "@/lib/reviews/schedule";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -87,6 +88,7 @@ export async function createFulfillment(
   const anyFulfilled = (refreshedItems ?? []).some((i) => i.fulfilled_quantity > 0);
   const newStatus = allFulfilled ? "FULFILLED" : anyFulfilled ? "PARTIALLY_FULFILLED" : "UNFULFILLED";
   await supabaseService.from("orders").update({ fulfillment_status: newStatus }).eq("id", orderId);
+  if (newStatus === "FULFILLED") await scheduleReviewRequest(orderId);
 
   if (input.notifyCustomer && order.email) {
     const { data: address } = order.shipping_address_id

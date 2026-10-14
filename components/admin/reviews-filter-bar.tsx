@@ -45,6 +45,7 @@ export function ReviewsFilterBar() {
         <option value="">Alla källor</option>
         <option value="judgeme">Judge.me</option>
         <option value="manual">Manuell</option>
+        <option value="storefront">Webbutik</option>
       </select>
       <select defaultValue={searchParams.get("verified") ?? ""} onChange={(e) => update({ verified: e.target.value || null })} className="rounded-md border border-gray-200 px-3 py-1.5 text-sm">
         <option value="">Alla köp</option>

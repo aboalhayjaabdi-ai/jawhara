@@ -189,6 +189,38 @@ export function refundNotificationTemplate(
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
 
+export type ReviewRequestItem = { title: string; variantTitle?: string | null; imageUrl?: string | null; reviewUrl: string };
+
+function reviewItemsTable(items: ReviewRequestItem[]) {
+  const rows = items
+    .map(
+      (i) => `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 12px 10px 12px 0; width: 64px;" valign="top">${itemImageCell({ title: i.title, variantTitle: i.variantTitle ?? null, qty: 1, unitPrice: 0, imageUrl: i.imageUrl })}</td>
+        <td style="padding: 12px 0;" valign="middle">
+          ${i.title}${i.variantTitle ? `<br/><span style="color:#666; font-size: 12px;">${i.variantTitle}</span>` : ""}
+        </td>
+        <td style="padding: 12px 0; text-align: right; white-space: nowrap;" valign="middle">
+          <a href="${escapeAttr(i.reviewUrl)}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; font-weight: 600; padding: 10px 16px;">
+            Skriv en recension
+          </a>
+        </td>
+      </tr>`
+    )
+    .join("");
+  return `<table role="presentation" style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">${rows}</table>`;
+}
+
+export function reviewRequestTemplate(content: EmailTemplateContent, params: { orderNumber: string; items: ReviewRequestItem[] }) {
+  const { orderNumber, items } = params;
+  const body = `
+    ${content.introHtml}
+    ${reviewItemsTable(items)}
+    ${content.outroHtml ?? ""}
+  `;
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
+}
+
 export function orderCancellationTemplate(
   content: EmailTemplateContent,
   params: { orderNumber: string; items: OrderLineItem[]; reason?: string | null }

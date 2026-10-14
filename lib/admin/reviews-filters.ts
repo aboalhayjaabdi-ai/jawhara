@@ -2,7 +2,7 @@ export type ReviewsListFilters = {
   q?: string;
   status?: "pending" | "approved" | "rejected";
   rating?: number;
-  source?: "judgeme" | "manual";
+  source?: "judgeme" | "manual" | "storefront";
   verified?: boolean;
   productId?: string;
   sort?: "created_at" | "rating" | "status";
