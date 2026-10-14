@@ -143,7 +143,7 @@ export function ProductDetail({
 
   useEffect(() => {
     if (!variant) return;
-    trackViewContent({ id: variant.id, title, price: variant.price, currency: "SEK" });
+    trackViewContent({ id: variant.id, title, price: variant.price, currency: "SEK", productHandle: handle });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle, variant?.id]);
 

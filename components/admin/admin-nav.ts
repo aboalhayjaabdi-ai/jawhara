@@ -6,6 +6,7 @@ import { t } from "@/lib/admin/i18n";
 // link here ahead of the page it points to.
 export const ADMIN_NAV = [
   { href: "/admin", label: "Översikt" },
+  { href: "/admin/analytics", label: "Webbplatsstatistik" },
   { href: "/admin/orders", label: "Ordrar" },
   { href: "/admin/customers", label: "Kunder" },
   { href: "/admin/products", label: "Produkter" },
