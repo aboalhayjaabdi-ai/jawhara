@@ -135,8 +135,11 @@ export function ProductDetail({
       ),
       quickAddVariantId: variants.length === 1 ? variants[0].id : null,
       // Recently-viewed is a flattened point-in-time snapshot (see lib/recently-viewed.ts) --
-      // multi-variant quick-add there is out of scope for this round, same as before.
+      // multi-variant quick-add there is out of scope for this round, same as before. The PDP
+      // doesn't compute real "3 för 2" eligibility (no badge shown here today, only on grid
+      // cards), so this snapshot never shows that badge either -- never a guessed/stale value.
       variants: [],
+      threeForTwo: false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
