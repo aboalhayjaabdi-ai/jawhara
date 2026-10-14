@@ -20,6 +20,11 @@ function sha256(value: string): string {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const sessionId = body?.sessionId as string | undefined;
+  // Only ever set by deliberate verification calls (e.g. against Meta's Test Events tool) --
+  // the real confirmation page never sends this, so normal traffic is unaffected. A short-lived
+  // code from Meta Events Manager only ever routes an event into that account's own Test Events
+  // view; it can't forge or suppress anyone else's data.
+  const testEventCode = body?.testEventCode as string | undefined;
   if (!sessionId) return NextResponse.json({ ok: false, error: "Missing sessionId" }, { status: 400 });
 
   const { data: order } = await supabaseService
@@ -65,6 +70,7 @@ export async function POST(req: NextRequest) {
         },
       },
     ],
+    ...(testEventCode ? { test_event_code: testEventCode } : {}),
   };
 
   try {
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: data?.error?.message ?? "Meta CAPI request failed" }, { status: 502 });
     }
-    return NextResponse.json({ ok: true, sent: true });
+    return NextResponse.json({ ok: true, sent: true, metaResponse: data });
   } catch {
     return NextResponse.json({ ok: false, error: "Network error calling Meta CAPI" }, { status: 502 });
   }
