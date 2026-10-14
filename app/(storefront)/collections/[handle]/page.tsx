@@ -13,10 +13,9 @@ import {
   type CollectionFilterOptions,
   type CollectionSort,
 } from "@/lib/queries";
-import { ProductCard } from "@/components/product/product-card";
 import { SubcategoryTiles } from "@/components/collection/subcategory-tiles";
 import { SortFilterBar } from "@/components/collection/sort-filter-bar";
-import { Pagination } from "@/components/collection/pagination";
+import { PaginatedGrid } from "@/components/collection/paginated-grid";
 
 export const revalidate = 60;
 
@@ -84,7 +83,7 @@ export default async function CollectionPage({
   if (handle === "all") {
     const { cards, total } = filtered ? await getFilteredAllProducts(filterOptions, PAGE_SIZE, offset) : await getAllProductCards(PAGE_SIZE, offset);
     if (cards.length === 0 && page === 1 && !filtered) notFound();
-    return <CollectionGrid title="Alla produkter" description={null} products={cards} total={total} page={page} />;
+    return <CollectionGrid handle="all" title="Alla produkter" description={null} products={cards} total={total} page={page} />;
   }
 
   const meta = await getCollectionMeta(handle);
@@ -96,6 +95,7 @@ export default async function CollectionPage({
 
   return (
     <CollectionGrid
+      handle={handle}
       title={meta.title}
       description={meta.description_html}
       products={products}
@@ -107,6 +107,7 @@ export default async function CollectionPage({
 }
 
 function CollectionGrid({
+  handle,
   title,
   description,
   products,
@@ -114,14 +115,14 @@ function CollectionGrid({
   page,
   templateSuffix = null,
 }: {
+  handle: string;
   title: string;
   description: string | null;
-  products: { handle: string }[];
+  products: import("@/lib/queries").ProductCard[];
   total: number;
   page: number;
   templateSuffix?: string | null;
 }) {
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-14 lg:px-14">
       <div className="pb-8 text-center">
@@ -142,17 +143,7 @@ function CollectionGrid({
         <SortFilterBar />
       </div>
 
-      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-6 pt-2 lg:grid-cols-4 lg:gap-7">
-        {products.map((p: any) => (
-          <ProductCard key={p.handle} product={p} />
-        ))}
-      </div>
-
-      {products.length === 0 && (
-        <p className="pt-10 text-center text-sm text-muted">Inga produkter matchar valda filter.</p>
-      )}
-
-      <Pagination currentPage={page} totalPages={totalPages} gridAnchorId={GRID_ANCHOR_ID} />
+      <PaginatedGrid handle={handle} initialProducts={products} initialTotal={total} initialPage={page} gridAnchorId={GRID_ANCHOR_ID} />
     </div>
   );
 }

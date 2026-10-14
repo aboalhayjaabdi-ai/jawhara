@@ -280,13 +280,20 @@ export const getCollectionMeta = cache(async (handle: string) => {
   return data;
 });
 
+/** Must stay filtered by products.status = 'active', exactly like getCollectionProductCards'
+ * join -- a plain unfiltered count here (the original bug) counts draft/archived products too,
+ * inflating `total` past what the active-only cards query can ever return. 19 of 31 real
+ * collections had this mismatch (e.g. "Armband": 216 raw rows vs 172 active), which made the
+ * last computed page(s) request an offset beyond the real active row count -- an empty grid with
+ * a page number that looked valid. */
 export async function getCollectionProductCount(handle: string): Promise<number> {
   const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).single();
   if (!collection) return 0;
   const { count } = await supabase
     .from("collection_products")
-    .select("product_id", { count: "exact", head: true })
-    .eq("collection_id", collection.id);
+    .select("product_id, products!inner(status)", { count: "exact", head: true })
+    .eq("collection_id", collection.id)
+    .eq("products.status", "active");
   return count ?? 0;
 }
 
