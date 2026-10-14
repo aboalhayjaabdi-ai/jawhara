@@ -10,15 +10,18 @@ export async function GET(req: NextRequest) {
 
   const { data: order } = await supabaseService
     .from("orders")
-    .select("order_number, financial_status, total_price")
+    .select("id, order_number, financial_status, total_price")
     .eq("stripe_checkout_session_id", sessionId)
     .single();
 
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
+  const { data: items } = await supabaseService.from("order_items").select("variant_id").eq("order_id", order.id);
+
   return NextResponse.json({
     orderNumber: order.order_number,
     status: order.financial_status,
     total: Number(order.total_price),
+    variantIds: (items ?? []).map((i) => i.variant_id).filter((v): v is string => !!v),
   });
 }

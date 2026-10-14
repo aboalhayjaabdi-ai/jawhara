@@ -8,7 +8,7 @@ import { useCart, useCartTotals } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
-import { trackInitiateCheckout } from "@/lib/marketing/events";
+import { trackInitiateCheckout, trackAddPaymentInfo } from "@/lib/marketing/events";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
@@ -21,13 +21,14 @@ export default function KassaPage() {
   const { items, hydrated, discountCode } = useCart();
   const { totals, loading } = useCartTotals();
   const trackedRef = useRef(false);
+  const trackedPaymentInfoRef = useRef(false);
 
   useEffect(() => {
     if (!hydrated || items.length === 0 || trackedRef.current) return;
     trackedRef.current = true;
     const value = items.reduce((sum, i) => sum + i.price * i.qty, 0);
     const itemCount = items.reduce((sum, i) => sum + i.qty, 0);
-    trackInitiateCheckout({ value, currency: "SEK", itemCount });
+    trackInitiateCheckout({ value, currency: "SEK", itemCount, contentIds: items.map((i) => i.variantId) });
   }, [hydrated, items]);
 
   const fetchClientSecret = useCallback(async () => {
@@ -42,6 +43,14 @@ export default function KassaPage() {
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error ?? (Array.isArray(data.errors) ? data.errors.join(", ") : "Något gick fel."));
+    }
+    // The embedded payment form is about to render with a real Stripe Checkout Session now that
+    // this succeeded -- the natural "customer reached the payment step" moment for this
+    // embedded-iframe flow, which has no finer-grained field-level event to hook into.
+    if (!trackedPaymentInfoRef.current) {
+      trackedPaymentInfoRef.current = true;
+      const value = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+      trackAddPaymentInfo({ value, currency: "SEK" });
     }
     return data.clientSecret as string;
   }, [items, discountCode]);

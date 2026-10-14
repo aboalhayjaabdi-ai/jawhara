@@ -37,6 +37,11 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
   return (
     <>
       {trackingActive && metaPixelId && (
+        // This inline script's own fbq('track','PageView') covers the very first page load,
+        // fired in the same script execution as fbq('init', ...) so there's no race with
+        // PageViewTracker (mounted once in the root layout) -- that component deliberately skips
+        // its first run and only fires PageView on later client-side route changes, so the two
+        // can never double-count the same page view.
         <Script id="meta-pixel" strategy="afterInteractive">
           {`
             !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?

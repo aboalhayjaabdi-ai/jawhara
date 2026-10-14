@@ -3,6 +3,7 @@ import { searchProductCards } from "@/lib/queries";
 import { ProductCard } from "@/components/product/product-card";
 import { RecentlyViewed } from "@/components/search/recently-viewed";
 import { SearchForm } from "@/components/search/search-form";
+import { SearchTracker } from "@/components/search/search-tracker";
 
 export const metadata: Metadata = { title: "Sök" };
 
@@ -14,6 +15,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-14 lg:px-14">
       <SearchForm initialQuery={query} />
+      {query && <SearchTracker query={query} resultCount={products.length} />}
 
       {query && (
         <div className="pb-8 pt-10 text-center text-xs font-semibold uppercase tracking-wide text-muted">

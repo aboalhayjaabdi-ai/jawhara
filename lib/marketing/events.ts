@@ -37,17 +37,40 @@ export function trackAddToCart(params: { id: string; title: string; price: numbe
   });
 }
 
-export function trackInitiateCheckout(params: { value: number; currency: string; itemCount: number }) {
+export function trackInitiateCheckout(params: { value: number; currency: string; itemCount: number; contentIds?: string[] }) {
   if (typeof window === "undefined") return;
-  window.fbq?.("track", "InitiateCheckout", { value: params.value, currency: params.currency, num_items: params.itemCount });
+  window.fbq?.("track", "InitiateCheckout", {
+    value: params.value,
+    currency: params.currency,
+    num_items: params.itemCount,
+    content_ids: params.contentIds,
+    content_type: "product",
+  });
   window.gtag?.("event", "begin_checkout", { value: params.value, currency: params.currency });
+}
+
+export function trackAddPaymentInfo(params: { value: number; currency: string }) {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "AddPaymentInfo", { value: params.value, currency: params.currency });
+  window.gtag?.("event", "add_payment_info", { value: params.value, currency: params.currency });
+}
+
+export function trackSearch(params: { query: string; resultCount?: number }) {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "Search", { search_string: params.query, content_type: "product" });
+  window.gtag?.("event", "search", { search_term: params.query });
 }
 
 /** `eventId` is the same value sent to the server-side Conversions API call for this same
  * purchase (the Stripe Checkout session ID) -- required for Meta to deduplicate the browser
  * pixel event against the server event instead of double-counting one real purchase. */
-export function trackPurchase(params: { eventId: string; orderNumber: string; value: number; currency: string }) {
+export function trackPurchase(params: { eventId: string; orderNumber: string; value: number; currency: string; contentIds?: string[] }) {
   if (typeof window === "undefined") return;
-  window.fbq?.("track", "Purchase", { value: params.value, currency: params.currency, content_name: params.orderNumber }, { eventID: params.eventId });
+  window.fbq?.(
+    "track",
+    "Purchase",
+    { value: params.value, currency: params.currency, content_name: params.orderNumber, content_ids: params.contentIds, content_type: "product" },
+    { eventID: params.eventId }
+  );
   window.gtag?.("event", "purchase", { transaction_id: params.orderNumber, value: params.value, currency: params.currency });
 }

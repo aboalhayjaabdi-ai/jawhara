@@ -24,13 +24,18 @@ export async function POST(req: NextRequest) {
 
   const { data: order } = await supabaseService
     .from("orders")
-    .select("order_number, financial_status, total_price, currency_code, email, phone")
+    .select("id, order_number, financial_status, total_price, currency_code, email, phone")
     .eq("stripe_checkout_session_id", sessionId)
     .single();
 
   if (!order || order.financial_status !== "paid") {
     return NextResponse.json({ ok: false, error: "Order not found or not paid" }, { status: 404 });
   }
+
+  const { data: items } = await supabaseService.from("order_items").select("variant_id, quantity").eq("order_id", order.id);
+  const contents = (items ?? [])
+    .filter((i) => i.variant_id)
+    .map((i) => ({ id: i.variant_id as string, quantity: i.quantity }));
 
   const settings = await getMarketingSettings();
   if (!settings.metaPixelId || !settings.metaCapiAccessToken) {
@@ -54,6 +59,9 @@ export async function POST(req: NextRequest) {
           currency: order.currency_code,
           value: Number(order.total_price),
           content_name: order.order_number,
+          content_type: "product",
+          content_ids: contents.map((c) => c.id),
+          contents,
         },
       },
     ],

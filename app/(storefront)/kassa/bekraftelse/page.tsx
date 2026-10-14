@@ -18,6 +18,7 @@ function Confirmation() {
   const [status, setStatus] = useState<Status>("loading");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [total, setTotal] = useState<number | null>(null);
+  const [variantIds, setVariantIds] = useState<string[]>([]);
   const { items, removeItem } = useCart();
   const clearedRef = useRef(false);
   const trackedPurchaseRef = useRef(false);
@@ -42,6 +43,7 @@ function Confirmation() {
         }
         setOrderNumber(data.orderNumber);
         setTotal(data.total);
+        setVariantIds(Array.isArray(data.variantIds) ? data.variantIds : []);
         if (data.status === "paid") {
           setStatus("paid");
           return;
@@ -79,7 +81,7 @@ function Confirmation() {
   useEffect(() => {
     if (status !== "paid" || !sessionId || !orderNumber || total == null || trackedPurchaseRef.current) return;
     trackedPurchaseRef.current = true;
-    trackPurchase({ eventId: sessionId, orderNumber, value: total, currency: "SEK" });
+    trackPurchase({ eventId: sessionId, orderNumber, value: total, currency: "SEK", contentIds: variantIds });
     fetch("/api/marketing/capi-purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,7 +89,7 @@ function Confirmation() {
     }).catch(() => {
       // Best-effort server-side event -- never blocks or affects the confirmation page.
     });
-  }, [status, sessionId, orderNumber, total]);
+  }, [status, sessionId, orderNumber, total, variantIds]);
 
   return (
     <div className="mx-auto max-w-xl px-6 py-24 text-center">

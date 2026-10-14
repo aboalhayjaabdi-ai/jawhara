@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { unstable_cache } from "next/cache";
 import { Newsreader, Red_Hat_Text } from "next/font/google";
 import "../globals.css";
@@ -9,6 +10,7 @@ import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
 import { CookieConsentAndTracking } from "@/components/marketing/cookie-consent-and-tracking";
+import { PageViewTracker } from "@/components/marketing/page-view-tracker";
 import { getSiteMenus, getLogoUrl } from "@/lib/queries";
 import { getPublicMarketingIds } from "@/lib/admin/marketing-settings";
 import { getGiftBoxOffer } from "@/lib/gift-box";
@@ -62,6 +64,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <CartDrawer giftBoxOffer={giftBoxOffer} />
           <AddToCartToast />
           <CookieConsentAndTracking metaPixelId={marketingIds.metaPixelId} ga4MeasurementId={marketingIds.ga4MeasurementId} />
+          <Suspense fallback={null}>
+            <PageViewTracker />
+          </Suspense>
         </CartProvider>
       </body>
     </html>
