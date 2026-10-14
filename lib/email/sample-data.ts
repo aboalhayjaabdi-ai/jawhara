@@ -48,7 +48,7 @@ function sampleParamsFor(key: EmailTemplateKey) {
   if (key === "review_request") {
     return {
       orderNumber: SAMPLE_ORDER_NUMBER,
-      items: items.map((i) => ({ title: i.title, variantTitle: i.variantTitle, imageUrl: i.imageUrl, reviewUrl: "https://jawhara.se/produkter/exempel?review_token=exempel" })),
+      items: items.map((i) => ({ title: i.title, variantTitle: i.variantTitle, imageUrl: i.imageUrl, reviewUrl: "https://jawhara.se/products/exempel?review_token=exempel" })),
     };
   }
   return { orderNumber: SAMPLE_ORDER_NUMBER, refundAmount: 399, reason: "En av produkterna var slut i lager.", items: [items[0]] };

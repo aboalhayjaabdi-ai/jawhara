@@ -46,5 +46,5 @@ export function verifyReviewToken(token: string): { orderId: string; productId: 
  * number/email re-entry needed, same UX principle as the tracking-link token. */
 export function buildReviewLinkUrl(productHandle: string, orderId: string, productId: string, siteUrl: string): string {
   const token = createReviewToken(orderId, productId);
-  return `${siteUrl}/produkter/${productHandle}?review_token=${token}#skriv-recension`;
+  return `${siteUrl}/products/${productHandle}?review_token=${token}#skriv-recension`;
 }
