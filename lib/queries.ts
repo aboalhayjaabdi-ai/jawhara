@@ -319,13 +319,33 @@ export type ProductFeedItem = {
   collectionHandles: string[];
 };
 
+/** collection_products has 1788 rows (growing) -- well past PostgREST's 1000-row default page
+ * cap, which silently truncated the feed's collection labels to whatever happened to sort into
+ * the first 1000 (missing real assignments, "Ads meta" among them, caught by checking the live
+ * feed against the real table). Pages through every row explicitly instead of trusting one
+ * unbounded select ever returns everything. */
+async function fetchAllCollectionProductLinks(): Promise<{ product_id: string; collections: { handle: string } | null }[]> {
+  const PAGE_SIZE = 1000;
+  const all: { product_id: string; collections: { handle: string } | null }[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data } = await supabase
+      .from("collection_products")
+      .select("product_id, collections(handle)")
+      .range(offset, offset + PAGE_SIZE - 1);
+    const page = (data ?? []) as any[];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
 /** Real, active catalog data for the public Google Shopping/Meta-catalog-compatible product feed
  * (app/feed/products.xml) -- one entry per purchasable variant (not per product), each with its
  * own price/availability/image, since that's what customers actually buy and what the Pixel's
  * content_ids reference. Every value here is already-real Supabase data -- nothing is invented
  * for the feed. */
 export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
-  const [{ data }, { data: collectionLinks }] = await Promise.all([
+  const [{ data }, collectionLinks] = await Promise.all([
     supabase
       .from("products")
       .select(
@@ -333,11 +353,11 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
       )
       .eq("status", "active")
       .order("title", { ascending: true }),
-    supabase.from("collection_products").select("product_id, collections(handle)"),
+    fetchAllCollectionProductLinks(),
   ]);
 
   const collectionHandlesByProductId = new Map<string, string[]>();
-  for (const link of (collectionLinks ?? []) as any[]) {
+  for (const link of collectionLinks) {
     const handle = link.collections?.handle;
     if (!handle) continue;
     const existing = collectionHandlesByProductId.get(link.product_id) ?? [];
