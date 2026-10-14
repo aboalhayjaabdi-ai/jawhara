@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
     .eq("status", "scheduled")
     .lte("send_after", new Date().toISOString())
     .limit(BATCH_SIZE);
-  if (dueError) return NextResponse.json({ ok: false, debug: "due query error", error: dueError });
+  if (dueError) {
+    console.error("Failed to query due review requests:", dueError);
+    return NextResponse.json({ ok: false, error: "query failed" }, { status: 500 });
+  }
 
   let sent = 0;
   let skipped = 0;
@@ -38,13 +41,14 @@ export async function GET(req: NextRequest) {
   for (const row of due ?? []) {
     // Atomic claim: only one cron run (even an overlapping one) can move a row out of
     // 'scheduled', so the same order can never be emailed twice from a race.
-    const { data: claimed } = await supabaseService
+    const { data: claimed, error: claimError } = await supabaseService
       .from("review_request_schedule")
       .update({ status: "sending" })
       .eq("id", row.id)
       .eq("status", "scheduled")
       .select("id")
       .maybeSingle();
+    if (claimError) console.error(`Failed to claim review request schedule row ${row.id}:`, claimError);
     if (!claimed) continue;
 
     try {
@@ -119,5 +123,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, enabled: true, sent, skipped, debugDueCount: (due ?? []).length });
+  return NextResponse.json({ ok: true, enabled: true, sent, skipped });
 }
