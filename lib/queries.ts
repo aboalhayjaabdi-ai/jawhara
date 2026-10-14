@@ -295,7 +295,14 @@ export async function getFeaturedProduct(handle: string) {
 }
 
 export type ProductFeedItem = {
-  id: string;
+  // The variant's own id -- every storefront tracking call (trackViewContent/AddToCart/
+  // InitiateCheckout/Purchase, see lib/marketing/events.ts) sends this exact same id as its
+  // content_id, never the parent product's. A catalog item id that didn't match would make Meta's
+  // dynamic/retargeting ads silently fail to resolve any pixel event back to a catalog item.
+  variantId: string;
+  // Groups this product's variants as one item in Meta/Google's UI -- standard practice for a
+  // multi-variant product, never used for matching against pixel events.
+  productId: string;
   handle: string;
   title: string;
   descriptionHtml: string | null;
@@ -307,31 +314,39 @@ export type ProductFeedItem = {
 };
 
 /** Real, active catalog data for the public Google Shopping/Meta-catalog-compatible product feed
- * (app/feed/products.xml). Every value here is already-real Supabase data -- nothing is invented
+ * (app/feed/products.xml) -- one entry per purchasable variant (not per product), each with its
+ * own price/availability/image, since that's what customers actually buy and what the Pixel's
+ * content_ids reference. Every value here is already-real Supabase data -- nothing is invented
  * for the feed. */
 export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
   const { data } = await supabase
     .from("products")
     .select(
-      "id, title, handle, description_html, status, media(storage_path, position), product_variants(price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, title, handle, description_html, status, media(storage_path, position, variant_id), product_variants(id, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("status", "active")
     .order("title", { ascending: true });
 
-  return (data ?? []).map((p: any) => {
+  const items: ProductFeedItem[] = [];
+  for (const p of (data ?? []) as any[]) {
     const card = toCard(p);
-    return {
-      id: p.id,
-      handle: card.handle,
-      title: card.title,
-      descriptionHtml: p.description_html ?? null,
-      image: card.image,
-      price: card.price,
-      compareAtPrice: card.compareAtPrice,
-      currency: "SEK",
-      available: card.available,
-    };
-  });
+    for (const v of card.variants) {
+      const variantLabel = [v.option1, v.option2, v.option3].filter((o) => o && o !== "Default Title").join(" / ");
+      items.push({
+        variantId: v.id,
+        productId: p.id,
+        handle: card.handle,
+        title: variantLabel ? `${card.title} - ${variantLabel}` : card.title,
+        descriptionHtml: p.description_html ?? null,
+        image: v.image ?? card.image,
+        price: v.price,
+        compareAtPrice: v.compareAtPrice,
+        currency: "SEK",
+        available: v.available,
+      });
+    }
+  }
+  return items;
 }
 
 // Powers generateStaticParams for /products/[handle]. Without generateStaticParams, Next.js 15

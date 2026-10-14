@@ -35,7 +35,8 @@ export async function GET() {
 
       return `
     <item>
-      <g:id>${escapeXml(p.id)}</g:id>
+      <g:id>${escapeXml(p.variantId)}</g:id>
+      <g:item_group_id>${escapeXml(p.productId)}</g:item_group_id>
       <title>${escapeXml(p.title)}</title>
       <description>${escapeXml(description || p.title)}</description>
       <link>${escapeXml(link)}</link>
