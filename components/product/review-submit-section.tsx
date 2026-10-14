@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function ReviewSubmitSection({ productId }: { productId: string }) {
   const searchParams = useSearchParams();
@@ -13,6 +13,15 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
   const [result, setResult] = useState<"ok" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  // This section only exists in the DOM once this client component mounts (it needs the real
+  // URL's ?review_token, so Next.js can't render it on the server for a static product page) --
+  // by then the browser's one-time "jump to #skriv-recension on load" has already happened and
+  // found nothing there, so it never scrolls. Do it ourselves once the form is actually present.
+  useEffect(() => {
+    if (token) sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [token]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -50,7 +59,7 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
   }
 
   return (
-    <div id="skriv-recension" className="mt-10 border-t border-line pt-8">
+    <div id="skriv-recension" ref={sectionRef} className="mt-10 border-t border-line pt-8">
       {!open ? (
         <button
           type="button"
