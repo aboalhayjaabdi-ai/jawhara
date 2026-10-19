@@ -40,30 +40,31 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-const rows = await runSql<{ shopify_id: string; title: string; product_title: string; product_status: string }[]>(
-  `select pv.shopify_id, pv.title, p.title as product_title, p.status as product_status
+// shopify_variant_id (not the legacy shopify_id column, which only holds the bare numeric tail
+// and went stale after the store's product/variant ids were regenerated) -- this is the real,
+// current "gid://shopify/ProductVariant/<id>" mapping lib/shopify/cart-sync.ts also reads.
+const rows = await runSql<{ shopify_variant_id: string; title: string; product_title: string; product_status: string }[]>(
+  `select pv.shopify_variant_id, pv.title, p.title as product_title, p.status as product_status
    from product_variants pv join products p on p.id = pv.product_id
-   where pv.shopify_id is not null and p.status = 'active'
+   where pv.shopify_variant_id is not null and p.status = 'active'
    order by p.title, pv.title`
 );
 console.log(`Checking ${rows.length} active, Shopify-mapped variants against the Storefront API (${DOMAIN})...`);
 
-const byGid = new Map(rows.map((r) => [`gid://shopify/ProductVariant/${r.shopify_id}`, r]));
+const byGid = new Map(rows.map((r) => [r.shopify_variant_id, r]));
 const notFound: typeof rows = [];
 const unavailable: (typeof rows)[number][] = [];
 let available = 0;
 
 for (const idsBatch of chunk([...byGid.keys()], 100)) {
   const data = await storefrontGraphQL<{
-    nodes: Array<{ id: string; availableForSale: boolean; quantityAvailable: number | null; product: { availableForSale: boolean } } | null>;
+    nodes: Array<{ id: string; availableForSale: boolean } | null>;
   }>(
     `query CheckVariants($ids: [ID!]!) {
       nodes(ids: $ids) {
         ... on ProductVariant {
           id
           availableForSale
-          quantityAvailable
-          product { availableForSale }
         }
       }
     }`,
@@ -85,11 +86,11 @@ for (const idsBatch of chunk([...byGid.keys()], 100)) {
 
 console.log(`\nAvailable for sale via Storefront API: ${available}`);
 console.log(`Found but NOT available for sale (stock/publish state): ${unavailable.length}`);
-for (const r of unavailable.slice(0, 20)) console.log(`  - ${r.product_title} / ${r.title} (shopify variant ${r.shopify_id})`);
+for (const r of unavailable.slice(0, 20)) console.log(`  - ${r.product_title} / ${r.title} (shopify variant ${r.shopify_variant_id})`);
 if (unavailable.length > 20) console.log(`  ...and ${unavailable.length - 20} more`);
 
 console.log(`\nNOT FOUND by the Storefront API at all (not published to a Storefront-exposed sales channel): ${notFound.length}`);
-for (const r of notFound.slice(0, 20)) console.log(`  - ${r.product_title} / ${r.title} (shopify variant ${r.shopify_id})`);
+for (const r of notFound.slice(0, 20)) console.log(`  - ${r.product_title} / ${r.title} (shopify variant ${r.shopify_variant_id})`);
 if (notFound.length > 20) console.log(`  ...and ${notFound.length - 20} more`);
 
 if (notFound.length > 0) {

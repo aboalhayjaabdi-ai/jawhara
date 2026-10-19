@@ -22,10 +22,6 @@ export type ShopifyCartSyncResult = {
   warnings: string[];
 };
 
-function toMerchandiseId(variantShopifyId: string): string {
-  return `gid://shopify/ProductVariant/${variantShopifyId}`;
-}
-
 function describeUserErrors(errors: CartUserError[]): string[] {
   return errors
     .filter((e) => e.message)
@@ -34,14 +30,18 @@ function describeUserErrors(errors: CartUserError[]): string[] {
 
 type VariantRow = {
   id: string;
-  shopify_id: string | null;
+  // Full "gid://shopify/ProductVariant/<id>" -- NOT the legacy `shopify_id` column (just the bare
+  // numeric tail, and stale after the store's product/variant ids were regenerated). This is the
+  // column the Phase 2 spec actually named, already backfilled and verified 100% current against
+  // live Shopify -- see the Phase 2 follow-up investigation for how that was confirmed.
+  shopify_variant_id: string | null;
   inventory_quantity: number;
   inventory_tracked: boolean;
   inventory_policy: string | null;
-  products: { status: string; shopify_id: string | null } | { status: string; shopify_id: string | null }[] | null;
+  products: { status: string } | { status: string }[] | null;
 };
 
-function productOf(row: VariantRow): { status: string; shopify_id: string | null } | null {
+function productOf(row: VariantRow): { status: string } | null {
   if (!row.products) return null;
   return Array.isArray(row.products) ? row.products[0] ?? null : row.products;
 }
@@ -63,7 +63,7 @@ async function resolveDesiredLines(
   const variantIds = [...new Set(lines.map((l) => l.variantId))];
   const { data, error } = await supabaseService
     .from("product_variants")
-    .select("id, shopify_id, inventory_quantity, inventory_tracked, inventory_policy, products!inner(status, shopify_id)")
+    .select("id, shopify_variant_id, inventory_quantity, inventory_tracked, inventory_policy, products!inner(status)")
     .in("id", variantIds);
 
   if (error || !data) {
@@ -82,7 +82,7 @@ async function resolveDesiredLines(
       droppedUnmapped = true;
       continue;
     }
-    if (!row.shopify_id) {
+    if (!row.shopify_variant_id) {
       droppedUnmapped = true;
       continue;
     }
@@ -107,7 +107,7 @@ async function resolveDesiredLines(
       }
     }
 
-    const merchandiseId = toMerchandiseId(row.shopify_id);
+    const merchandiseId = row.shopify_variant_id;
     desired.set(merchandiseId, (desired.get(merchandiseId) ?? 0) + qty);
   }
 
@@ -142,10 +142,12 @@ export async function syncShopifyCart(input: {
   }
 
   try {
-    let cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
-    const isUsable = cart && !cart.completedAt;
+    // Storefront API Cart has no field exposing "already converted to an order" in this API
+    // version -- any cart id that still resolves is treated as usable. Fine for Phase 2 (nothing
+    // ever drives a customer to checkoutUrl yet); revisit once Phase 3 actually converts carts.
+    const cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
 
-    if (!isUsable) {
+    if (!cart) {
       const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
       const { cart: created, userErrors } = await cartCreate(lines);
       return { shopifyCartId: created?.id ?? null, warnings: [...warnings, ...describeUserErrors(userErrors)] };

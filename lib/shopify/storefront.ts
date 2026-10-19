@@ -66,14 +66,11 @@ export type StorefrontCartLine = {
   id: string;
   quantity: number;
   merchandiseId: string;
-  availableForSale: boolean;
-  quantityAvailable: number | null;
 };
 
 export type StorefrontCart = {
   id: string;
   checkoutUrl: string;
-  completedAt: string | null;
   totalQuantity: number;
   cost: { totalAmount: { amount: string; currencyCode: string }; subtotalAmount: { amount: string; currencyCode: string } };
   lines: StorefrontCartLine[];
@@ -84,7 +81,6 @@ export type CartUserError = { field: string[] | null; message: string; code?: st
 const CART_FIELDS = `
   id
   checkoutUrl
-  completedAt
   totalQuantity
   cost {
     totalAmount { amount currencyCode }
@@ -98,8 +94,6 @@ const CART_FIELDS = `
         merchandise {
           ... on ProductVariant {
             id
-            availableForSale
-            quantityAvailable
           }
         }
       }
@@ -112,15 +106,12 @@ function toCart(raw: any): StorefrontCart | null {
   return {
     id: raw.id,
     checkoutUrl: raw.checkoutUrl,
-    completedAt: raw.completedAt ?? null,
     totalQuantity: raw.totalQuantity,
     cost: raw.cost,
     lines: (raw.lines?.edges ?? []).map((e: any) => ({
       id: e.node.id,
       quantity: e.node.quantity,
       merchandiseId: e.node.merchandise?.id,
-      availableForSale: e.node.merchandise?.availableForSale ?? false,
-      quantityAvailable: e.node.merchandise?.quantityAvailable ?? null,
     })),
   };
 }
