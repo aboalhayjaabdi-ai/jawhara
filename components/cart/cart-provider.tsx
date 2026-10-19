@@ -50,6 +50,11 @@ type CartState = {
   // of truth for its own validity/amount, only an input to the authoritative computeCheckoutTotals
   // call (see useCartTotals below and app/api/checkout/route.ts).
   discountCode: string | null;
+  // Customer-safe, Swedish warnings from the most recent background Shopify cart sync (e.g. a
+  // variant that couldn't be matched, or a quantity that got clamped to real stock) -- informational
+  // only, never blocks adding/removing/checking out, since Supabase (not this) is what prices and
+  // gates the visible Jawhara cart in Phase 2.
+  shopifyWarnings: string[];
 };
 
 type CartContextValue = CartState & CartActions;
@@ -59,6 +64,10 @@ const CartStateContext = createContext<CartState | null>(null);
 
 const STORAGE_KEY = "jawhara_cart";
 const DISCOUNT_CODE_STORAGE_KEY = "jawhara_discount_code";
+// The real Shopify Storefront API cart id this Jawhara cart is mirrored into (lib/shopify/cart-
+// sync.ts) -- kept in its own key so a customer's visible cart (STORAGE_KEY, unchanged since
+// Phase 1) never depends on whether the Shopify side of the sync has ever succeeded.
+const SHOPIFY_CART_ID_STORAGE_KEY = "jawhara_shopify_cart_id";
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -66,6 +75,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [bump, setBump] = useState(0);
   const [discountCode, setDiscountCodeState] = useState<string | null>(null);
+  const [shopifyCartId, setShopifyCartId] = useState<string | null>(null);
+  const [shopifyWarnings, setShopifyWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     try {
@@ -73,6 +84,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (raw) setItems(JSON.parse(raw));
       const code = localStorage.getItem(DISCOUNT_CODE_STORAGE_KEY);
       if (code) setDiscountCodeState(code);
+      const shopifyId = localStorage.getItem(SHOPIFY_CART_ID_STORAGE_KEY);
+      if (shopifyId) setShopifyCartId(shopifyId);
     } catch {
       // ignore corrupted/unavailable storage
     }
@@ -87,6 +100,56 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   }, [items, hydrated]);
+
+  // Mirrors the current cart into a real Shopify Storefront API cart in the background --
+  // see lib/shopify/cart-sync.ts. Debounced so rapid qty +/- clicks collapse into one sync, and
+  // keyed by a request id (like useCartTotals below) so a slow, now-superseded response can
+  // never clobber a newer one. Never blocks or alters the visible cart: on any failure it just
+  // records a warning and keeps retrying on the next change, since Supabase (not Shopify) is
+  // what prices and persists the customer-visible cart in Phase 2.
+  const shopifyCartIdRef = useRef(shopifyCartId);
+  shopifyCartIdRef.current = shopifyCartId;
+  const shopifySyncRequestId = useRef(0);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (items.length === 0) return;
+    const id = ++shopifySyncRequestId.current;
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/shopify-cart/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shopifyCartId: shopifyCartIdRef.current,
+            lines: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
+          }),
+        });
+        if (id !== shopifySyncRequestId.current) return; // a newer sync superseded this one
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) {
+          setShopifyWarnings(["Kunde inte synkronisera varukorgen med Shopify just nu."]);
+          return;
+        }
+        if (typeof data.shopifyCartId === "string" && data.shopifyCartId !== shopifyCartIdRef.current) {
+          setShopifyCartId(data.shopifyCartId);
+          try {
+            localStorage.setItem(SHOPIFY_CART_ID_STORAGE_KEY, data.shopifyCartId);
+          } catch {
+            // ignore
+          }
+        }
+        setShopifyWarnings(Array.isArray(data.warnings) ? data.warnings : []);
+      } catch {
+        if (id !== shopifySyncRequestId.current) return;
+        setShopifyWarnings(["Kunde inte synkronisera varukorgen med Shopify just nu."]);
+      }
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [items, hydrated]);
+
+  useEffect(() => {
+    if (items.length === 0) setShopifyWarnings([]);
+  }, [items.length]);
 
   const setDiscountCode = useCallback((code: string | null) => {
     setDiscountCodeState(code);
@@ -133,8 +196,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [open, close, addItem, removeItem, setQty, setDiscountCode]
   );
   const state = useMemo<CartState>(
-    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode }),
-    [items, isOpen, subtotal, count, hydrated, bump, discountCode]
+    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings }),
+    [items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings]
   );
 
   return (

@@ -16,7 +16,7 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode } = useCart();
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings } = useCart();
   const { totals, loading, fetchError } = useCartTotals();
   const router = useRouter();
 
@@ -211,6 +211,14 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             <div className="border border-line bg-[#f4f4f4] px-3 py-2.5 text-xs text-muted">
               {totals.discountNotices.map((n, i) => (
                 <div key={i}>{n}</div>
+              ))}
+            </div>
+          )}
+
+          {items.length > 0 && shopifyWarnings.length > 0 && (
+            <div className="border border-line bg-[#f4f4f4] px-3 py-2.5 text-xs text-muted">
+              {shopifyWarnings.map((w, i) => (
+                <div key={i}>{w}</div>
               ))}
             </div>
           )}

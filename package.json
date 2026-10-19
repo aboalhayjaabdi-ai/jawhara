@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "audit": "tsx scripts/shopify/audit.ts"
+    "audit": "tsx scripts/shopify/audit.ts",
+    "verify-storefront": "tsx scripts/shopify/verify-storefront-availability.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
