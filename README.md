@@ -1,7 +1,9 @@
 # Jawhara — independent e-commerce platform
 
 Migration of the Jawhara Shopify store (jawhara.se) to a fully independent platform: Next.js +
-TypeScript, Supabase (Postgres/Auth/Storage), Stripe + Klarna, Resend, deployed on Vercel.
+TypeScript, Supabase (Postgres/Auth/Storage), Resend, deployed on Vercel. Checkout is being
+rebuilt on Shopify (Storefront API cart + Shopify Checkout) -- Stripe has been fully removed and
+checkout stays disabled (`NEXT_PUBLIC_CHECKOUT_ENABLED=false`) until that lands.
 
 See `/root/.claude/plans/you-are-a-senior-imperative-umbrella.md` for the full phase-by-phase
 migration plan, `docs/migration-inventory.md` for the Phase 1 data audit, and

@@ -39,7 +39,9 @@ export function RefundForm({ orderId, maxAmount, currency }: { orderId: string; 
 
       {result && (
         <div className="mb-3 text-xs text-emerald-600">
-          {result.mode === "stripe" ? "Återbetalning skickad via Stripe." : "Återbetalning registrerad manuellt (ingen Stripe-betalning fanns att återbetala)."}
+          {result.mode === "stripe"
+            ? "Registrerad. Genomför själva återbetalningen i Stripe Dashboard -- denna order betalades via Stripe."
+            : "Återbetalning registrerad manuellt (ingen Stripe-betalning fanns att återbetala)."}
         </div>
       )}
 

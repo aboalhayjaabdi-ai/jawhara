@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { stripe } from "@/lib/stripe/server";
 import { getStripeRefundablePayment } from "@/lib/orders/refund-guard";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
@@ -12,11 +11,12 @@ export type RefundLineInput = { orderItemId: string; quantity: number; amount: n
 export type RefundResult = { ok: true; refundId: string; mode: "stripe" | "manual" } | { ok: false; error: string };
 
 /**
- * The only place in the admin UI that can create a refund. Branches on
- * getStripeRefundablePayment() -- the single shared guard -- so a historical Shopify-origin order
- * (or a manual order marked "paid outside the system") can NEVER reach stripe.refunds.create():
- * when no refundable Stripe payment exists, this writes a manual_historical refund row only, with
- * zero Stripe API calls of any kind.
+ * The only place in the admin UI that can create a refund. Stripe has been removed from this app
+ * (no API keys, no SDK) -- this never calls any payment gateway. It only records a refund row and
+ * updates local bookkeeping. getStripeRefundablePayment() still tells us whether the order's
+ * original payment really went through Stripe: if so, the admin must issue the actual refund from
+ * the Stripe Dashboard directly and this just records that it happened; otherwise it's a plain
+ * manual_historical record.
  */
 export async function createRefund(
   orderId: string,
@@ -44,22 +44,13 @@ export async function createRefund(
   let mode: "stripe" | "manual";
 
   if (refundablePayment) {
-    let stripeRefund;
-    try {
-      stripeRefund = await stripe.refunds.create({
-        payment_intent: refundablePayment.stripePaymentIntentId,
-        amount: Math.round(input.amount * 100),
-      });
-    } catch (err) {
-      return { ok: false, error: `Stripe-återbetalning misslyckades: ${(err as Error).message}` };
-    }
-
+    // Bookkeeping only -- the admin processes the actual refund in the Stripe Dashboard
+    // directly, then records it here so order history stays accurate.
     const { data: refundRow, error } = await supabaseService
       .from("refunds")
       .insert({
         order_id: orderId,
         return_id: input.returnId ?? null,
-        stripe_refund_id: stripeRefund.id,
         kind: isFull ? "full" : "partial",
         amount: input.amount,
         reason: input.reason || null,

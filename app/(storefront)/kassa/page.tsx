@@ -1,17 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { useEffect, useRef } from "react";
 import { useCart, useCartTotals } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
-
-const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -30,22 +25,6 @@ export default function KassaPage() {
     trackInitiateCheckout({ value, currency: "SEK", itemCount });
   }, [hydrated, items]);
 
-  const fetchClientSecret = useCallback(async () => {
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
-        discountCode,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error ?? (Array.isArray(data.errors) ? data.errors.join(", ") : "Något gick fel."));
-    }
-    return data.clientSecret as string;
-  }, [items, discountCode]);
-
   if (!hydrated) {
     return <div className="mx-auto max-w-2xl px-6 py-24" />;
   }
@@ -58,22 +37,14 @@ export default function KassaPage() {
     );
   }
 
-  if (!stripePromise) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-24 text-center">
-        <p className="text-sm text-muted">Kassan är inte konfigurerad ännu.</p>
-      </div>
-    );
-  }
-
   const displayLines = buildDisplayLines(items, totals);
   const summary = buildCartSummary(items, totals);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      {/* Always-visible order summary -- no dropdown/accordion. Every figure here comes from the
-          same /api/cart/totals call (computeCheckoutTotals) that app/api/checkout/route.ts uses to
-          build the real Stripe session below, so this can never disagree with what's charged. */}
+      {/* Always-visible order summary -- every figure here comes from the same /api/cart/totals
+          call (computeCheckoutTotals) that the eventual Shopify-backed checkout will use, so this
+          can never disagree with what's charged. */}
       <div className="mb-8 border border-line">
         <div className="border-b border-line px-5 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-widest">Ordersammanfattning</h2>
@@ -155,11 +126,11 @@ export default function KassaPage() {
         </div>
       </div>
 
-      <div className="mb-8">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest">Kassa</h2>
-        <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
-          <EmbeddedCheckout />
-        </EmbeddedCheckoutProvider>
+      <div className="mb-8 border border-line px-5 py-6 text-center">
+        <p className="text-sm font-medium">Kassan är inte tillgänglig just nu.</p>
+        <p className="mt-2 text-sm text-muted">
+          Vi uppdaterar vårt betalsystem. Kom tillbaka inom kort för att slutföra ditt köp.
+        </p>
       </div>
     </div>
   );

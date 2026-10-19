@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
-import { getStripeConnectionStatus } from "@/lib/admin/payments-status";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +26,7 @@ export default async function AdminPaymentsSettingsPage({ searchParams }: { sear
   const sp = await searchParams;
   const page = Math.max(1, Number(Array.isArray(sp.page) ? sp.page[0] : sp.page ?? "1") || 1);
 
-  const [connection, supabase] = await Promise.all([getStripeConnectionStatus(), createAuthServerClient()]);
+  const supabase = await createAuthServerClient();
 
   const { data: payments, count } = await supabase
     .from("payments")
@@ -48,25 +47,14 @@ export default async function AdminPaymentsSettingsPage({ searchParams }: { sear
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Stripe-anslutning</div>
-          {connection.ok ? (
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="font-medium text-gray-900">Ansluten ({connection.mode === "live" ? "livemiljö" : "testmiljö"})</span>
-              </div>
-              {connection.accountName && <div className="text-gray-500">{connection.accountName}</div>}
-              {connection.accountEmail && <div className="text-gray-500">{connection.accountEmail}</div>}
-              <div className="text-gray-400">
-                {connection.country} · {connection.defaultCurrency}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-rose-600">
-              <span className="h-2 w-2 rounded-full bg-rose-500" />
-              {connection.error}
-            </div>
-          )}
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Betalningsleverantör</div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-gray-300" />
+            <span className="font-medium text-gray-900">Stripe borttaget</span>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">
+            Stripe är avinstallerat. Kassan flyttas till Shopify Checkout -- historiken nedan är bevarad.
+          </p>
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-5">

@@ -17,9 +17,7 @@ export function ManualOrderForm() {
   const [results, setResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
-  const [paymentMode, setPaymentMode] = useState<"stripe_link" | "mark_paid">("stripe_link");
   const [error, setError] = useState<string | null>(null);
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   async function search(q: string) {
@@ -74,38 +72,14 @@ export function ManualOrderForm() {
       const result = await createManualOrder({
         email,
         note: note || undefined,
-        paymentMode,
         items: lines.map(({ productId, variantId, quantity, unitPrice }) => ({ productId, variantId, quantity, unitPrice })),
       });
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      if (result.checkoutUrl) {
-        setCheckoutUrl(result.checkoutUrl);
-      } else {
-        router.push(`/admin/orders/${result.orderId}`);
-      }
+      router.push(`/admin/orders/${result.orderId}`);
     });
-  }
-
-  if (checkoutUrl) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="text-sm font-medium text-gray-900">Ordern är skapad.</div>
-        <p className="mt-2 text-sm text-gray-500">Skicka denna betalningslänk till kunden:</p>
-        <div className="mt-3 flex items-center gap-2">
-          <input readOnly value={checkoutUrl} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700" />
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(checkoutUrl)}
-            className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
-          >
-            Kopiera
-          </button>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -193,16 +167,7 @@ export function ManualOrderForm() {
 
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Betalning</div>
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={paymentMode === "stripe_link"} onChange={() => setPaymentMode("stripe_link")} />
-            Skicka betalningslänk (Stripe)
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={paymentMode === "mark_paid"} onChange={() => setPaymentMode("mark_paid")} />
-            Redan betald (markera manuellt)
-          </label>
-        </div>
+        <p className="text-sm text-gray-500">Ordern markeras som redan betald (kassa via Stripe är borttagen).</p>
 
         <div className="mt-4">
           <textarea

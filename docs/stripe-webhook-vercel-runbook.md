@@ -1,5 +1,9 @@
 # Registering the production Stripe webhook (Phase 9 launch step)
 
+**Deprecated.** Stripe has been fully removed from this app (see the Shopify migration work) —
+`app/api/webhooks/stripe/route.ts` no longer exists and this runbook no longer applies. Kept only
+as historical record of the Phase 9 plan.
+
 This is a documented runbook only — nothing here is executed until the site is actually deployed
 to Vercel, which has not happened yet. No Vercel project exists or is connected to this repo as of
 this writing. Do this once, after the real deployment domain is known.

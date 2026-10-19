@@ -2,28 +2,21 @@
 
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { stripe } from "@/lib/stripe/server";
 import { consumeInventoryForOrderItems } from "@/lib/inventory/consume";
 
 export type ManualOrderLineInput = { productId: string; variantId: string; quantity: number; unitPrice: number };
-export type CreateManualOrderResult = { ok: true; orderId: string; checkoutUrl?: string } | { ok: false; error: string };
+export type CreateManualOrderResult = { ok: true; orderId: string } | { ok: false; error: string };
 
 /**
- * Two deliberate payment modes, not three options left open:
- * - "stripe_link": reuses the real, already-tested checkout/webhook pipeline. The webhook (zero
- *   new code) confirms payment, decrements inventory, and emails confirmation exactly as it does
- *   for a normal storefront checkout -- this order is indistinguishable to that pipeline from a
- *   customer-initiated one.
- * - "mark_paid": for a sale already settled outside the system (cash, bank transfer). Consumes
- *   inventory the same oversell-safe way the webhook does (lib/inventory/consume.ts, extracted
- *   from that exact logic) and errors -- rolling back the just-created order -- instead of
- *   silently creating a paid order for stock that doesn't exist.
+ * For a sale already settled outside the system (cash, bank transfer, Shopify Checkout once that
+ * lands). Consumes inventory the same oversell-safe way the webhook used to
+ * (lib/inventory/consume.ts) and errors -- rolling back the just-created order -- instead of
+ * silently creating a paid order for stock that doesn't exist.
  */
 export async function createManualOrder(input: {
   email: string;
   items: ManualOrderLineInput[];
   note?: string;
-  paymentMode: "stripe_link" | "mark_paid";
 }): Promise<CreateManualOrderResult> {
   const admin = await requireAdmin();
   if (!input.items.length) return { ok: false, error: "Lägg till minst en artikel." };
@@ -67,64 +60,27 @@ export async function createManualOrder(input: {
   });
   await supabaseService.from("order_items").insert(orderItemRows);
 
-  if (input.paymentMode === "mark_paid") {
-    const consumeResult = await consumeInventoryForOrderItems(
-      input.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-      { orderId: order.id, actorId: admin.adminId }
-    );
-    if (!consumeResult.ok) {
-      await supabaseService.from("orders").delete().eq("id", order.id); // order_items cascade
-      const variant = variantById.get(consumeResult.oversoldVariantId) as any;
-      return { ok: false, error: `Lagret räcker inte för ${variant?.products?.title ?? "en vald vara"}.` };
-    }
-
-    await supabaseService.from("orders").update({ financial_status: "paid", processed_at: new Date().toISOString() }).eq("id", order.id);
-    await supabaseService.from("payments").insert({
-      order_id: order.id,
-      kind: "sale",
-      status: "succeeded",
-      gateway: "manual",
-      amount: subtotal,
-      currency_code: "SEK",
-      processed_at: new Date().toISOString(),
-    });
-
-    await logAdminAction(admin.adminId, "orders.mark_paid_manual", "order", order.id, { amount: subtotal });
-    return { ok: true, orderId: order.id };
+  const consumeResult = await consumeInventoryForOrderItems(
+    input.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+    { orderId: order.id, actorId: admin.adminId }
+  );
+  if (!consumeResult.ok) {
+    await supabaseService.from("orders").delete().eq("id", order.id); // order_items cascade
+    const variant = variantById.get(consumeResult.oversoldVariantId) as any;
+    return { ok: false, error: `Lagret räcker inte för ${variant?.products?.title ?? "en vald vara"}.` };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
-  const lineItems = input.items.map((i) => ({
-    quantity: i.quantity,
-    price_data: {
-      currency: "sek",
-      unit_amount: Math.round(i.unitPrice * 100),
-      product_data: { name: (variantById.get(i.variantId) as any)?.products?.title ?? "Jawhara-produkt" },
-    },
-  }));
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: lineItems,
-    customer_email: input.email || undefined,
-    shipping_address_collection: { allowed_countries: ["SE"] },
-    phone_number_collection: { enabled: true },
-    metadata: { order_id: order.id },
-    success_url: `${siteUrl}/kassa/bekraftelse?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: siteUrl,
-  });
-
-  await supabaseService.from("orders").update({ stripe_checkout_session_id: session.id }).eq("id", order.id);
+  await supabaseService.from("orders").update({ financial_status: "paid", processed_at: new Date().toISOString() }).eq("id", order.id);
   await supabaseService.from("payments").insert({
     order_id: order.id,
-    stripe_checkout_session_id: session.id,
     kind: "sale",
-    status: "pending",
-    gateway: "stripe",
+    status: "succeeded",
+    gateway: "manual",
     amount: subtotal,
     currency_code: "SEK",
+    processed_at: new Date().toISOString(),
   });
 
-  await logAdminAction(admin.adminId, "orders.create_manual", "order", order.id, { amount: subtotal, mode: "stripe_link" });
-  return { ok: true, orderId: order.id, checkoutUrl: session.url ?? undefined };
+  await logAdminAction(admin.adminId, "orders.mark_paid_manual", "order", order.id, { amount: subtotal });
+  return { ok: true, orderId: order.id };
 }

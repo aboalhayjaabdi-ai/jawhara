@@ -46,9 +46,9 @@ type CartState = {
   // cart, and shouldn't re-trigger the add-to-cart feedback).
   bump: number;
   // A discount code the customer has entered, carried from the cart drawer through to /kassa so
-  // the same code is already applied when the real Stripe session is created -- never the source
-  // of truth for its own validity/amount, only an input to the authoritative computeCheckoutTotals
-  // call (see useCartTotals below and app/api/checkout/route.ts).
+  // the same code is already applied once a real checkout session exists -- never the source of
+  // truth for its own validity/amount, only an input to the authoritative computeCheckoutTotals
+  // call (see useCartTotals below).
   discountCode: string | null;
 };
 
@@ -184,8 +184,8 @@ export function useJustAdded(durationMs: number): boolean {
 
 /**
  * The single place the cart drawer and /kassa's order summary both get real totals from --
- * always a fresh call to /api/cart/totals (app/api/cart/totals/route.ts), which wraps the exact
- * same computeCheckoutTotals() that creates the real Stripe session in app/api/checkout/route.ts.
+ * always a fresh call to /api/cart/totals (app/api/cart/totals/route.ts), which wraps the same
+ * computeCheckoutTotals() a real checkout flow will use to charge the customer.
  * Never computes a price/discount itself; re-fetches (debounced) whenever the cart contents or
  * discount code change, so quantity edits, removals, and code changes all stay correct without
  * the caller needing to re-derive anything client-side.
