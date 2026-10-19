@@ -1,50 +1,43 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { useState } from "react";
 import { useCart, useCartTotals } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { SHIPPING_METHOD_NAME } from "@/lib/shipping-method";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 
-const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
 }
 
+// Phase 3: checkout itself now happens on Shopify's own hosted page (see goToCheckout in
+// components/cart/cart-provider.tsx) -- nothing in the app navigates to this route anymore (the
+// cart drawer's "Till kassan" redirects straight to Shopify from wherever the customer already
+// is). This page only still exists for a direct visit (an old bookmark, a shared link): it shows
+// the exact same order summary it always has, with a single button that runs the identical
+// sync-then-redirect the drawer's button does, instead of the old Stripe embedded payment form.
 export default function KassaPage() {
-  const { items, hydrated, discountCode } = useCart();
+  const { items, hydrated, subtotal, goToCheckout } = useCart();
   const { totals, loading } = useCartTotals();
-  const trackedRef = useRef(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!hydrated || items.length === 0 || trackedRef.current) return;
-    trackedRef.current = true;
-    const value = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const itemCount = items.reduce((sum, i) => sum + i.qty, 0);
-    trackInitiateCheckout({ value, currency: "SEK", itemCount });
-  }, [hydrated, items]);
-
-  const fetchClientSecret = useCallback(async () => {
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
-        discountCode,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error ?? (Array.isArray(data.errors) ? data.errors.join(", ") : "Något gick fel."));
+  async function handleCheckout() {
+    if (isCheckingOut) return;
+    setCheckoutError(null);
+    setIsCheckingOut(true);
+    const result = await goToCheckout();
+    if (!result.ok) {
+      setCheckoutError(result.error);
+      setIsCheckingOut(false);
+      return;
     }
-    return data.clientSecret as string;
-  }, [items, discountCode]);
+    trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
+  }
 
   if (!hydrated) {
     return <div className="mx-auto max-w-2xl px-6 py-24" />;
@@ -58,22 +51,15 @@ export default function KassaPage() {
     );
   }
 
-  if (!stripePromise) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-24 text-center">
-        <p className="text-sm text-muted">Kassan är inte konfigurerad ännu.</p>
-      </div>
-    );
-  }
-
   const displayLines = buildDisplayLines(items, totals);
   const summary = buildCartSummary(items, totals);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      {/* Always-visible order summary -- no dropdown/accordion. Every figure here comes from the
-          same /api/cart/totals call (computeCheckoutTotals) that app/api/checkout/route.ts uses to
-          build the real Stripe session below, so this can never disagree with what's charged. */}
+      {/* Always-visible order summary -- no dropdown/accordion. Every figure here is Jawhara's own
+          price (computeCheckoutTotals via /api/cart/totals), including admin-managed discounts --
+          Shopify's own checkout total below it can disagree with this until Phase 4 connects
+          those discounts to Shopify too (see goToCheckout in cart-provider.tsx). */}
       <div className="mb-8 border border-line">
         <div className="border-b border-line px-5 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-widest">Ordersammanfattning</h2>
@@ -157,9 +143,14 @@ export default function KassaPage() {
 
       <div className="mb-8">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest">Kassa</h2>
-        <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
-          <EmbeddedCheckout />
-        </EmbeddedCheckoutProvider>
+        {checkoutError && <p className="mb-2 text-xs text-red-700">{checkoutError}</p>}
+        <button
+          disabled={!CHECKOUT_ENABLED || loading || isCheckingOut}
+          onClick={handleCheckout}
+          className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
+        >
+          {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isCheckingOut ? "Öppnar kassan..." : "Till kassan"}
+        </button>
       </div>
     </div>
   );

@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
+import { trackInitiateCheckout } from "@/lib/marketing/events";
 import type { GiftBoxOffer } from "@/lib/gift-box";
 
 function formatSek(amount: number) {
@@ -16,24 +16,37 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings } = useCart();
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, subtotal } =
+    useCart();
   const { totals, loading, fetchError } = useCartTotals();
-  const router = useRouter();
 
   const [codeInput, setCodeInput] = useState("");
   const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [applyingCode, setApplyingCode] = useState(false);
-  const [isNavigatingToCheckout, startCheckoutTransition] = useTransition();
-  // Keeps the drawer open (with its "Öppnar kassan..." pending state visible) until the /kassa
-  // route transition actually finishes, instead of closing immediately and leaving a blank flash
-  // of whatever page was behind it while the new page streams in.
-  const checkoutRequestedRef = useRef(false);
-  useEffect(() => {
-    if (!isNavigatingToCheckout && checkoutRequestedRef.current) {
-      checkoutRequestedRef.current = false;
-      close();
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  // Syncs the cart to Shopify one last time (never trusting the debounced background sync's
+  // possibly-stale state) and, only once that confirms a real checkoutUrl for these exact items,
+  // leaves the page for Shopify's hosted checkout. Never navigates on any kind of shortfall --
+  // see goToCheckout's own comment in cart-provider.tsx.
+  async function handleCheckout() {
+    if (isCheckingOut) return;
+    setCheckoutError(null);
+    setIsCheckingOut(true);
+    const result = await goToCheckout();
+    if (!result.ok) {
+      setCheckoutError(result.error);
+      setIsCheckingOut(false);
+      return;
     }
-  }, [isNavigatingToCheckout, close]);
+    // Fires right as the customer actually leaves for checkout, not merely when a page loads --
+    // the old /kassa page fired this on mount, which no longer happens since checkout now
+    // redirects straight to Shopify instead of routing through it.
+    trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
+    // isCheckingOut stays true: the browser is navigating away (window.location.href), so there's
+    // no later render to reset it for, and leaving the button showing "Öppnar kassan..." is correct.
+  }
 
   // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks
   // qty on repeat calls for the same variant), so checking presence first prevents a double-add
@@ -312,17 +325,14 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </div>
           )}
 
+          {checkoutError && <p className="mb-2 text-xs text-red-700">{checkoutError}</p>}
+
           <button
-            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isNavigatingToCheckout}
-            onClick={() => {
-              checkoutRequestedRef.current = true;
-              startCheckoutTransition(() => {
-                router.push("/kassa");
-              });
-            }}
+            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isCheckingOut}
+            onClick={handleCheckout}
             className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
-            {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isNavigatingToCheckout ? "Öppnar kassan..." : "Till kassan"}
+            {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isCheckingOut ? "Öppnar kassan..." : "Till kassan"}
           </button>
         </div>
       </div>

@@ -33,6 +33,10 @@ type CartActions = {
   removeItem: (variantId: string) => void;
   setQty: (variantId: string, qty: number) => void;
   setDiscountCode: (code: string | null) => void;
+  // Phase 3: forces an immediate (non-debounced) Shopify cart sync and, on success, navigates
+  // the browser to that exact cart's Shopify-hosted checkout page. Never navigates on failure --
+  // see its own comment below for exactly what counts as failure.
+  goToCheckout: () => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 type CartState = {
@@ -45,10 +49,11 @@ type CartState = {
   // below), distinct from `count` (which also changes when qty is adjusted inside an already-open
   // cart, and shouldn't re-trigger the add-to-cart feedback).
   bump: number;
-  // A discount code the customer has entered, carried from the cart drawer through to /kassa so
-  // the same code is already applied when the real Stripe session is created -- never the source
-  // of truth for its own validity/amount, only an input to the authoritative computeCheckoutTotals
-  // call (see useCartTotals below and app/api/checkout/route.ts).
+  // A discount code the customer has entered -- never the source of truth for its own
+  // validity/amount, only an input to the authoritative computeCheckoutTotals call (see
+  // useCartTotals below) that prices what Jawhara itself displays. Not yet sent to Shopify in
+  // any form: admin-managed discounts aren't connected to the Shopify side of checkout until
+  // Phase 4, so Shopify's own checkout total can disagree with this (see cart-drawer.tsx).
   discountCode: string | null;
   // Customer-safe, Swedish warnings from the most recent background Shopify cart sync (e.g. a
   // variant that couldn't be matched, or a quantity that got clamped to real stock) -- informational
@@ -101,55 +106,84 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, hydrated]);
 
-  // Mirrors the current cart into a real Shopify Storefront API cart in the background --
-  // see lib/shopify/cart-sync.ts. Debounced so rapid qty +/- clicks collapse into one sync, and
-  // keyed by a request id (like useCartTotals below) so a slow, now-superseded response can
-  // never clobber a newer one. Never blocks or alters the visible cart: on any failure it just
-  // records a warning and keeps retrying on the next change, since Supabase (not Shopify) is
-  // what prices and persists the customer-visible cart in Phase 2.
+  // Shared by the background sync effect below AND goToCheckout's immediate, un-debounced call --
+  // one single place that talks to /api/shopify-cart/sync and folds its response into provider
+  // state, so the two callers can never disagree about what the current shopifyCartId is. Never
+  // throws (the fetch is try/caught here); callers get back the raw parsed result (or null on
+  // total failure) and decide what that means for them.
   const shopifyCartIdRef = useRef(shopifyCartId);
   shopifyCartIdRef.current = shopifyCartId;
+  const syncWithShopify = useCallback(async (currentItems: CartItem[]) => {
+    try {
+      const res = await fetch("/api/shopify-cart/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopifyCartId: shopifyCartIdRef.current,
+          lines: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) return null;
+      if (typeof data.shopifyCartId === "string" && data.shopifyCartId !== shopifyCartIdRef.current) {
+        setShopifyCartId(data.shopifyCartId);
+        try {
+          localStorage.setItem(SHOPIFY_CART_ID_STORAGE_KEY, data.shopifyCartId);
+        } catch {
+          // ignore
+        }
+      }
+      return data as { shopifyCartId: string | null; checkoutUrl: string | null; warnings: string[] };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Mirrors the current cart into Shopify in the background -- debounced so rapid qty +/-
+  // clicks collapse into one sync, and keyed by a request id (like useCartTotals below) so a
+  // slow, now-superseded response can never clobber a newer one. Never blocks or alters the
+  // visible cart: on any failure it just records a warning and keeps retrying on the next
+  // change, since Supabase (not Shopify) is what prices and persists the customer-visible cart.
   const shopifySyncRequestId = useRef(0);
   useEffect(() => {
     if (!hydrated) return;
     if (items.length === 0) return;
     const id = ++shopifySyncRequestId.current;
     const timeout = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/shopify-cart/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            shopifyCartId: shopifyCartIdRef.current,
-            lines: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
-          }),
-        });
-        if (id !== shopifySyncRequestId.current) return; // a newer sync superseded this one
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data) {
-          setShopifyWarnings(["Kunde inte synkronisera varukorgen med Shopify just nu."]);
-          return;
-        }
-        if (typeof data.shopifyCartId === "string" && data.shopifyCartId !== shopifyCartIdRef.current) {
-          setShopifyCartId(data.shopifyCartId);
-          try {
-            localStorage.setItem(SHOPIFY_CART_ID_STORAGE_KEY, data.shopifyCartId);
-          } catch {
-            // ignore
-          }
-        }
-        setShopifyWarnings(Array.isArray(data.warnings) ? data.warnings : []);
-      } catch {
-        if (id !== shopifySyncRequestId.current) return;
-        setShopifyWarnings(["Kunde inte synkronisera varukorgen med Shopify just nu."]);
-      }
+      const data = await syncWithShopify(items);
+      if (id !== shopifySyncRequestId.current) return; // a newer sync superseded this one
+      setShopifyWarnings(data ? data.warnings : ["Kunde inte synkronisera varukorgen med Shopify just nu."]);
     }, 500);
     return () => clearTimeout(timeout);
-  }, [items, hydrated]);
+  }, [items, hydrated, syncWithShopify]);
 
   useEffect(() => {
     if (items.length === 0) setShopifyWarnings([]);
   }, [items.length]);
+
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  // Phase 3: the "Till kassan" button calls this directly instead of waiting for the debounced
+  // background sync above, so a click always redirects to a checkoutUrl for the cart's true
+  // current contents -- never a stale one from before the customer's last qty change. Treats
+  // every kind of sync shortfall (network failure, Storefront API error, or checkout simply not
+  // enabled yet -- see app/api/shopify-cart/sync/route.ts's own gate) the same way: no checkoutUrl
+  // means no navigation, full stop.
+  const goToCheckout = useCallback(async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+    if (itemsRef.current.length === 0) {
+      return { ok: false, error: "Din varukorg är tom." };
+    }
+    const data = await syncWithShopify(itemsRef.current);
+    if (!data) {
+      return { ok: false, error: "Kunde inte synkronisera varukorgen med Shopify just nu. Försök igen." };
+    }
+    setShopifyWarnings(data.warnings);
+    if (!data.checkoutUrl) {
+      return { ok: false, error: "Kassan är inte tillgänglig just nu. Försök igen." };
+    }
+    window.location.href = data.checkoutUrl;
+    return { ok: true };
+  }, [syncWithShopify]);
 
   const setDiscountCode = useCallback((code: string | null) => {
     setDiscountCodeState(code);
@@ -192,8 +226,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
   const actions = useMemo<CartActions>(
-    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode }),
-    [open, close, addItem, removeItem, setQty, setDiscountCode]
+    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode, goToCheckout }),
+    [open, close, addItem, removeItem, setQty, setDiscountCode, goToCheckout]
   );
   const state = useMemo<CartState>(
     () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings }),
@@ -246,12 +280,13 @@ export function useJustAdded(durationMs: number): boolean {
 }
 
 /**
- * The single place the cart drawer and /kassa's order summary both get real totals from --
- * always a fresh call to /api/cart/totals (app/api/cart/totals/route.ts), which wraps the exact
- * same computeCheckoutTotals() that creates the real Stripe session in app/api/checkout/route.ts.
- * Never computes a price/discount itself; re-fetches (debounced) whenever the cart contents or
- * discount code change, so quantity edits, removals, and code changes all stay correct without
- * the caller needing to re-derive anything client-side.
+ * The single place the cart drawer and /kassa's order summary both get real totals from -- always
+ * a fresh call to /api/cart/totals (app/api/cart/totals/route.ts), which wraps computeCheckoutTotals().
+ * This is Jawhara's own price, including admin-managed discounts (3-for-2 etc.) -- it is NOT what
+ * Shopify's hosted checkout (Phase 3, via goToCheckout above) will charge, since those discounts
+ * aren't connected to Shopify yet (Phase 4). Never computes a price/discount itself; re-fetches
+ * (debounced) whenever the cart contents or discount code change, so quantity edits, removals,
+ * and code changes all stay correct without the caller needing to re-derive anything client-side.
  */
 export function useCartTotals(): { totals: CheckoutTotals | null; loading: boolean; fetchError: string | null } {
   const { items, discountCode } = useCart();

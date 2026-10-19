@@ -18,6 +18,10 @@ export type ShopifyCartSyncResult = {
   // the same shopifyCartId it already had -- this function never invents a cart id it can't
   // confirm exists).
   shopifyCartId: string | null;
+  // Shopify's hosted checkout page for this exact cart (Phase 3) -- null under the same
+  // conditions as shopifyCartId, plus whenever the API route decides checkout isn't enabled yet
+  // (see app/api/shopify-cart/sync/route.ts; this function itself doesn't gate on that).
+  checkoutUrl: string | null;
   // Swedish, customer-safe messages -- never raw Shopify/GraphQL error text.
   warnings: string[];
 };
@@ -138,19 +142,24 @@ export async function syncShopifyCart(input: {
     // Either the Jawhara cart is empty, or nothing in it could map to Shopify -- nothing to
     // write. Keep whatever cart id we already had (it may still hold items from before a
     // removal that hasn't round-tripped yet); next sync with real lines will reconcile it.
-    return { shopifyCartId: input.shopifyCartId, warnings };
+    return { shopifyCartId: input.shopifyCartId, checkoutUrl: null, warnings };
   }
 
   try {
     // Storefront API Cart has no field exposing "already converted to an order" in this API
-    // version -- any cart id that still resolves is treated as usable. Fine for Phase 2 (nothing
-    // ever drives a customer to checkoutUrl yet); revisit once Phase 3 actually converts carts.
+    // version -- any cart id that still resolves is treated as usable. Checkout isn't wired to
+    // actually convert a cart yet (Phase 3 only redirects to it; nothing completes a purchase),
+    // so this can't yet go stale in practice -- revisit if that changes.
     const cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
 
     if (!cart) {
       const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
       const { cart: created, userErrors } = await cartCreate(lines);
-      return { shopifyCartId: created?.id ?? null, warnings: [...warnings, ...describeUserErrors(userErrors)] };
+      return {
+        shopifyCartId: created?.id ?? null,
+        checkoutUrl: created?.checkoutUrl ?? null,
+        warnings: [...warnings, ...describeUserErrors(userErrors)],
+      };
     }
 
     const currentByMerchandise = new Map(cart!.lines.map((l) => [l.merchandiseId, l]));
@@ -178,12 +187,12 @@ export async function syncShopifyCart(input: {
       extraWarnings.push(...describeUserErrors(userErrors));
     }
 
-    return { shopifyCartId: cart!.id, warnings: [...warnings, ...extraWarnings] };
+    return { shopifyCartId: cart!.id, checkoutUrl: cart!.checkoutUrl, warnings: [...warnings, ...extraWarnings] };
   } catch (err) {
     const message =
       err instanceof StorefrontConfigError
         ? "Shopify-varukorgen är inte konfigurerad ännu."
         : "Kunde inte synkronisera varukorgen med Shopify just nu.";
-    return { shopifyCartId: input.shopifyCartId, warnings: [...warnings, message] };
+    return { shopifyCartId: input.shopifyCartId, checkoutUrl: null, warnings: [...warnings, message] };
   }
 }
