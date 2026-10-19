@@ -4,7 +4,7 @@ if (typeof window !== "undefined") {
   throw new Error("lib/admin/discount-scheduler.ts must never be imported into client code");
 }
 
-export type SyncResult = { activated: number; expired: number };
+export type SyncResult = { activated: number; expired: number; changedIds: string[] };
 
 /**
  * Makes `starts_at`/`ends_at` scheduling genuinely functional. `lib/discounts.ts` (the real
@@ -36,5 +36,9 @@ export async function syncDiscountStatuses(): Promise<SyncResult> {
     .lte("ends_at", nowIso)
     .select("id");
 
-  return { activated: activated?.length ?? 0, expired: expired?.length ?? 0 };
+  return {
+    activated: activated?.length ?? 0,
+    expired: expired?.length ?? 0,
+    changedIds: [...(activated ?? []), ...(expired ?? [])].map((r) => r.id),
+  };
 }

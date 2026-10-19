@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateDiscount, deleteDiscount, type DiscountFormInput } from "@/app/admin/(authenticated)/discounts/[id]/actions";
+import { updateDiscount, deleteDiscount, syncDiscountNow, type DiscountFormInput } from "@/app/admin/(authenticated)/discounts/[id]/actions";
 import { DiscountItemPicker, type PickerItem } from "@/components/admin/discount-item-picker";
 
 function toLocalInput(iso: string | null): string {
@@ -93,7 +93,7 @@ export function DiscountForm({ discountId, initial, allCollections }: { discount
     startTransition(async () => {
       const result = await updateDiscount(discountId, input);
       if (result.ok) {
-        setMessage("Sparat.");
+        setMessage(result.shopifyWarning ? `Sparat. ${result.shopifyWarning}` : "Sparat.");
         router.refresh();
       } else {
         setError(result.error);
@@ -106,6 +106,20 @@ export function DiscountForm({ discountId, initial, allCollections }: { discount
       const result = await deleteDiscount(discountId, true);
       if (result.ok) router.push("/admin/discounts");
       else setError(result.error);
+    });
+  }
+
+  function syncNow() {
+    setError(null);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await syncDiscountNow(discountId);
+      if (result.ok) {
+        setMessage(result.shopifyWarning ?? "Synkad till Shopify.");
+        router.refresh();
+      } else {
+        setError(result.error);
+      }
     });
   }
 
@@ -249,9 +263,19 @@ export function DiscountForm({ discountId, initial, allCollections }: { discount
       {message && <div className="text-sm text-emerald-600">{message}</div>}
       {error && <div className="text-sm text-rose-600">{error}</div>}
       <div className="flex items-center justify-between">
-        <button type="button" onClick={save} disabled={isPending} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
-          {isPending ? "Sparar…" : "Spara"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={save} disabled={isPending} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
+            {isPending ? "Sparar…" : "Spara"}
+          </button>
+          <button
+            type="button"
+            onClick={syncNow}
+            disabled={isPending}
+            className="rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Synka till Shopify nu
+          </button>
+        </div>
         {!showDelete ? (
           <button type="button" onClick={() => setShowDelete(true)} className="text-xs font-medium text-rose-700 underline hover:text-rose-900">
             Radera permanent…

@@ -33,9 +33,10 @@ type CartActions = {
   removeItem: (variantId: string) => void;
   setQty: (variantId: string, qty: number) => void;
   setDiscountCode: (code: string | null) => void;
-  // Phase 3: forces an immediate (non-debounced) Shopify cart sync and, on success, navigates
-  // the browser to that exact cart's Shopify-hosted checkout page. Never navigates on failure --
-  // see its own comment below for exactly what counts as failure.
+  // Phase 3/4: forces an immediate (non-debounced) Shopify cart sync, verifies Shopify's own
+  // computed total actually matches what Jawhara displays, and only then navigates the browser to
+  // that exact cart's Shopify-hosted checkout page. Never navigates on failure OR on a price
+  // mismatch -- see its own comment below for exactly what counts as either.
   goToCheckout: () => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
@@ -113,7 +114,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // total failure) and decide what that means for them.
   const shopifyCartIdRef = useRef(shopifyCartId);
   shopifyCartIdRef.current = shopifyCartId;
-  const syncWithShopify = useCallback(async (currentItems: CartItem[]) => {
+  type ShopifySyncResponse = {
+    shopifyCartId: string | null;
+    checkoutUrl: string | null;
+    shopifyTotal: number | null;
+    discountCodeApplicable: boolean | null;
+    warnings: string[];
+  };
+  const syncWithShopify = useCallback(async (currentItems: CartItem[], currentDiscountCode: string | null) => {
     try {
       const res = await fetch("/api/shopify-cart/sync", {
         method: "POST",
@@ -121,6 +129,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           shopifyCartId: shopifyCartIdRef.current,
           lines: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })),
+          discountCode: currentDiscountCode,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -133,29 +142,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
           // ignore
         }
       }
-      return data as { shopifyCartId: string | null; checkoutUrl: string | null; warnings: string[] };
+      return data as ShopifySyncResponse;
     } catch {
       return null;
     }
   }, []);
 
-  // Mirrors the current cart into Shopify in the background -- debounced so rapid qty +/-
-  // clicks collapse into one sync, and keyed by a request id (like useCartTotals below) so a
-  // slow, now-superseded response can never clobber a newer one. Never blocks or alters the
-  // visible cart: on any failure it just records a warning and keeps retrying on the next
-  // change, since Supabase (not Shopify) is what prices and persists the customer-visible cart.
+  // Mirrors the current cart (and entered discount code) into Shopify in the background --
+  // debounced so rapid qty +/- clicks collapse into one sync, and keyed by a request id (like
+  // useCartTotals below) so a slow, now-superseded response can never clobber a newer one. Never
+  // blocks or alters the visible cart: on any failure it just records a warning and keeps
+  // retrying on the next change, since Supabase (not Shopify) is what prices and persists the
+  // customer-visible cart.
   const shopifySyncRequestId = useRef(0);
   useEffect(() => {
     if (!hydrated) return;
     if (items.length === 0) return;
     const id = ++shopifySyncRequestId.current;
     const timeout = setTimeout(async () => {
-      const data = await syncWithShopify(items);
+      const data = await syncWithShopify(items, discountCode);
       if (id !== shopifySyncRequestId.current) return; // a newer sync superseded this one
       setShopifyWarnings(data ? data.warnings : ["Kunde inte synkronisera varukorgen med Shopify just nu."]);
     }, 500);
     return () => clearTimeout(timeout);
-  }, [items, hydrated, syncWithShopify]);
+  }, [items, discountCode, hydrated, syncWithShopify]);
 
   useEffect(() => {
     if (items.length === 0) setShopifyWarnings([]);
@@ -163,25 +173,60 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  // Phase 3: the "Till kassan" button calls this directly instead of waiting for the debounced
+  const discountCodeRef = useRef(discountCode);
+  discountCodeRef.current = discountCode;
+  // Phase 3/4: the "Till kassan" button calls this directly instead of waiting for the debounced
   // background sync above, so a click always redirects to a checkoutUrl for the cart's true
-  // current contents -- never a stale one from before the customer's last qty change. Treats
+  // current contents -- never a stale one from before the customer's last qty/code change. Treats
   // every kind of sync shortfall (network failure, Storefront API error, or checkout simply not
   // enabled yet -- see app/api/shopify-cart/sync/route.ts's own gate) the same way: no checkoutUrl
   // means no navigation, full stop.
+  //
+  // Phase 4 price-parity guard: also re-fetches Jawhara's own total (the same call
+  // useCartTotals below makes) for this exact cart and compares it against Shopify's own
+  // cart.cost.totalAmount in the same sync response. The two should agree once a discount is
+  // correctly mirrored to Shopify (lib/shopify/discount-sync.ts) -- if they don't (a discount
+  // Shopify doesn't know about yet, a sync that silently dropped an item, a code Shopify
+  // considers inapplicable), this refuses to send the customer to checkout at all rather than
+  // let them see an unexpected price there. A few öre of rounding slack is allowed; anything more
+  // blocks.
   const goToCheckout = useCallback(async (): Promise<{ ok: true } | { ok: false; error: string }> => {
-    if (itemsRef.current.length === 0) {
+    const currentItems = itemsRef.current;
+    if (currentItems.length === 0) {
       return { ok: false, error: "Din varukorg är tom." };
     }
-    const data = await syncWithShopify(itemsRef.current);
-    if (!data) {
+    const currentDiscountCode = discountCodeRef.current;
+    const [shopifyData, jawharaRes] = await Promise.all([
+      syncWithShopify(currentItems, currentDiscountCode),
+      fetch("/api/cart/totals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cart: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: currentDiscountCode }),
+      })
+        .then((r) => r.json())
+        .catch(() => null),
+    ]);
+
+    if (!shopifyData) {
       return { ok: false, error: "Kunde inte synkronisera varukorgen med Shopify just nu. Försök igen." };
     }
-    setShopifyWarnings(data.warnings);
-    if (!data.checkoutUrl) {
+    setShopifyWarnings(shopifyData.warnings);
+    if (!shopifyData.checkoutUrl) {
       return { ok: false, error: "Kassan är inte tillgänglig just nu. Försök igen." };
     }
-    window.location.href = data.checkoutUrl;
+    if (!jawharaRes || typeof jawharaRes.total !== "number" || (jawharaRes.errors?.length ?? 0) > 0) {
+      return { ok: false, error: "Kunde inte bekräfta priset innan kassan. Försök igen." };
+    }
+    if (shopifyData.discountCodeApplicable === false) {
+      return { ok: false, error: "Rabattkoden gäller inte i Shopifys kassa just nu. Ta bort den eller försök igen senare." };
+    }
+    if (shopifyData.shopifyTotal == null || Math.abs(shopifyData.shopifyTotal - jawharaRes.total) > 1) {
+      return {
+        ok: false,
+        error: `Priset i Shopifys kassa (${Math.round(shopifyData.shopifyTotal ?? 0)} kr) stämmer inte med varukorgen (${Math.round(jawharaRes.total)} kr). Kontakta oss innan du fortsätter.`,
+      };
+    }
+    window.location.href = shopifyData.checkoutUrl;
     return { ok: true };
   }, [syncWithShopify]);
 

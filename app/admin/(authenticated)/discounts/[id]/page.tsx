@@ -63,6 +63,26 @@ export default async function AdminDiscountDetailPage({ params }: { params: Prom
       <h1 className="mt-2 mb-6 text-2xl font-semibold text-gray-900">{discount.title}</h1>
 
       <div className="space-y-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 text-sm">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Shopify-synk</div>
+          {discount.shopify_discount_id ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${discount.shopify_sync_status === "error" ? "bg-rose-500" : "bg-emerald-500"}`} />
+                <span className="font-medium text-gray-900">{discount.shopify_sync_status === "error" ? "Fel vid senaste synk" : "Synkad"}</span>
+              </div>
+              <div className="text-xs text-gray-400">
+                Shopify-id: {discount.shopify_discount_id}
+                {discount.shopify_synced_at && ` · ${new Date(discount.shopify_synced_at).toLocaleString("sv-SE")}`}
+              </div>
+              {discount.shopify_sync_error && <div className="text-xs text-rose-600">{discount.shopify_sync_error}</div>}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">
+              Inte synkad till Shopify ännu{discount.status === "draft" ? " (utkast -- synkas när du aktiverar eller schemalägger den)." : "."}
+            </p>
+          )}
+        </div>
         <DiscountForm discountId={id} initial={initial} allCollections={allCollections} />
         <DiscountRedemptionsCard stats={stats} />
       </div>

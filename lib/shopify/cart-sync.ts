@@ -3,12 +3,14 @@ import { isVariantAvailable } from "@/lib/inventory";
 import {
   StorefrontConfigError,
   cartCreate,
+  cartDiscountCodesUpdate,
   cartGet,
   cartLinesAdd,
   cartLinesRemove,
   cartLinesUpdate,
   type CartLineInput,
   type CartUserError,
+  type StorefrontCart,
 } from "@/lib/shopify/storefront";
 
 export type ShopifyCartSyncLine = { variantId: string; qty: number };
@@ -22,6 +24,17 @@ export type ShopifyCartSyncResult = {
   // conditions as shopifyCartId, plus whenever the API route decides checkout isn't enabled yet
   // (see app/api/shopify-cart/sync/route.ts; this function itself doesn't gate on that).
   checkoutUrl: string | null;
+  // Phase 4: Shopify's own computed total for this exact cart (after its native discounts,
+  // before shipping/tax -- neither is ever added at the cart stage, only at real checkout), in
+  // SEK as a plain number. Null whenever shopifyCartId is. Compared against Jawhara's own total
+  // (computeCheckoutTotals) by the caller (components/cart/cart-provider.tsx's goToCheckout) as
+  // the price-parity guard the Phase 4 spec requires -- this module only ever reports the number,
+  // it never decides whether a mismatch should block anything.
+  shopifyTotal: number | null;
+  // Phase 4: whether the discount code the caller passed in (if any) is one Shopify's cart
+  // considers applicable to its current contents. False (not simply absent) is the signal a
+  // dead/expired/out-of-scope code gives -- Shopify never errors the mutation itself for that.
+  discountCodeApplicable: boolean | null;
   // Swedish, customer-safe messages -- never raw Shopify/GraphQL error text.
   warnings: string[];
 };
@@ -30,6 +43,10 @@ function describeUserErrors(errors: CartUserError[]): string[] {
   return errors
     .filter((e) => e.message)
     .map(() => "Ett lagerproblem upptäcktes för en vara i varukorgen. Mängden kan ha justerats.");
+}
+
+function describeDiscountCodeErrors(errors: CartUserError[]): string[] {
+  return errors.filter((e) => e.message).map(() => "Rabattkoden kunde inte tillämpas i Shopify-varukorgen.");
 }
 
 type VariantRow = {
@@ -132,9 +149,38 @@ async function resolveDesiredLines(
  * existing shopifyCartId is returned unchanged, so a transient Shopify outage never breaks the
  * visible Jawhara cart (which is driven entirely by localStorage + Supabase, not by this).
  */
+function emptyResult(shopifyCartId: string | null, warnings: string[]): ShopifyCartSyncResult {
+  return { shopifyCartId, checkoutUrl: null, shopifyTotal: null, discountCodeApplicable: null, warnings };
+}
+
+function finalize(cart: StorefrontCart, discountCode: string | null, warnings: string[]): ShopifyCartSyncResult {
+  const applied = discountCode ? cart.discountCodes.find((d) => d.code.toLowerCase() === discountCode.toLowerCase()) : null;
+  const applicable = discountCode ? applied?.applicable ?? false : null;
+  const allWarnings = applicable === false ? [...warnings, "Rabattkoden gäller inte för den här varukorgen i Shopify."] : warnings;
+  return {
+    shopifyCartId: cart.id,
+    checkoutUrl: cart.checkoutUrl,
+    shopifyTotal: Number(cart.cost.totalAmount.amount),
+    discountCodeApplicable: applicable,
+    warnings: allWarnings,
+  };
+}
+
+/**
+ * Reconciles the real Shopify Storefront cart to match the Jawhara cart's current contents and
+ * entered discount code. Called after every add/remove/qty/code change (see components/cart/
+ * cart-provider.tsx) with the FULL current line list, not a delta -- same "always recompute from
+ * the whole cart" approach as computeCheckoutTotals, so a missed or out-of-order call can never
+ * leave Shopify holding stale lines, duplicates, or a stale code.
+ *
+ * Never throws. Any Storefront API/config failure degrades to a warning and the caller's
+ * existing shopifyCartId is returned unchanged, so a transient Shopify outage never breaks the
+ * visible Jawhara cart (which is driven entirely by localStorage + Supabase, not by this).
+ */
 export async function syncShopifyCart(input: {
   shopifyCartId: string | null;
   lines: ShopifyCartSyncLine[];
+  discountCode: string | null;
 }): Promise<ShopifyCartSyncResult> {
   const { desired, warnings } = await resolveDesiredLines(input.lines);
 
@@ -142,7 +188,7 @@ export async function syncShopifyCart(input: {
     // Either the Jawhara cart is empty, or nothing in it could map to Shopify -- nothing to
     // write. Keep whatever cart id we already had (it may still hold items from before a
     // removal that hasn't round-tripped yet); next sync with real lines will reconcile it.
-    return { shopifyCartId: input.shopifyCartId, checkoutUrl: null, warnings };
+    return emptyResult(input.shopifyCartId, warnings);
   }
 
   try {
@@ -150,49 +196,61 @@ export async function syncShopifyCart(input: {
     // version -- any cart id that still resolves is treated as usable. Checkout isn't wired to
     // actually convert a cart yet (Phase 3 only redirects to it; nothing completes a purchase),
     // so this can't yet go stale in practice -- revisit if that changes.
-    const cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
+    let cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
+    const extraWarnings: string[] = [];
 
     if (!cart) {
       const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
       const { cart: created, userErrors } = await cartCreate(lines);
-      return {
-        shopifyCartId: created?.id ?? null,
-        checkoutUrl: created?.checkoutUrl ?? null,
-        warnings: [...warnings, ...describeUserErrors(userErrors)],
-      };
-    }
-
-    const currentByMerchandise = new Map(cart!.lines.map((l) => [l.merchandiseId, l]));
-
-    const toRemove = cart!.lines.filter((l) => !desired.has(l.merchandiseId)).map((l) => l.id);
-    const toUpdate = [...desired.entries()]
-      .filter(([merchandiseId, qty]) => currentByMerchandise.has(merchandiseId) && currentByMerchandise.get(merchandiseId)!.quantity !== qty)
-      .map(([merchandiseId, quantity]) => ({ id: currentByMerchandise.get(merchandiseId)!.id, quantity }));
-    const toAdd: CartLineInput[] = [...desired.entries()]
-      .filter(([merchandiseId]) => !currentByMerchandise.has(merchandiseId))
-      .map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
-
-    const extraWarnings: string[] = [];
-
-    if (toRemove.length > 0) {
-      const { userErrors } = await cartLinesRemove(cart!.id, toRemove);
       extraWarnings.push(...describeUserErrors(userErrors));
-    }
-    if (toUpdate.length > 0) {
-      const { userErrors } = await cartLinesUpdate(cart!.id, toUpdate);
-      extraWarnings.push(...describeUserErrors(userErrors));
-    }
-    if (toAdd.length > 0) {
-      const { userErrors } = await cartLinesAdd(cart!.id, toAdd);
-      extraWarnings.push(...describeUserErrors(userErrors));
+      if (!created) return emptyResult(null, [...warnings, ...extraWarnings]);
+      cart = created;
+    } else {
+      const currentByMerchandise = new Map(cart.lines.map((l) => [l.merchandiseId, l]));
+
+      const toRemove = cart.lines.filter((l) => !desired.has(l.merchandiseId)).map((l) => l.id);
+      const toUpdate = [...desired.entries()]
+        .filter(([merchandiseId, qty]) => currentByMerchandise.has(merchandiseId) && currentByMerchandise.get(merchandiseId)!.quantity !== qty)
+        .map(([merchandiseId, quantity]) => ({ id: currentByMerchandise.get(merchandiseId)!.id, quantity }));
+      const toAdd: CartLineInput[] = [...desired.entries()]
+        .filter(([merchandiseId]) => !currentByMerchandise.has(merchandiseId))
+        .map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
+
+      if (toRemove.length > 0) {
+        const { cart: updated, userErrors } = await cartLinesRemove(cart.id, toRemove);
+        if (updated) cart = updated;
+        extraWarnings.push(...describeUserErrors(userErrors));
+      }
+      if (toUpdate.length > 0) {
+        const { cart: updated, userErrors } = await cartLinesUpdate(cart.id, toUpdate);
+        if (updated) cart = updated;
+        extraWarnings.push(...describeUserErrors(userErrors));
+      }
+      if (toAdd.length > 0) {
+        const { cart: updated, userErrors } = await cartLinesAdd(cart.id, toAdd);
+        if (updated) cart = updated;
+        extraWarnings.push(...describeUserErrors(userErrors));
+      }
     }
 
-    return { shopifyCartId: cart!.id, checkoutUrl: cart!.checkoutUrl, warnings: [...warnings, ...extraWarnings] };
+    // Only re-applied when it actually changed -- a discount code almost never changes between
+    // syncs (items do, every time), so this avoids a redundant Storefront API call on every
+    // qty +/- click.
+    const desiredCodes = input.discountCode ? [input.discountCode] : [];
+    const currentCodes = cart.discountCodes.map((d) => d.code);
+    const codesChanged = desiredCodes.length !== currentCodes.length || desiredCodes.some((c) => !currentCodes.includes(c));
+    if (codesChanged) {
+      const { cart: updated, userErrors } = await cartDiscountCodesUpdate(cart.id, desiredCodes);
+      if (updated) cart = updated;
+      extraWarnings.push(...describeDiscountCodeErrors(userErrors));
+    }
+
+    return finalize(cart, input.discountCode, [...warnings, ...extraWarnings]);
   } catch (err) {
     const message =
       err instanceof StorefrontConfigError
         ? "Shopify-varukorgen är inte konfigurerad ännu."
         : "Kunde inte synkronisera varukorgen med Shopify just nu.";
-    return { shopifyCartId: input.shopifyCartId, checkoutUrl: null, warnings: [...warnings, message] };
+    return emptyResult(input.shopifyCartId, [...warnings, message]);
   }
 }

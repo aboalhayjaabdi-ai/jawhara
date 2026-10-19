@@ -3,6 +3,7 @@ import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { parseDiscountsListFilters, applyDiscountsListFilters } from "@/lib/admin/discounts-filters";
 import { syncDiscountStatuses } from "@/lib/admin/discount-scheduler";
+import { syncDiscountToShopify } from "@/lib/shopify/discount-sync";
 import { DiscountsFilterBar } from "@/components/admin/discounts-filter-bar";
 import { DiscountsTable, type DiscountRow } from "@/components/admin/discounts-table";
 
@@ -13,7 +14,11 @@ const PAGE_SIZE = 50;
 export default async function AdminDiscountsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Keeps `status` in sync with starts_at/ends_at on every page load -- see
   // lib/admin/discount-scheduler.ts for why this is what makes scheduling real rather than cosmetic.
-  await syncDiscountStatuses();
+  // Also pushes exactly the discounts whose status just flipped (scheduled->active,
+  // active/scheduled->expired) to Shopify -- in practice almost always empty, so this adds zero
+  // extra Shopify calls to the common page load.
+  const { changedIds } = await syncDiscountStatuses();
+  await Promise.all(changedIds.map((id) => syncDiscountToShopify(id)));
 
   const sp = await searchParams;
   const filters = parseDiscountsListFilters(sp);

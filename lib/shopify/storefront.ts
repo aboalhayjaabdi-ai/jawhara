@@ -74,6 +74,10 @@ export type StorefrontCart = {
   totalQuantity: number;
   cost: { totalAmount: { amount: string; currencyCode: string }; subtotalAmount: { amount: string; currencyCode: string } };
   lines: StorefrontCartLine[];
+  // Phase 4: which discount code(s), if any, Shopify currently has on this cart, and whether each
+  // one actually applies to its current contents -- `applicable: false` is how a dead/invalid/
+  // out-of-scope code shows up (Shopify never errors the mutation itself for that).
+  discountCodes: { code: string; applicable: boolean }[];
 };
 
 export type CartUserError = { field: string[] | null; message: string; code?: string | null };
@@ -86,6 +90,7 @@ const CART_FIELDS = `
     totalAmount { amount currencyCode }
     subtotalAmount { amount currencyCode }
   }
+  discountCodes { code applicable }
   lines(first: 100) {
     edges {
       node {
@@ -108,6 +113,7 @@ function toCart(raw: any): StorefrontCart | null {
     checkoutUrl: raw.checkoutUrl,
     totalQuantity: raw.totalQuantity,
     cost: raw.cost,
+    discountCodes: (raw.discountCodes ?? []).map((d: any) => ({ code: d.code, applicable: d.applicable })),
     lines: (raw.lines?.edges ?? []).map((e: any) => ({
       id: e.node.id,
       quantity: e.node.quantity,
@@ -173,6 +179,27 @@ export async function cartLinesUpdate(
     { cartId, lines }
   );
   return { cart: toCart(data.cartLinesUpdate.cart), userErrors: data.cartLinesUpdate.userErrors ?? [] };
+}
+
+/** Sets the cart's discount code(s) to exactly this list (replaces whatever was there, same
+ * "full state, not a delta" contract as the cart line mutations) -- an empty array clears any
+ * code. Never errors just because a code is invalid/expired/ineligible: Shopify accepts the call
+ * and reports that via the returned cart's discountCodes[].applicable instead (see StorefrontCart
+ * above), which lib/shopify/cart-sync.ts surfaces as a warning rather than a failed sync. */
+export async function cartDiscountCodesUpdate(
+  cartId: string,
+  discountCodes: string[]
+): Promise<{ cart: StorefrontCart | null; userErrors: CartUserError[] }> {
+  const data = await storefrontGraphQL<any>(
+    `mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
+      cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
+        cart { ${CART_FIELDS} }
+        userErrors { field message }
+      }
+    }`,
+    { cartId, discountCodes }
+  );
+  return { cart: toCart(data.cartDiscountCodesUpdate.cart), userErrors: data.cartDiscountCodesUpdate.userErrors ?? [] };
 }
 
 export async function cartLinesRemove(

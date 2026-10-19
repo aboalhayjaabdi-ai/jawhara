@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
+import { syncDiscountToShopify, describeDiscountSyncResult, deactivateShopifyDiscount } from "@/lib/shopify/discount-sync";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true; shopifyWarning?: string } | { ok: false; error: string };
 
 export type DiscountFormInput = {
   title: string;
@@ -70,20 +71,49 @@ export async function updateDiscount(discountId: string, input: DiscountFormInpu
   if (error) return { ok: false, error: error.message };
 
   await logAdminAction(admin.adminId, "discounts.update", "discount", discountId, { title, kind: input.kind, shape: input.shape, status: input.status });
+
+  // Best-effort: pushes this exact change to Shopify now, rather than waiting for the next list-
+  // page load's scheduler sweep (lib/admin/discount-scheduler.ts) to notice the status changed.
+  // Never fails the save above -- Jawhara's own pricing (lib/discounts.ts) doesn't depend on this.
+  const syncResult = await syncDiscountToShopify(discountId);
+  await logAdminAction(admin.adminId, "discounts.shopify_sync", "discount", discountId, syncResult);
+
   revalidatePath("/admin/discounts");
   revalidatePath(`/admin/discounts/${discountId}`);
-  return { ok: true };
+  const shopifyWarning = describeDiscountSyncResult(syncResult) ?? undefined;
+  return shopifyWarning ? { ok: true, shopifyWarning } : { ok: true };
+}
+
+/** Manual re-trigger for the admin detail page's "Synka till Shopify nu" button -- same
+ * sync syncDiscountToShopify every save already runs, exposed on its own for retrying after a
+ * transient Shopify failure without having to touch and re-save the form. */
+export async function syncDiscountNow(discountId: string): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  const result = await syncDiscountToShopify(discountId);
+  await logAdminAction(admin.adminId, "discounts.shopify_sync", "discount", discountId, result);
+  revalidatePath(`/admin/discounts/${discountId}`);
+  if (!result.ok) return { ok: false, error: result.error };
+  const warning = describeDiscountSyncResult(result);
+  return warning ? { ok: true, shopifyWarning: warning } : { ok: true };
 }
 
 export async function deleteDiscount(discountId: string, confirmed: boolean): Promise<ActionResult> {
   const admin = await requireAdmin();
   if (!confirmed) return { ok: false, error: "Bekräfta för att radera permanent." };
 
-  const { data: discount } = await supabaseService.from("discounts").select("title").eq("id", discountId).maybeSingle();
+  const { data: discount } = await supabaseService.from("discounts").select("title, kind, shopify_discount_id").eq("id", discountId).maybeSingle();
   const { error } = await supabaseService.from("discounts").delete().eq("id", discountId);
   if (error) return { ok: false, error: error.message };
 
   await logAdminAction(admin.adminId, "discounts.delete", "discount", discountId, { title: discount?.title });
+
+  let shopifyWarning: string | undefined;
+  if (discount?.shopify_discount_id) {
+    const result = await deactivateShopifyDiscount(discount.kind as "automatic" | "code", discount.shopify_discount_id);
+    await logAdminAction(admin.adminId, "discounts.shopify_sync", "discount", discountId, result);
+    if (!result.ok) shopifyWarning = `Raderad i Jawhara, men kunde inte avaktiveras i Shopify: ${result.error}`;
+  }
+
   revalidatePath("/admin/discounts");
-  return { ok: true };
+  return shopifyWarning ? { ok: true, shopifyWarning } : { ok: true };
 }
