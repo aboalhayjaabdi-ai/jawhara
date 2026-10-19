@@ -522,6 +522,18 @@ export const getThreeForTwoCollectionIds = cache(async (): Promise<Set<string>> 
   return new Set((data?.buy_item_ids as string[] | null) ?? []);
 });
 
+/** Same "3 för 2" eligibility as getThreeForTwoCollectionIds above, for a single product by its
+ * internal id (not shopify_id) -- same shape as isEligibleForWalletPromo, so the PDP
+ * (app/(storefront)/products/[handle]/page.tsx) can keep showing the badge on the product page
+ * itself, matching the "Rea" badge there, instead of only on grid cards. */
+export async function isEligibleForThreeForTwo(productId: string): Promise<boolean> {
+  const [{ data }, threeForTwoCollectionIds] = await Promise.all([
+    supabase.from("collection_products").select("collections(shopify_id)").eq("product_id", productId),
+    getThreeForTwoCollectionIds(),
+  ]);
+  return ((data ?? []) as any[]).some((row) => row.collections?.shopify_id && threeForTwoCollectionIds.has(row.collections.shopify_id));
+}
+
 /** "Passar med" -- manually curated complementary products (product_complementary), entirely
  * separate from getRelatedProductCards' automatic recommendations above. Only the admin's own
  * manual selections are ever returned, in the admin's own chosen order; excludes unpublished
