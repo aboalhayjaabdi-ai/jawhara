@@ -15,6 +15,9 @@ out/
 data/exports/
 data/media/
 
+# Sello bot working data — downloaded product images and generated listing manifests, regenerate via export-product.ts
+data/sello-export/
+
 # Misc
 .DS_Store
 *.log
