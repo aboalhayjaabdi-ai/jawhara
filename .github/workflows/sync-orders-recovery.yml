@@ -7,9 +7,13 @@ name: Shopify order sync recovery sweep
 # especially under high load, so this is a fast recovery sweep, not a latency guarantee). The
 # real-time Shopify webhook is still the primary path; this only catches an order the webhook
 # missed, within a few minutes instead of up to a day.
+#
+# Offset by 2 minutes (:02, :07, :12, ...) rather than on the exact 5-minute mark: GitHub's own
+# docs call out the top of every hour (and, by extension, exact round-number ticks) as GitHub
+# Actions' highest-load, most delay-prone scheduling moments.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "2-57/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
