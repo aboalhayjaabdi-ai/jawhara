@@ -6,6 +6,7 @@ import { sendOrderConfirmationEmail } from "@/lib/email/order-confirmation";
 import { sendOrderCancellationEmail } from "@/lib/email/order-cancellation";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
+import { reportPurchaseToMeta } from "@/lib/marketing/capi-purchase";
 
 /**
  * Single endpoint for every Shopify order/fulfillment webhook topic this app subscribes to (see
@@ -61,6 +62,13 @@ export async function POST(req: NextRequest) {
 
     if (result.isNewlyPaid) {
       await maybeSendOrderConfirmation(result.orderId);
+      // Independent of the email claim above (its own column, its own failure mode) -- the ONLY
+      // Purchase signal Meta gets for this storefront, since checkout happens entirely on
+      // Shopify's own domain with no native Facebook/Instagram channel installed and no browser
+      // pixel ever fires for it. See lib/marketing/capi-purchase.ts's own comment for the full
+      // reasoning (and why this never races the bulk "Sync from Shopify" pull).
+      const capiResult = await reportPurchaseToMeta(result.orderId);
+      if (!capiResult.ok) console.error(`Meta CAPI Purchase failed for order ${result.orderId}: ${capiResult.error}`);
     }
     if (result.isNewlyCancelled) {
       await maybeSendCancellationEmail(result.orderId);

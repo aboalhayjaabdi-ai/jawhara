@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import Script from "next/script";
 import { getConsent, setConsent, type ConsentState } from "@/lib/marketing/consent";
+import { trackPageView } from "@/lib/marketing/events";
 
 /**
  * One combined client component (not split into separate banner/script components) so the
@@ -22,6 +24,21 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
     setConsentState(getConsent());
     setHydrated(true);
   }, []);
+
+  // The pixel's own init script below fires the very first PageView itself the moment it loads
+  // (consent accepted) -- this effect covers every page after that. Without it, PageView only
+  // ever fired once per full browser load: Next.js App Router navigation between pages (any
+  // <Link> click) never reloads the page, so most real pageviews on this site were never being
+  // reported at all.
+  const pathname = usePathname();
+  const skippedFirstRef = useRef(false);
+  useEffect(() => {
+    if (!skippedFirstRef.current) {
+      skippedFirstRef.current = true;
+      return;
+    }
+    trackPageView();
+  }, [pathname]);
 
   function handleAccept() {
     setConsent("accepted");
