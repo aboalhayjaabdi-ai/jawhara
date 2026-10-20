@@ -39,7 +39,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
   let query = supabase
     .from("orders")
     .select(
-      "id, order_number, email, currency_code, financial_status, fulfillment_status, total_price, created_at, source, cancelled_at, customers(first_name, last_name), order_items(count), fulfillments(tracking_company)",
+      "id, order_number, email, currency_code, financial_status, fulfillment_status, total_price, created_at, source, cancelled_at, is_test_order, customers(first_name, last_name), order_items(count), fulfillments(tracking_company)",
       { count: "exact" }
     );
   query = applyOrdersListFilters(query as any, filters, carrierOrderIds);
@@ -66,6 +66,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
     customerName: o.customers ? [o.customers.first_name, o.customers.last_name].filter(Boolean).join(" ") || null : null,
     itemCount: o.order_items?.[0]?.count ?? 0,
     carrier: (o.fulfillments ?? []).find((f: any) => f.tracking_company)?.tracking_company ?? null,
+    isTestOrder: !!o.is_test_order,
   }));
 
   const returnQuery = new URLSearchParams(Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] ?? "" : v ?? ""])).toString();
@@ -78,6 +79,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
       created_at: r.created_at,
       fulfillment_status: r.fulfillment_status,
       customerName: r.customerName,
+      isTestOrder: r.isTestOrder,
     }));
 
     return (

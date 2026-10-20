@@ -46,7 +46,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, source, shipping_address_id, customer_id, hidden_at, customers(first_name, last_name, email, phone)"
+      "id, order_number, email, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_tax, total_discounts, total_price, note, tags, cancelled_at, cancel_reason, processed_at, created_at, shopify_id, stripe_checkout_session_id, source, shipping_address_id, customer_id, hidden_at, is_test_order, customers(first_name, last_name, email, phone)"
     )
     .eq("id", id)
     .maybeSingle();
@@ -244,6 +244,9 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+            {order.is_test_order && (
+              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">Testorder</span>
+            )}
             <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillmentLabel.tone]}`}>
               {FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""] ? t(locale, FULFILLMENT_STATUS_LABEL[order.fulfillment_status ?? ""]) : fulfillmentLabel.label}
             </span>
@@ -355,6 +358,9 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold text-gray-900">{order.order_number}</h1>
+          {order.is_test_order && (
+            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">Testorder</span>
+          )}
           <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[fulfillmentLabel.tone]}`}>{fulfillmentLabel.label}</span>
           <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_CLASSES[financialLabel.tone]}`}>{financialLabel.label}</span>
           <span

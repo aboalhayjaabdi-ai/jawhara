@@ -20,7 +20,16 @@ export type OrderRow = {
   customerName: string | null;
   itemCount?: number;
   carrier?: string | null;
+  isTestOrder?: boolean;
 };
+
+function TestOrderBadge() {
+  return (
+    <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+      Testorder
+    </span>
+  );
+}
 
 function formatMoney(amount: number | null, currency: string) {
   if (amount == null) return "—";
@@ -151,7 +160,10 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
               className="block rounded-lg border border-gray-200 bg-white p-4 active:bg-gray-50"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <span className="font-semibold text-gray-900">{o.order_number}</span>
+                <span className="flex items-center gap-1.5 font-semibold text-gray-900">
+                  {o.order_number}
+                  {o.isTestOrder && <TestOrderBadge />}
+                </span>
                 <span className="font-semibold text-gray-900">{formatMoney(o.total_price, o.currency_code)}</span>
               </div>
               <div className="mt-1 text-sm text-gray-500">
@@ -201,8 +213,12 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
                   <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="h-4 w-4 rounded border-gray-300" />
                 </td>
                 <td className="px-5 py-3">
-                  <Link href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`} className="font-medium text-gray-900 hover:underline">
+                  <Link
+                    href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`}
+                    className="flex items-center gap-1.5 font-medium text-gray-900 hover:underline"
+                  >
                     {o.order_number}
+                    {o.isTestOrder && <TestOrderBadge />}
                   </Link>
                 </td>
                 <td className="px-5 py-3 text-gray-500">{formatDate(o.created_at)}</td>
