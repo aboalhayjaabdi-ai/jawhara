@@ -521,7 +521,17 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
             </div>
           </div>
 
-          <RefundForm orderId={order.id} maxAmount={refundableAmount} currency={order.currency_code} />
+          {order.source === "shopify" ? (
+            <div className="rounded-lg border border-gray-200 bg-white p-5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Återbetalning</div>
+              <p className="text-sm text-gray-600">
+                Den här ordern kommer från Shopify. Hantera återbetalningar i Shopify Admin — Jawhara uppdaterar
+                automatiskt när Shopify har bekräftat återbetalningen.
+              </p>
+            </div>
+          ) : (
+            <RefundForm orderId={order.id} maxAmount={refundableAmount} currency={order.currency_code} />
+          )}
 
           <div className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Kund</div>

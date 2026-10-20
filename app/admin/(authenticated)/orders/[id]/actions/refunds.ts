@@ -29,10 +29,17 @@ export async function createRefund(
 
   const { data: order } = await supabaseService
     .from("orders")
-    .select("id, order_number, email, total_price")
+    .select("id, order_number, email, total_price, source")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return { ok: false, error: "Ordern hittades inte." };
+  // Shopify orders are refunded in Shopify Admin only -- never here. Jawhara automatically
+  // reflects the result (refund row + financial_status) once Shopify's own refund syncs back via
+  // webhook or the reconciliation cron (see lib/shopify/order-sync-shared.ts), so this never
+  // creates a misleading local-only "refunded" state that Shopify itself hasn't confirmed.
+  if (order.source === "shopify") {
+    return { ok: false, error: "Den här ordern kommer från Shopify. Hantera återbetalningen i Shopify Admin — Jawhara synkar den automatiskt när Shopify har bekräftat den." };
+  }
 
   const { data: existingRefunds } = await supabaseService.from("refunds").select("amount").eq("order_id", orderId);
   const alreadyRefunded = (existingRefunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);

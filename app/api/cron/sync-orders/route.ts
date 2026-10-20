@@ -8,7 +8,10 @@ import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
  * delivery is explicitly "not always guaranteed" (their own docs' wording) -- this re-pulls
  * recent orders on a schedule so Jawhara stays correct even on a day webhooks are missed or
  * delayed, independent of the admin's manual "Sync from Shopify" button
- * (app/api/admin/orders/sync/route.ts, same underlying function).
+ * (app/api/admin/orders/sync/route.ts, same underlying function with recoverMissedEvents left at
+ * its default false). Passing true here also recovers a genuinely missed Meta Purchase report or
+ * cancellation email -- see syncOrdersFromShopify's own comment for why this can never duplicate
+ * one the webhook already sent.
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -16,7 +19,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await syncOrdersFromShopify();
+  const result = await syncOrdersFromShopify(true);
 
   await supabaseService.from("cron_sync_runs").insert({
     pulled_count: result.pulledCount,

@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { verifyShopifyWebhookSignature } from "@/lib/shopify/webhook-verify";
 import { syncSingleShopifyOrder } from "@/lib/shopify/order-sync-shared";
-import { sendOrderConfirmationEmail } from "@/lib/email/order-confirmation";
-import { sendOrderCancellationEmail } from "@/lib/email/order-cancellation";
-import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
-import { buildEmailLineItems } from "@/lib/email/build-line-items";
-import { reportPurchaseToMeta } from "@/lib/marketing/capi-purchase";
+import { reportNewlyPaidPurchase, maybeSendCancellationEmail } from "@/lib/shopify/sync-side-effects";
 import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
 
 /**
@@ -61,28 +57,22 @@ export async function POST(req: NextRequest) {
     const result = await syncSingleShopifyOrder(orderGid);
     if (!result) return NextResponse.json({ received: true, note: "order not found" });
 
+    // Order confirmation and refund notifications are intentionally NOT sent from here: Shopify's
+    // own native "Order confirmation" and "Refund" customer notifications are the system of
+    // record for those two events (business decision), so Jawhara must never also send them --
+    // see lib/shopify/sync-side-effects.ts's own comment. Jawhara's own refunds.ts admin action is
+    // separately blocked from ever refunding a Shopify order, so the only place a Shopify order's
+    // refund can happen at all is Shopify itself, and result.newRefundIds (from upsertShopifyOrder
+    // above) only exists so refund rows/financial_status stay in sync here, nothing more.
     if (result.isNewlyPaid) {
-      await maybeSendOrderConfirmation(result.orderId);
-      // Independent of the email claim above (its own column, its own failure mode) -- the ONLY
-      // Purchase signal Meta gets for this storefront, since checkout happens entirely on
+      // The ONLY Purchase signal Meta gets for this storefront, since checkout happens entirely on
       // Shopify's own domain with no native Facebook/Instagram channel installed and no browser
       // pixel ever fires for it. See lib/marketing/capi-purchase.ts's own comment for the full
-      // reasoning (and why this never races the bulk "Sync from Shopify" pull).
-      const capiResult = await reportPurchaseToMeta(result.orderId);
-      if (!capiResult.ok) {
-        console.error(`Meta CAPI Purchase failed for order ${result.orderId}: ${capiResult.error}`);
-        await logIntegrationError("capi", capiResult.error, { topic }, result.orderId);
-      }
+      // reasoning.
+      await reportNewlyPaidPurchase(result.orderId);
     }
     if (result.isNewlyCancelled) {
       await maybeSendCancellationEmail(result.orderId);
-    }
-    // A refund issued directly in Shopify (the admin's own createRefund action never reaches
-    // here at all -- it writes its refund row and sends its one email synchronously, without
-    // ever calling Shopify). result.newRefundIds is already deduped by shopify_id, so a webhook
-    // retry for the same refund never re-sends.
-    for (const refundId of result.newRefundIds) {
-      await maybeSendRefundEmail(refundId);
     }
     // Fulfillments created/updated directly in Shopify (result.newFulfillmentIds) are synced
     // into Supabase above (via syncSingleShopifyOrder -> upsertShopifyOrder) for consistency, but
@@ -103,137 +93,3 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function maybeSendOrderConfirmation(orderId: string) {
-  const { data: order } = await supabaseService
-    .from("orders")
-    .select("order_number, email, subtotal_price, total_discounts, applied_discounts, total_tax, total_shipping, total_price, shipping_address_id")
-    .eq("id", orderId)
-    .single();
-  if (!order?.email) return;
-
-  // Atomic claim: only the first caller to see confirmation_email_sent_at still null gets to
-  // send -- a webhook retry (or an admin-triggered re-sync landing on the same order a moment
-  // later) that loses this race sends nothing.
-  const { data: claimed } = await supabaseService
-    .from("orders")
-    .update({ confirmation_email_sent_at: new Date().toISOString() })
-    .eq("id", orderId)
-    .is("confirmation_email_sent_at", null)
-    .select("id")
-    .maybeSingle();
-  if (!claimed) return;
-
-  const { data: items } = await supabaseService
-    .from("order_items")
-    .select("id, title, quantity, unit_price, discounted_unit_price, variant_id, product_id, image_url, variant_title_snapshot, product_variants(title)")
-    .eq("order_id", orderId);
-  const { data: address } = order.shipping_address_id
-    ? await supabaseService.from("addresses").select("first_name, address1, address2, city, zip, country_code").eq("id", order.shipping_address_id).maybeSingle()
-    : { data: null };
-
-  const lineItems = await buildEmailLineItems(
-    (items ?? []).map((i: any) => ({
-      id: i.id,
-      title: i.title,
-      quantity: i.quantity,
-      unitPrice: Number(i.discounted_unit_price ?? i.unit_price),
-      variantId: i.variant_id,
-      productId: i.product_id,
-      variantTitle: i.product_variants?.title ?? null,
-      imageUrlSnapshot: i.image_url,
-      variantTitleSnapshot: i.variant_title_snapshot,
-    }))
-  );
-
-  await sendOrderConfirmationEmail({
-    to: order.email,
-    orderNumber: order.order_number,
-    items: lineItems,
-    subtotal: Number(order.subtotal_price ?? 0),
-    discountTotal: Number(order.total_discounts ?? 0),
-    appliedDiscounts: Array.isArray(order.applied_discounts)
-      ? (order.applied_discounts as any[]).map((d) => ({ title: d.title, amountOff: Number(d.amountOff) }))
-      : undefined,
-    vat: Number(order.total_tax ?? 0),
-    shipping: Number(order.total_shipping ?? 0),
-    total: Number(order.total_price),
-    shippingAddress: address
-      ? { name: address.first_name, address1: address.address1, address2: address.address2, city: address.city, zip: address.zip, country: address.country_code }
-      : null,
-  });
-}
-
-async function maybeSendCancellationEmail(orderId: string) {
-  const { data: order } = await supabaseService.from("orders").select("order_number, email, cancel_reason").eq("id", orderId).single();
-  if (!order?.email) return;
-
-  // Same atomic-claim pattern as order confirmation -- also guards against double-sending when
-  // an order was already cancelled through Jawhara admin's own cancelOrder() action (which sets
-  // this same column directly) moments before this webhook for the same cancellation arrives.
-  const { data: claimed } = await supabaseService
-    .from("orders")
-    .update({ cancellation_email_sent_at: new Date().toISOString() })
-    .eq("id", orderId)
-    .is("cancellation_email_sent_at", null)
-    .select("id")
-    .maybeSingle();
-  if (!claimed) return;
-
-  const { data: items } = await supabaseService
-    .from("order_items")
-    .select("id, title, quantity, unit_price, discounted_unit_price, variant_id, product_id, image_url, variant_title_snapshot, product_variants(title)")
-    .eq("order_id", orderId);
-  const lineItems = await buildEmailLineItems(
-    (items ?? []).map((i: any) => ({
-      id: i.id,
-      title: i.title,
-      quantity: i.quantity,
-      unitPrice: Number(i.discounted_unit_price ?? i.unit_price),
-      variantId: i.variant_id,
-      productId: i.product_id,
-      variantTitle: i.product_variants?.title ?? null,
-      imageUrlSnapshot: i.image_url,
-      variantTitleSnapshot: i.variant_title_snapshot,
-    }))
-  );
-  await sendOrderCancellationEmail({ to: order.email, orderNumber: order.order_number, items: lineItems, reason: order.cancel_reason || null });
-}
-
-async function maybeSendRefundEmail(refundId: string) {
-  const { data: refund } = await supabaseService.from("refunds").select("id, order_id, amount, reason").eq("id", refundId).single();
-  if (!refund) return;
-  const { data: order } = await supabaseService.from("orders").select("order_number, email").eq("id", refund.order_id).maybeSingle();
-  if (!order?.email) return;
-
-  // Same atomic-claim pattern as the order-level emails above, on refunds.notification_sent_at.
-  const { data: claimed } = await supabaseService
-    .from("refunds")
-    .update({ notification_sent_at: new Date().toISOString() })
-    .eq("id", refundId)
-    .is("notification_sent_at", null)
-    .select("id")
-    .maybeSingle();
-  if (!claimed) return;
-
-  // Shopify's refund webhook doesn't carry a precise line-item breakdown in the fields this app
-  // queries (order-sync-shared.ts's ORDER_FIELDS_FRAGMENT) -- show every item on the order, same
-  // as the (now-dead) Stripe charge.refunded handler always did for an order-level refund.
-  const { data: items } = await supabaseService
-    .from("order_items")
-    .select("id, title, quantity, unit_price, discounted_unit_price, variant_id, product_id, image_url, variant_title_snapshot, product_variants(title)")
-    .eq("order_id", refund.order_id);
-  const lineItems = await buildEmailLineItems(
-    (items ?? []).map((i: any) => ({
-      id: i.id,
-      title: i.title,
-      quantity: i.quantity,
-      unitPrice: Number(i.discounted_unit_price ?? i.unit_price),
-      variantId: i.variant_id,
-      productId: i.product_id,
-      variantTitle: i.product_variants?.title ?? null,
-      imageUrlSnapshot: i.image_url,
-      variantTitleSnapshot: i.variant_title_snapshot,
-    }))
-  );
-  await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: Number(refund.amount), reason: refund.reason, items: lineItems });
-}
