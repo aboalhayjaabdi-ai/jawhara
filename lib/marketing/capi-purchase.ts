@@ -38,12 +38,19 @@ export type CapiPurchaseResult = { ok: true; skipped?: string } | { ok: false; e
 export async function reportPurchaseToMeta(orderId: string): Promise<CapiPurchaseResult> {
   const { data: order } = await supabaseService
     .from("orders")
-    .select("id, shopify_id, order_number, financial_status, total_price, currency_code, email, phone")
+    .select("id, shopify_id, order_number, financial_status, total_price, currency_code, email, phone, is_test_order")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return { ok: false, error: "Order not found" };
   if (order.financial_status?.toUpperCase() !== "PAID") {
     return { ok: false, error: `Order is not paid (financial_status=${order.financial_status})` };
+  }
+  // Shopify's own "test order" flag (orders placed via the admin's "Place test order" action, or
+  // created with test: true through the API) is never a real purchase -- reporting it to Meta
+  // would feed live ad optimization and reporting a fake conversion. This is the only guard
+  // against that, so it applies unconditionally, not just during deliberate pipeline testing.
+  if (order.is_test_order) {
+    return { ok: true, skipped: "Shopify test order - not reported to Meta" };
   }
 
   const settings = await getMarketingSettings();

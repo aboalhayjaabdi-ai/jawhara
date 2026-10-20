@@ -25,6 +25,7 @@ export type ShopifyOrderNode = {
   currencyCode: string;
   note: string | null;
   tags: string[];
+  test: boolean;
   customer: { id: string } | null;
   subtotalPriceSet: { shopMoney: { amount: string } } | null;
   totalShippingPriceSet: { shopMoney: { amount: string } } | null;
@@ -69,7 +70,7 @@ export type ShopifyOrderNode = {
 
 export const ORDER_FIELDS_FRAGMENT = `
   id name email phone createdAt processedAt cancelledAt cancelReason
-  displayFinancialStatus displayFulfillmentStatus currencyCode note tags
+  displayFinancialStatus displayFulfillmentStatus currencyCode note tags test
   customer { id }
   subtotalPriceSet { shopMoney { amount currencyCode } }
   totalShippingPriceSet { shopMoney { amount currencyCode } }
@@ -155,6 +156,7 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode): Promise<UpsertOrd
         total_price: Number(o.totalPriceSet.shopMoney.amount),
         note: o.note || null,
         tags: o.tags || [],
+        is_test_order: o.test,
         cancelled_at: o.cancelledAt || null,
         cancel_reason: o.cancelReason || null,
         processed_at: o.processedAt || null,
