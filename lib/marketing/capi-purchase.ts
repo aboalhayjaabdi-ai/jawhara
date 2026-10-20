@@ -10,7 +10,35 @@ function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export type CapiPurchaseResult = { ok: true; skipped?: string } | { ok: false; error: string };
+export type PurchaseReportSource = "webhook" | "cron_sync" | "github_actions";
+export type RecoverySource = Exclude<PurchaseReportSource, "webhook">;
+
+type MetaCallOutcome = { ok: true } | { ok: false; error: string; retryable: boolean };
+
+async function postToMetaWithRetry(url: string, payload: unknown, maxAttempts = 3): Promise<MetaCallOutcome> {
+  let lastError: MetaCallOutcome = { ok: false, error: "Not attempted", retryable: true };
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json().catch(() => null);
+      if (res.ok) return { ok: true };
+      // 4xx (bad token, malformed event, etc.) won't succeed on retry within this same process --
+      // only retry on 5xx (Meta's own transient failure), same as the network-error branch below.
+      const retryable = res.status >= 500;
+      lastError = { ok: false, error: data?.error?.message ?? `Meta CAPI request failed (${res.status})`, retryable };
+      if (!retryable) return lastError;
+    } catch (err) {
+      lastError = { ok: false, error: `Network error calling Meta CAPI: ${(err as Error).message}`, retryable: true };
+    }
+    if (attempt < maxAttempts) await sleep(attempt * 500);
+  }
+  return lastError;
+}
 
 /**
  * Reports a confirmed Shopify order's Purchase to Meta via the Conversions API -- the ONLY
@@ -24,21 +52,24 @@ export type CapiPurchaseResult = { ok: true; skipped?: string } | { ok: false; e
  * ever added back (e.g. via a Shopify checkout web pixel extension), give it the SAME event_id
  * this sends (shopify_order_<order id>) so Meta can dedupe the two.
  *
- * Called from app/api/webhooks/shopify/route.ts only when an order newly becomes PAID there --
- * deliberately not from the periodic bulk "Sync from Shopify" pull (lib/shopify/sync-orders.ts),
- * same reasoning as that pull never sending the confirmation email either: reporting a
- * backfilled, possibly much-older order's purchase to Meta out of real time would feed its ad
- * optimization bad signal, not a safety net worth having.
+ * Called from three places, all converging on the same atomic claim (orders.purchase_event_sent_at)
+ * so an order is reported exactly once regardless of which caller gets there first:
+ *  - the real-time webhook (source: "webhook"), the fast path, targeting a few seconds of latency
+ *    under normal Shopify delivery conditions (not a guaranteed bound -- Shopify's own delivery
+ *    isn't guaranteed either);
+ *  - the ~5-minute GitHub Actions recovery sweep (source: "github_actions");
+ *  - the daily Vercel Cron reconciliation sweep (source: "cron_sync"), the final backstop.
+ * Every one of these logs a purchase_tracking_log row (payment confirmed -> this caller observed
+ * it -> Meta submitted -> Meta accepted/rejected) so actual end-to-end latency, and which path
+ * actually caught each order, is measurable after the fact.
  *
- * Claimed atomically on orders.purchase_event_sent_at before sending, so a webhook retry (or this
- * racing the confirmation-email claim, which is a separate column) can never report the same
- * order twice. Every value sent is re-derived from the real orders/order_items rows by orderId --
- * never trusted from any caller-supplied data.
+ * Every value sent is re-derived from the real orders/order_items rows by orderId -- never
+ * trusted from any caller-supplied data.
  */
-export async function reportPurchaseToMeta(orderId: string): Promise<CapiPurchaseResult> {
+export async function reportPurchaseToMeta(orderId: string, source: PurchaseReportSource = "webhook"): Promise<CapiPurchaseResult> {
   const { data: order } = await supabaseService
     .from("orders")
-    .select("id, shopify_id, order_number, financial_status, total_price, currency_code, email, phone, is_test_order")
+    .select("id, shopify_id, order_number, financial_status, total_price, currency_code, email, phone, is_test_order, processed_at")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return { ok: false, error: "Order not found" };
@@ -68,6 +99,13 @@ export async function reportPurchaseToMeta(orderId: string): Promise<CapiPurchas
     .select("id")
     .maybeSingle();
   if (!claimed) return { ok: true, skipped: "Already reported" };
+
+  const detectedAt = new Date().toISOString();
+  const { data: logRow } = await supabaseService
+    .from("purchase_tracking_log")
+    .insert({ order_id: orderId, source, payment_confirmed_at: order.processed_at, detected_at: detectedAt })
+    .select("id")
+    .single();
 
   const { data: items } = await supabaseService
     .from("order_items")
@@ -107,21 +145,21 @@ export async function reportPurchaseToMeta(orderId: string): Promise<CapiPurchas
     ],
   };
 
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/v21.0/${settings.metaPixelId}/events?access_token=${encodeURIComponent(settings.metaCapiAccessToken)}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-    );
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      // Release the claim so a genuine retry (webhook redelivery) can try again instead of being
-      // permanently marked "sent" when Meta actually rejected it.
-      await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
-      return { ok: false, error: data?.error?.message ?? `Meta CAPI request failed (${res.status})` };
-    }
+  const submittedAt = new Date().toISOString();
+  if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_submitted_at: submittedAt }).eq("id", logRow.id);
+
+  const url = `https://graph.facebook.com/v21.0/${settings.metaPixelId}/events?access_token=${encodeURIComponent(settings.metaCapiAccessToken)}`;
+  const outcome = await postToMetaWithRetry(url, payload);
+
+  if (outcome.ok) {
+    if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_accepted_at: new Date().toISOString() }).eq("id", logRow.id);
     return { ok: true };
-  } catch (err) {
-    await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
-    return { ok: false, error: `Network error calling Meta CAPI: ${(err as Error).message}` };
   }
+
+  // Release the claim so a genuine retry (the next webhook redelivery, or the 5-minute/daily
+  // reconciliation sweeps) can try again instead of being permanently marked "sent" when Meta
+  // actually rejected it.
+  await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
+  if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_error: outcome.error }).eq("id", logRow.id);
+  return { ok: false, error: outcome.error };
 }

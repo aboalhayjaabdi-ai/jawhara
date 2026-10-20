@@ -1,7 +1,7 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendOrderCancellationEmail } from "@/lib/email/order-cancellation";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
-import { reportPurchaseToMeta } from "@/lib/marketing/capi-purchase";
+import { reportPurchaseToMeta, type PurchaseReportSource } from "@/lib/marketing/capi-purchase";
 import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
 
 if (typeof window !== "undefined") {
@@ -22,8 +22,8 @@ if (typeof window !== "undefined") {
  * stay on Resend since Shopify's own notifications for those are suppressed at the point Jawhara
  * creates them).
  */
-export async function reportNewlyPaidPurchase(orderId: string): Promise<void> {
-  const capiResult = await reportPurchaseToMeta(orderId);
+export async function reportNewlyPaidPurchase(orderId: string, source: PurchaseReportSource = "webhook"): Promise<void> {
+  const capiResult = await reportPurchaseToMeta(orderId, source);
   if (!capiResult.ok) {
     console.error(`Meta CAPI Purchase failed for order ${orderId}: ${capiResult.error}`);
     await logIntegrationError("capi", capiResult.error, {}, orderId);

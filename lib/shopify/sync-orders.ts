@@ -1,6 +1,7 @@
 import { paginateAll } from "./client";
 import { upsertShopifyOrder, ORDER_FIELDS_FRAGMENT, type ShopifyOrderNode } from "./order-sync-shared";
 import { reportNewlyPaidPurchase, maybeSendCancellationEmail } from "./sync-side-effects";
+import type { RecoverySource } from "@/lib/marketing/capi-purchase";
 
 // How far back a recovered order's own processed/created date may be for this sweep to still
 // treat it as "newly" paid/cancelled and act on it (report to Meta, send the cancellation email).
@@ -40,15 +41,16 @@ const QUERY = `
  * docs/order-reconciliation-report.md §4), so it catches new orders going forward; it does not
  * redo the one-time historical backfill that import-mcp-backfill-orders.ts already did once.
  *
- * `recoverMissedEvents`: only the reconciliation cron (app/api/cron/sync-orders/route.ts) passes
- * true. When set, any order found newly paid/cancelled AND processed within the last
- * RECOVERY_WINDOW_MS also gets the same Meta Purchase report / cancellation email the real-time
- * webhook would have sent -- safe to call repeatedly: both go through the same atomic-claim
- * columns the webhook path uses, so an order the webhook already handled is a no-op here, and one
- * it missed gets handled exactly once. The admin's manual "Sync from Shopify" button keeps its
- * original data-only behavior (default false), unchanged.
+ * `recoverySource`: only the reconciliation callers (app/api/cron/sync-orders/route.ts, and the
+ * ~5-minute GitHub Actions sweep hitting the same route) pass this. When set, any order found
+ * newly paid/cancelled AND processed within the last RECOVERY_WINDOW_MS also gets the same Meta
+ * Purchase report / cancellation email the real-time webhook would have sent, tagged with this
+ * source so purchase_tracking_log shows which path actually caught it -- safe to call repeatedly:
+ * both go through the same atomic-claim columns the webhook path uses, so an order the webhook
+ * already handled is a no-op here, and one it missed gets handled exactly once. The admin's manual
+ * "Sync from Shopify" button keeps its original data-only behavior (omitted/undefined), unchanged.
  */
-export async function syncOrdersFromShopify(recoverMissedEvents = false): Promise<SyncOrdersResult> {
+export async function syncOrdersFromShopify(recoverySource?: RecoverySource): Promise<SyncOrdersResult> {
   const orders: ShopifyOrderNode[] = [];
   await paginateAll(QUERY, (d: any) => d.orders, async (nodes) => void orders.push(...(nodes as ShopifyOrderNode[])), 50);
 
@@ -60,11 +62,11 @@ export async function syncOrdersFromShopify(recoverMissedEvents = false): Promis
       const result = await upsertShopifyOrder(o);
       importedCount += 1;
 
-      if (recoverMissedEvents) {
+      if (recoverySource) {
         const referenceDate = o.processedAt ?? o.createdAt;
         const isRecent = referenceDate && Date.now() - new Date(referenceDate).getTime() < RECOVERY_WINDOW_MS;
         if (isRecent) {
-          if (result.isNewlyPaid) await reportNewlyPaidPurchase(result.orderId);
+          if (result.isNewlyPaid) await reportNewlyPaidPurchase(result.orderId, recoverySource);
           if (result.isNewlyCancelled) await maybeSendCancellationEmail(result.orderId);
         }
       }
