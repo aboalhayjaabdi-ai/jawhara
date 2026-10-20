@@ -77,6 +77,24 @@ function cartFingerprint(items: CartItem[], discountCode: string | null): string
   return JSON.stringify({ lines: sortedLines, discountCode });
 }
 
+// Every cart/checkout network call goes through this -- a request that hangs (a cold serverless
+// function, Supabase connection pressure from a burst of rapid qty clicks, a flaky mobile network)
+// used to leave `loading`/`isCheckingOut` stuck true forever, with nothing short of a page refresh
+// to recover: nothing anywhere had a ceiling on how long a fetch was allowed to take. This gives
+// every one a hard ceiling; past it, the fetch rejects like any other network failure and the
+// existing catch/finally blocks handle it the same way (clear the loading state, surface an
+// error), so the UI can never wait longer than this for a response that may never come.
+const DEFAULT_FETCH_TIMEOUT_MS = 10000;
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const STORAGE_KEY = "jawhara_cart";
 const DISCOUNT_CODE_STORAGE_KEY = "jawhara_discount_code";
 // The real Shopify Storefront API cart id this Jawhara cart is mirrored into (lib/shopify/cart-
@@ -116,13 +134,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, hydrated]);
 
-  // Shared by the background sync effect below AND goToCheckout's immediate, un-debounced call --
-  // one single place that talks to /api/shopify-cart/sync and folds its response into provider
-  // state, so the two callers can never disagree about what the current shopifyCartId is. Never
-  // throws (the fetch is try/caught here); callers get back the raw parsed result (or null on
-  // total failure) and decide what that means for them.
   const shopifyCartIdRef = useRef(shopifyCartId);
   shopifyCartIdRef.current = shopifyCartId;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const discountCodeRef = useRef(discountCode);
+  discountCodeRef.current = discountCode;
+
   type ShopifySyncResponse = {
     shopifyCartId: string | null;
     checkoutUrl: string | null;
@@ -135,9 +153,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // cart unchanged since the last sync (almost always true: the background effect keeps this warm
   // as the customer shops) can reuse it instead of paying for another round trip to Shopify's API.
   const lastShopifySyncRef = useRef<{ fingerprint: string; data: ShopifySyncResponse } | null>(null);
-  const syncWithShopify = useCallback(async (currentItems: CartItem[], currentDiscountCode: string | null) => {
+
+  // The actual network call -- never invoked directly (always through syncWithShopify's queue
+  // below), and bounded by fetchWithTimeout so a hung request can't leave anything waiting on it
+  // stuck forever.
+  const runShopifySync = useCallback(async (currentItems: CartItem[], currentDiscountCode: string | null): Promise<ShopifySyncResponse | null> => {
     try {
-      const res = await fetch("/api/shopify-cart/sync", {
+      const res = await fetchWithTimeout("/api/shopify-cart/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -163,6 +185,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Shared by the background sync effect below AND goToCheckout's immediate, un-debounced call --
+  // one single place that talks to /api/shopify-cart/sync and folds its response into provider
+  // state, so the two callers can never disagree about what the current shopifyCartId is.
+  //
+  // Serialized through this one queue: Shopify's own API mutates a cart's lines with separate
+  // remove/add calls (lib/shopify/cart-sync.ts), and two of those calls running concurrently
+  // against the SAME cart can interleave their mutations unpredictably server-side. That's the
+  // real mechanism behind the price-mismatch bug recurring -- a rapid qty change firing a second
+  // sync before the first's mutations had finished landing in Shopify. The earlier fix
+  // (078e4c8) made each INDIVIDUAL sync compute the right quantity; it never stopped two of them
+  // from running at the same time in the first place. This queue does: a call that arrives while
+  // one is already in flight waits its turn, then syncs whatever the cart's truly current
+  // contents are by then -- never the possibly-already-superseded snapshot it was originally
+  // asked to sync, and never a no-op if a call ahead of it in the queue already covered it.
+  const syncQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const syncWithShopify = useCallback((): Promise<ShopifySyncResponse | null> => {
+    let result: ShopifySyncResponse | null = null;
+    const next = syncQueueRef.current.catch(() => {}).then(async () => {
+      const latestItems = itemsRef.current;
+      const latestDiscountCode = discountCodeRef.current;
+      const latestFingerprint = cartFingerprint(latestItems, latestDiscountCode);
+      if (lastShopifySyncRef.current?.fingerprint === latestFingerprint) {
+        // A call ahead of us in the queue already synced exactly this state -- reuse it
+        // instead of making Shopify do the same work twice.
+        result = lastShopifySyncRef.current.data;
+        return;
+      }
+      result = await runShopifySync(latestItems, latestDiscountCode);
+    });
+    syncQueueRef.current = next;
+    return next.then(() => result);
+  }, [runShopifySync]);
+
   // Mirrors the current cart (and entered discount code) into Shopify in the background --
   // debounced so rapid qty +/- clicks collapse into one sync, and keyed by a request id (like
   // useCartTotals below) so a slow, now-superseded response can never clobber a newer one. Never
@@ -175,7 +230,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (items.length === 0) return;
     const id = ++shopifySyncRequestId.current;
     const timeout = setTimeout(async () => {
-      const data = await syncWithShopify(items, discountCode);
+      const data = await syncWithShopify();
       if (id !== shopifySyncRequestId.current) return; // a newer sync superseded this one
       setShopifyWarnings(data ? data.warnings : ["Kunde inte synkronisera varukorgen med Shopify just nu."]);
     }, 500);
@@ -186,10 +241,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (items.length === 0) setShopifyWarnings([]);
   }, [items.length]);
 
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const discountCodeRef = useRef(discountCode);
-  discountCodeRef.current = discountCode;
   // Phase 3/4: the "Till kassan" button calls this directly instead of waiting for the debounced
   // background sync above, so a click always redirects to a checkoutUrl for the cart's true
   // current contents -- never a stale one from before the customer's last qty/code change. Treats
@@ -222,10 +273,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const shopifyDataPromise =
       cached && cached.fingerprint === fingerprint && cached.data.checkoutUrl
         ? Promise.resolve(cached.data as ShopifySyncResponse | null)
-        : syncWithShopify(currentItems, currentDiscountCode);
+        : syncWithShopify();
     const [shopifyData, jawharaRes] = await Promise.all([
       shopifyDataPromise,
-      fetch("/api/cart/totals", {
+      fetchWithTimeout("/api/cart/totals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cart: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: currentDiscountCode }),
@@ -366,6 +417,18 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const requestId = useRef(0);
+  // Bumped on every pageshow (covers a bfcache restore landing back on a page that was frozen
+  // mid-fetch) to force a clean re-fetch even when items/discountCode haven't changed -- a
+  // request that was in flight when the page got frozen can't be trusted to still be resolving
+  // correctly once it thaws, and the effect below has no other way to know that happened.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  useEffect(() => {
+    function onPageShow() {
+      setRefreshNonce((n) => n + 1);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -378,7 +441,13 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
     setLoading(true);
     const timeout = setTimeout(async () => {
       try {
-        const res = await fetch("/api/cart/totals", {
+        // fetchWithTimeout is what actually guarantees this can't hang forever -- without it, a
+        // slow/hung response here left `loading` (and so the disabled "Till kassan" button)
+        // stuck true indefinitely, with nothing short of a full page refresh to recover. That
+        // was the real cause of the button going permanently grey after an ordinary add/remove/
+        // qty change: no logic bug in the state transitions themselves, just no ceiling on how
+        // long one was ever allowed to take.
+        const res = await fetchWithTimeout("/api/cart/totals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -404,7 +473,7 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
       }
     }, 300); // debounce rapid qty +/- clicks
     return () => clearTimeout(timeout);
-  }, [items, discountCode]);
+  }, [items, discountCode, refreshNonce]);
 
   return { totals, loading, fetchError };
 }
