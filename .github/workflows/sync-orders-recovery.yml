@@ -20,7 +20,7 @@ jobs:
         run: |
           status=$(curl -sS -o response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.EXTERNAL_CRON_SECRET }}" \
-            https://jawhara.se/api/cron/sync-orders)
+            https://www.jawhara.se/api/cron/sync-orders)
           echo "HTTP status: $status"
           cat response.json
           if [ "$status" -ge 300 ]; then
