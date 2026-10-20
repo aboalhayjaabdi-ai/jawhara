@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
@@ -19,21 +19,56 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode } = useCart();
   const { totals, loading, fetchError } = useCartTotals();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [codeInput, setCodeInput] = useState("");
   const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [applyingCode, setApplyingCode] = useState(false);
-  const [isNavigatingToCheckout, startCheckoutTransition] = useTransition();
-  // Keeps the drawer open (with its "Öppnar kassan..." pending state visible) until the /kassa
-  // route transition actually finishes, instead of closing immediately and leaving a blank flash
-  // of whatever page was behind it while the new page streams in.
+  // Plain state rather than useTransition's isPending -- CartDrawer is mounted once at the root
+  // layout and never unmounts across client navigation, so a useTransition wrapping router.push
+  // can get permanently stuck "pending" if the /kassa navigation is interrupted (e.g. the customer
+  // hits browser Back before it commits): React never gets a chance to resolve that specific
+  // transition, and since this component lives forever, the stuck flag would then disable "Till
+  // kassan" for the rest of the session on every later add/remove/qty change. Every reset path
+  // below is defense-in-depth against that: whichever one fires first wins.
+  const [isNavigatingToCheckout, setIsNavigatingToCheckout] = useState(false);
   const checkoutRequestedRef = useRef(false);
+  const checkoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function resetCheckoutNavigation() {
+    if (checkoutTimeoutRef.current) {
+      clearTimeout(checkoutTimeoutRef.current);
+      checkoutTimeoutRef.current = null;
+    }
+    checkoutRequestedRef.current = false;
+    setIsNavigatingToCheckout(false);
+  }
+
+  // Primary reset: any route change (arriving at /kassa, or landing anywhere else because Back
+  // interrupted the navigation) means the attempt is over one way or the other.
   useEffect(() => {
-    if (!isNavigatingToCheckout && checkoutRequestedRef.current) {
-      checkoutRequestedRef.current = false;
+    if (checkoutRequestedRef.current) {
+      resetCheckoutNavigation();
       close();
     }
-  }, [isNavigatingToCheckout, close]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Secondary reset: browser back/forward (popstate) and bfcache restores (pageshow with
+  // persisted=true) don't always produce a pathname change in time, so force-clear the flag
+  // directly on those events too.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) resetCheckoutNavigation();
+    }
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", resetCheckoutNavigation);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", resetCheckoutNavigation);
+      if (checkoutTimeoutRef.current) clearTimeout(checkoutTimeoutRef.current);
+    };
+  }, []);
 
   // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks
   // qty on repeat calls for the same variant), so checking presence first prevents a double-add
@@ -307,10 +342,14 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           <button
             disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isNavigatingToCheckout}
             onClick={() => {
+              if (isNavigatingToCheckout) return;
               checkoutRequestedRef.current = true;
-              startCheckoutTransition(() => {
-                router.push("/kassa");
-              });
+              setIsNavigatingToCheckout(true);
+              // Last-resort reset: if the route genuinely never changes (a stalled navigation,
+              // or Back landing right back on this same page) and neither event listener above
+              // fires either, the button must still become clickable again on its own.
+              checkoutTimeoutRef.current = setTimeout(resetCheckoutNavigation, 8000);
+              router.push("/kassa");
             }}
             className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >

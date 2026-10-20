@@ -196,6 +196,18 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const requestId = useRef(0);
+  // Bumped on a bfcache restore (browser back/forward landing on a frozen page) to force a clean
+  // re-fetch even when `items`/`discountCode` haven't changed -- a request that was in flight when
+  // the page was frozen can't be trusted to still be resolving correctly.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) setRefreshNonce((n) => n + 1);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -206,7 +218,12 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
     }
     const id = ++requestId.current;
     setLoading(true);
-    const timeout = setTimeout(async () => {
+    const controller = new AbortController();
+    // Hard ceiling so a slow/hung Supabase round trip can never leave `loading` stuck forever --
+    // it fails gracefully (re-enabling the checkout button) instead of waiting on a browser-level
+    // network timeout the customer will never sit through.
+    const hardTimeout = setTimeout(() => controller.abort(), 12000);
+    const debounce = setTimeout(async () => {
       try {
         const res = await fetch("/api/cart/totals", {
           method: "POST",
@@ -215,6 +232,7 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
             cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
             discountCode,
           }),
+          signal: controller.signal,
         });
         const data = await res.json();
         if (id !== requestId.current) return; // a newer request superseded this one
@@ -233,8 +251,12 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
         if (id === requestId.current) setLoading(false);
       }
     }, 300); // debounce rapid qty +/- clicks
-    return () => clearTimeout(timeout);
-  }, [items, discountCode]);
+    return () => {
+      clearTimeout(debounce);
+      clearTimeout(hardTimeout);
+      controller.abort();
+    };
+  }, [items, discountCode, refreshNonce]);
 
   return { totals, loading, fetchError };
 }
