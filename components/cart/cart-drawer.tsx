@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCart, useCartTotals } from "./cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
@@ -25,27 +25,66 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   const [applyingCode, setApplyingCode] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const checkoutTimeoutRef = useRef<number | null>(null);
+
+  function clearCheckoutTimeout() {
+    if (checkoutTimeoutRef.current != null) {
+      window.clearTimeout(checkoutTimeoutRef.current);
+      checkoutTimeoutRef.current = null;
+    }
+  }
+
+  // Safari/iOS (and other browsers with a back-forward cache) can restore this exact page --
+  // including React's in-memory state -- straight from bfcache when the customer taps the
+  // browser's back button from Shopify's hosted checkout, without re-running any component
+  // initializer. Without this, `isCheckingOut` (set true right before the browser navigated away)
+  // stays frozen true forever, leaving the button stuck on "Öppnar kassan..." even though the
+  // customer is back on Jawhara and perfectly able to try again. Resetting unconditionally on
+  // every pageshow (not only when `event.persisted` is true) is deliberate: on an ordinary fresh
+  // load isCheckingOut is already false, so this is a harmless no-op there, and it doesn't depend
+  // on `persisted` being reported correctly by every browser.
+  useEffect(() => {
+    function onPageShow() {
+      clearCheckoutTimeout();
+      setIsCheckingOut(false);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      clearCheckoutTimeout();
+    };
+  }, []);
 
   // Syncs the cart to Shopify one last time (never trusting the debounced background sync's
   // possibly-stale state) and, only once that confirms a real checkoutUrl for these exact items,
   // leaves the page for Shopify's hosted checkout. Never navigates on any kind of shortfall --
   // see goToCheckout's own comment in cart-provider.tsx.
   async function handleCheckout() {
-    if (isCheckingOut) return;
+    if (isCheckingOut) return; // belt-and-braces alongside the disabled button below -- a second
+    // click queued before React re-renders that disabled state could otherwise still reach here.
     setCheckoutError(null);
     setIsCheckingOut(true);
-    const result = await goToCheckout();
-    if (!result.ok) {
-      setCheckoutError(result.error);
+    try {
+      const result = await goToCheckout();
+      if (!result.ok) {
+        setIsCheckingOut(false);
+        setCheckoutError(result.error);
+        return;
+      }
+      // Fires right as the customer actually leaves for checkout, not merely when a page loads --
+      // the old /kassa page fired this on mount, which no longer happens since checkout now
+      // redirects straight to Shopify instead of routing through it.
+      trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
+      // isCheckingOut stays true: the browser is navigating away (window.location.href), so there's
+      // no later render on THIS page load that needs it reset -- the pageshow listener above is
+      // what resets it for the only way the customer sees this button again (browser back). This
+      // timeout is purely a safety net in case the navigation itself silently fails to actually
+      // leave the page.
+      checkoutTimeoutRef.current = window.setTimeout(() => setIsCheckingOut(false), 8000);
+    } catch {
       setIsCheckingOut(false);
-      return;
+      setCheckoutError("Något gick fel. Försök igen.");
     }
-    // Fires right as the customer actually leaves for checkout, not merely when a page loads --
-    // the old /kassa page fired this on mount, which no longer happens since checkout now
-    // redirects straight to Shopify instead of routing through it.
-    trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
-    // isCheckingOut stays true: the browser is navigating away (window.location.href), so there's
-    // no later render to reset it for, and leaving the button showing "Öppnar kassan..." is correct.
   }
 
   // Presence-guarded toggle, not a bare addItem/removeItem pair -- addItem is additive (stacks

@@ -68,6 +68,15 @@ type CartContextValue = CartState & CartActions;
 const CartActionsContext = createContext<CartActions | null>(null);
 const CartStateContext = createContext<CartState | null>(null);
 
+// A stable fingerprint of exactly what Shopify's checkoutUrl/total actually depend on -- the
+// variant/qty lines (order-independent) and the discount code. Lets goToCheckout recognize when
+// the cart is unchanged since the last successful sync (background or foreground) and skip
+// re-hitting Shopify's API entirely (see lastShopifySyncRef below).
+function cartFingerprint(items: CartItem[], discountCode: string | null): string {
+  const sortedLines = items.map((i) => [i.variantId, i.qty] as const).sort((a, b) => a[0].localeCompare(b[0]));
+  return JSON.stringify({ lines: sortedLines, discountCode });
+}
+
 const STORAGE_KEY = "jawhara_cart";
 const DISCOUNT_CODE_STORAGE_KEY = "jawhara_discount_code";
 // The real Shopify Storefront API cart id this Jawhara cart is mirrored into (lib/shopify/cart-
@@ -121,6 +130,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     discountCodeApplicable: boolean | null;
     warnings: string[];
   };
+  // Last successful sync's result, keyed by the exact cart/discount-code fingerprint it was for --
+  // shared by the background effect below and goToCheckout, so a checkout click that finds the
+  // cart unchanged since the last sync (almost always true: the background effect keeps this warm
+  // as the customer shops) can reuse it instead of paying for another round trip to Shopify's API.
+  const lastShopifySyncRef = useRef<{ fingerprint: string; data: ShopifySyncResponse } | null>(null);
   const syncWithShopify = useCallback(async (currentItems: CartItem[], currentDiscountCode: string | null) => {
     try {
       const res = await fetch("/api/shopify-cart/sync", {
@@ -142,6 +156,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           // ignore
         }
       }
+      lastShopifySyncRef.current = { fingerprint: cartFingerprint(currentItems, currentDiscountCode), data: data as ShopifySyncResponse };
       return data as ShopifySyncResponse;
     } catch {
       return null;
@@ -196,8 +211,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "Din varukorg är tom." };
     }
     const currentDiscountCode = discountCodeRef.current;
+    // Reuse a just-completed sync's result instead of hitting Shopify's API again when nothing
+    // about the cart has changed since -- the background effect above already keeps this warm as
+    // the customer shops, so by the time they click "Till kassan" it's almost always already
+    // fresh, and skipping Shopify's round trip is most of what makes the redirect fast. Any real
+    // change (qty, items, or code) changes the fingerprint and falls straight through to a live
+    // sync, exactly as before.
+    const fingerprint = cartFingerprint(currentItems, currentDiscountCode);
+    const cached = lastShopifySyncRef.current;
+    const shopifyDataPromise =
+      cached && cached.fingerprint === fingerprint && cached.data.checkoutUrl
+        ? Promise.resolve(cached.data as ShopifySyncResponse | null)
+        : syncWithShopify(currentItems, currentDiscountCode);
     const [shopifyData, jawharaRes] = await Promise.all([
-      syncWithShopify(currentItems, currentDiscountCode),
+      shopifyDataPromise,
       fetch("/api/cart/totals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
