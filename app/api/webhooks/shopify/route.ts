@@ -7,6 +7,7 @@ import { sendOrderCancellationEmail } from "@/lib/email/order-cancellation";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
 import { reportPurchaseToMeta } from "@/lib/marketing/capi-purchase";
+import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
 
 /**
  * Single endpoint for every Shopify order/fulfillment webhook topic this app subscribes to (see
@@ -68,7 +69,10 @@ export async function POST(req: NextRequest) {
       // pixel ever fires for it. See lib/marketing/capi-purchase.ts's own comment for the full
       // reasoning (and why this never races the bulk "Sync from Shopify" pull).
       const capiResult = await reportPurchaseToMeta(result.orderId);
-      if (!capiResult.ok) console.error(`Meta CAPI Purchase failed for order ${result.orderId}: ${capiResult.error}`);
+      if (!capiResult.ok) {
+        console.error(`Meta CAPI Purchase failed for order ${result.orderId}: ${capiResult.error}`);
+        await logIntegrationError("capi", capiResult.error, { topic }, result.orderId);
+      }
     }
     if (result.isNewlyCancelled) {
       await maybeSendCancellationEmail(result.orderId);
@@ -94,6 +98,7 @@ export async function POST(req: NextRequest) {
     // instead of being silently deduped into a permanently stuck half-synced order.
     await supabaseService.from("shopify_webhook_events").delete().eq("shopify_webhook_id", webhookId);
     console.error(`Shopify webhook processing failed for ${webhookId} (${topic}):`, err);
+    await logIntegrationError("webhook", (err as Error).message, { webhookId, topic, restOrderId });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 }
