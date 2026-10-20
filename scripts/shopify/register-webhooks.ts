@@ -18,8 +18,11 @@ const CLIENT_SECRET = requireEnv("SHOPIFY_CLIENT_SECRET");
 const API_VERSION = "2026-10";
 // The site this app actually serves order/fulfillment/email sync from -- defaults to the live
 // production domain since that's the only place Shopify can reach from the public internet
-// (never localhost/a preview deployment).
-const CALLBACK_BASE = process.argv[2] ?? "https://jawhara.se";
+// (never localhost/a preview deployment). Must be the www subdomain: the apex jawhara.se 308s to
+// www.jawhara.se, and Shopify's webhook delivery does not follow redirects -- a subscription
+// pointed at the apex domain is silently never delivered (confirmed empirically: real paid orders
+// never arrived until all 7 subscriptions were repointed at www.jawhara.se).
+const CALLBACK_BASE = process.argv[2] ?? "https://www.jawhara.se";
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch(`https://${STORE_DOMAIN}/admin/oauth/access_token`, {
