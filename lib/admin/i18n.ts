@@ -55,6 +55,7 @@ const DICTIONARY = {
   "fulfillment.title": { sv: "Skapa leverans", zh: "创建发货单" },
   "fulfillment.remaining": { sv: "av", zh: "/" },
   "fulfillment.trackingNumber": { sv: "Spårningsnummer", zh: "追踪号" },
+  "fulfillment.trackingUrl": { sv: "Spårningslänk (valfritt)", zh: "追踪链接（可选）" },
   "fulfillment.notify": { sv: "Meddela kund via e-post", zh: "通过电子邮件通知客户" },
   "fulfillment.notifyHint": {
     sv: "Kunden får en spårningslänk till Jawhara direkt -- ingen transportör krävs för att spara.",

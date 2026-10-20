@@ -8,6 +8,7 @@ import { parseOrdersListFilters, resolveCarrierOrderIds, getAdjacentOrderIds } f
 import { financialStatusLabel, fulfillmentStatusLabel, STATUS_TONE_CLASSES } from "@/lib/admin/order-status-labels";
 import { OrderNotesCard } from "@/components/admin/order-notes-card";
 import { FulfillmentForm } from "@/components/admin/fulfillment-form";
+import { FulfillmentEditControls } from "@/components/admin/fulfillment-edit-controls";
 import { RefundForm } from "@/components/admin/refund-form";
 import { CancelOrderButton } from "@/components/admin/cancel-order-button";
 import { OrderHideButton } from "@/components/admin/order-hide-button";
@@ -56,12 +57,16 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   const [{ data: items }, { data: payments }, { data: fulfillments }, { data: refunds }, { data: shippingAddress }] = await Promise.all([
     supabase
       .from("order_items")
-      .select("id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id, product_id, product_variants(title)")
+      .select(
+        "id, title, sku, quantity, unit_price, discounted_unit_price, fulfilled_quantity, refunded_quantity, variant_id, product_id, image_url, image_is_variant_specific, variant_title_snapshot, product_variants(title)"
+      )
       .eq("order_id", order.id),
     supabase.from("payments").select("id, kind, status, gateway, amount, currency_code, processed_at, stripe_payment_intent_id").eq("order_id", order.id),
     supabase
       .from("fulfillments")
-      .select("id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(tracking_api_registered_at)")
+      .select(
+        "id, status, tracking_number, tracking_url, tracking_company, created_at, shopify_id, shopify_fulfillment_id, shopify_sync_error, tracking_cache(tracking_api_registered_at)"
+      )
       .eq("order_id", order.id),
     supabase.from("refunds").select("id, amount, reason, created_at, kind").eq("order_id", order.id),
     order.shipping_address_id
@@ -73,9 +78,19 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
       : Promise.resolve({ data: null }),
   ]);
 
-  const itemImages = await getOrderItemImages(
-    (items ?? []).map((i) => ({ id: i.id, variantId: i.variant_id, productId: i.product_id }))
-  );
+  // Prefers each item's immutable snapshot (frozen at order-sync time, see migration 0041) --
+  // only items synced before that mechanism existed (image_url never populated) fall back to a
+  // live lookup, so this page always shows exactly what every transactional email for the same
+  // order item shows (lib/email/build-line-items.ts uses the identical preference order).
+  const needingLiveLookup = (items ?? []).filter((i) => i.image_url == null);
+  const liveImages = needingLiveLookup.length
+    ? await getOrderItemImages(needingLiveLookup.map((i) => ({ id: i.id, variantId: i.variant_id, productId: i.product_id })))
+    : {};
+  const itemImages: Record<string, { imageUrl: string | null; isVariantSpecific: boolean }> = {};
+  for (const i of items ?? []) {
+    itemImages[i.id] =
+      i.image_url != null ? { imageUrl: i.image_url, isVariantSpecific: !!i.image_is_variant_specific } : liveImages[i.id] ?? { imageUrl: null, isVariantSpecific: false };
+  }
 
   const currencyCode = order.currency_code;
   const customer = order.customers as any;
@@ -170,7 +185,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
   // A deleted product (order_items.product_id is set null on delete, never cascaded) renders the
   // same info as plain text instead of a dead link.
   function ItemRow({ item, showPrice }: { item: NonNullable<typeof items>[number]; showPrice: boolean }) {
-    const variantTitle = normalizeVariantTitle((item.product_variants as any)?.title);
+    const variantTitle = normalizeVariantTitle(item.variant_title_snapshot ?? (item.product_variants as any)?.title);
     const image = itemImages[item.id];
     const href = item.product_id ? `/admin/products/${item.product_id}${item.variant_id ? `?variant=${item.variant_id}` : ""}` : null;
     const thumb = (
@@ -427,6 +442,23 @@ export default async function AdminOrderDetailPage({ params, searchParams }: { p
                           ? "Registrerad hos 17TRACK"
                           : "Inte registrerad hos 17TRACK (ej konfigurerat)"}
                       </div>
+                    )}
+                    <div className="mt-1 text-xs text-gray-400">
+                      {f.shopify_id
+                        ? "Synkad till Shopify"
+                        : f.shopify_sync_error
+                          ? `Shopify-synk misslyckades: ${f.shopify_sync_error}`
+                          : order.source === "shopify"
+                            ? "Inte synkad till Shopify"
+                            : null}
+                    </div>
+                    {f.status !== "CANCELLED" && (
+                      <FulfillmentEditControls
+                        fulfillmentId={f.id}
+                        orderId={order.id}
+                        currentTrackingNumber={f.tracking_number}
+                        currentTrackingUrl={f.tracking_url}
+                      />
                     )}
                   </div>
                 ))}

@@ -112,7 +112,7 @@ export async function createRefund(
     if (input.lineItems?.length) {
       const { data: refundedItems } = await supabaseService
         .from("order_items")
-        .select("id, title, variant_id, product_id, product_variants(title)")
+        .select("id, title, variant_id, product_id, image_url, variant_title_snapshot, product_variants(title)")
         .in("id", input.lineItems.map((li) => li.orderItemId));
       const byId = new Map((refundedItems ?? []).map((i: any) => [i.id, i]));
       lineItems = await buildEmailLineItems(
@@ -126,6 +126,8 @@ export async function createRefund(
             variantId: item?.variant_id ?? null,
             productId: item?.product_id ?? null,
             variantTitle: item?.product_variants?.title ?? null,
+            imageUrlSnapshot: item?.image_url,
+            variantTitleSnapshot: item?.variant_title_snapshot,
           };
         })
       );

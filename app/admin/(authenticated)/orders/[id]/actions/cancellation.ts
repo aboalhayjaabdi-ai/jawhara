@@ -32,7 +32,9 @@ export async function cancelOrder(orderId: string, reason: string, force: boolea
 
   const { data: items } = await supabaseService
     .from("order_items")
-    .select("id, title, variant_id, product_id, quantity, fulfilled_quantity, unit_price, discounted_unit_price, product_variants(title)")
+    .select(
+      "id, title, variant_id, product_id, quantity, fulfilled_quantity, unit_price, discounted_unit_price, image_url, variant_title_snapshot, product_variants(title)"
+    )
     .eq("order_id", orderId);
   // Restocking the unfulfilled remainder per line item is always correct, shipped or not: a fully
   // fulfilled item's remainder is already 0 (nothing to add back), and a never-fulfilled item's
@@ -47,7 +49,19 @@ export async function cancelOrder(orderId: string, reason: string, force: boolea
     .update({ cancelled_at: new Date().toISOString(), cancel_reason: reason || null, cancelled_by: admin.adminId })
     .eq("id", orderId);
 
-  if (order.email) {
+  // Atomic claim, same idempotency column the orders/updated webhook path checks (see
+  // app/api/webhooks/shopify/route.ts) -- whichever of the two gets here first for this order is
+  // the only one that ever sends the cancellation email.
+  const { data: claimed } = order.email
+    ? await supabaseService
+        .from("orders")
+        .update({ cancellation_email_sent_at: new Date().toISOString() })
+        .eq("id", orderId)
+        .is("cancellation_email_sent_at", null)
+        .select("id")
+        .maybeSingle()
+    : { data: null };
+  if (claimed && order.email) {
     const lineItems = await buildEmailLineItems(
       (items ?? []).map((i: any) => ({
         id: i.id,
@@ -57,6 +71,8 @@ export async function cancelOrder(orderId: string, reason: string, force: boolea
         variantId: i.variant_id,
         productId: i.product_id,
         variantTitle: i.product_variants?.title ?? null,
+        imageUrlSnapshot: i.image_url,
+        variantTitleSnapshot: i.variant_title_snapshot,
       }))
     );
     await sendOrderCancellationEmail({ to: order.email, orderNumber: order.order_number, items: lineItems, reason: reason || null });

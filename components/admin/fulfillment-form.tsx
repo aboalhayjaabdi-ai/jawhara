@@ -13,6 +13,7 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
   );
   const [checked, setChecked] = useState<Record<string, boolean>>(Object.fromEntries(items.map((i) => [i.id, true])));
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -28,6 +29,7 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
       const result = await createFulfillment(orderId, {
         items: lines,
         trackingNumber: trackingNumber || undefined,
+        trackingUrl: trackingUrl || undefined,
         notifyCustomer,
       });
       if (!result.ok) setError(result.error);
@@ -66,11 +68,17 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
         ))}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-2">
         <input
           value={trackingNumber}
           onChange={(e) => setTrackingNumber(e.target.value)}
           placeholder={t(locale, "fulfillment.trackingNumber")}
+          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+        />
+        <input
+          value={trackingUrl}
+          onChange={(e) => setTrackingUrl(e.target.value)}
+          placeholder={t(locale, "fulfillment.trackingUrl")}
           className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
         />
       </div>

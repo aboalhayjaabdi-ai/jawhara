@@ -10,6 +10,13 @@ export type RawOrderItemRow = {
   variantId: string | null;
   productId: string | null;
   variantTitle?: string | null;
+  // The immutable snapshot taken when the order was first synced (order_items.image_url/
+  // variant_title_snapshot) -- when present, this is used VERBATIM instead of a live lookup, so
+  // an email always shows exactly what the customer bought even if the product's media or
+  // variant has since changed. Only absent for order items synced before the snapshot mechanism
+  // existed, which still get the old live-lookup behavior as a fallback.
+  imageUrlSnapshot?: string | null;
+  variantTitleSnapshot?: string | null;
 };
 
 /** The single place every transactional email resolves a line item's display data -- the exact
@@ -17,14 +24,18 @@ export type RawOrderItemRow = {
  * the real variant title with Shopify's "Default Title" sentinel hidden (lib/variant-title.ts,
  * already proven in the cart drawer) -- so order confirmation, shipping confirmation, refund, and
  * cancellation emails can never drift from what the storefront/admin already show for the same
- * order item. */
+ * order item. Prefers each row's own immutable snapshot (see RawOrderItemRow.imageUrlSnapshot)
+ * over a live lookup whenever one was taken. */
 export async function buildEmailLineItems(rows: RawOrderItemRow[]): Promise<OrderLineItem[]> {
-  const images = await getOrderItemImages(rows.map((r) => ({ id: r.id, variantId: r.variantId, productId: r.productId })));
+  const needsLiveLookup = rows.filter((r) => r.imageUrlSnapshot === undefined);
+  const images = needsLiveLookup.length
+    ? await getOrderItemImages(needsLiveLookup.map((r) => ({ id: r.id, variantId: r.variantId, productId: r.productId })))
+    : {};
   return rows.map((r) => ({
     title: r.title,
-    variantTitle: normalizeVariantTitle(r.variantTitle),
+    variantTitle: normalizeVariantTitle(r.variantTitleSnapshot !== undefined ? r.variantTitleSnapshot : r.variantTitle),
     qty: r.quantity,
     unitPrice: r.unitPrice,
-    imageUrl: images[r.id]?.imageUrl ?? null,
+    imageUrl: r.imageUrlSnapshot !== undefined ? r.imageUrlSnapshot : images[r.id]?.imageUrl ?? null,
   }));
 }
