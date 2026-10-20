@@ -100,66 +100,78 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
     .maybeSingle();
   if (!claimed) return { ok: true, skipped: "Already reported" };
 
-  const detectedAt = new Date().toISOString();
-  const { data: logRow } = await supabaseService
-    .from("purchase_tracking_log")
-    .insert({ order_id: orderId, source, payment_confirmed_at: order.processed_at, detected_at: detectedAt })
-    .select("id")
-    .single();
+  // Everything from here on is wraped so ANY unexpected failure -- not just a Meta API error, but
+  // e.g. a transient Supabase read -- still releases the claim below. Without this, an order could
+  // get permanently stuck "sent" with purchase_event_sent_at set but no Meta event ever actually
+  // delivered: the real-time webhook won't retry it (isNewlyPaid is only true once), so only this
+  // release lets the 5-minute/daily reconciliation sweeps pick it back up.
+  let logRowId: string | null = null;
+  try {
+    const { data: logRow } = await supabaseService
+      .from("purchase_tracking_log")
+      .insert({ order_id: orderId, source, payment_confirmed_at: order.processed_at, detected_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    logRowId = logRow?.id ?? null;
 
-  const { data: items } = await supabaseService
-    .from("order_items")
-    .select("variant_id, quantity, unit_price, discounted_unit_price")
-    .eq("order_id", orderId);
+    const { data: items } = await supabaseService
+      .from("order_items")
+      .select("variant_id, quantity, unit_price, discounted_unit_price")
+      .eq("order_id", orderId);
 
-  const contents = (items ?? [])
-    .filter((i) => i.variant_id)
-    .map((i) => ({
-      id: i.variant_id as string,
-      quantity: i.quantity,
-      item_price: Number(i.discounted_unit_price ?? i.unit_price),
-    }));
+    const contents = (items ?? [])
+      .filter((i) => i.variant_id)
+      .map((i) => ({
+        id: i.variant_id as string,
+        quantity: i.quantity,
+        item_price: Number(i.discounted_unit_price ?? i.unit_price),
+      }));
 
-  const userData: Record<string, string[]> = {};
-  if (order.email) userData.em = [sha256(order.email)];
-  if (order.phone) userData.ph = [sha256(order.phone.replace(/[^\d+]/g, ""))];
+    const userData: Record<string, string[]> = {};
+    if (order.email) userData.em = [sha256(order.email)];
+    if (order.phone) userData.ph = [sha256(order.phone.replace(/[^\d+]/g, ""))];
 
-  const eventId = `shopify_order_${order.shopify_id ?? order.id}`;
-  const payload = {
-    data: [
-      {
-        event_name: "Purchase",
-        event_time: Math.floor(Date.now() / 1000),
-        event_id: eventId,
-        action_source: "website",
-        user_data: userData,
-        custom_data: {
-          currency: order.currency_code,
-          value: Number(order.total_price),
-          content_name: order.order_number,
-          content_type: "product",
-          contents,
-          num_items: contents.reduce((sum, c) => sum + c.quantity, 0),
+    const eventId = `shopify_order_${order.shopify_id ?? order.id}`;
+    const payload = {
+      data: [
+        {
+          event_name: "Purchase",
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: eventId,
+          action_source: "website",
+          user_data: userData,
+          custom_data: {
+            currency: order.currency_code,
+            value: Number(order.total_price),
+            content_name: order.order_number,
+            content_type: "product",
+            contents,
+            num_items: contents.reduce((sum, c) => sum + c.quantity, 0),
+          },
         },
-      },
-    ],
-  };
+      ],
+    };
 
-  const submittedAt = new Date().toISOString();
-  if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_submitted_at: submittedAt }).eq("id", logRow.id);
+    if (logRowId) await supabaseService.from("purchase_tracking_log").update({ capi_submitted_at: new Date().toISOString() }).eq("id", logRowId);
 
-  const url = `https://graph.facebook.com/v21.0/${settings.metaPixelId}/events?access_token=${encodeURIComponent(settings.metaCapiAccessToken)}`;
-  const outcome = await postToMetaWithRetry(url, payload);
+    const url = `https://graph.facebook.com/v21.0/${settings.metaPixelId}/events?access_token=${encodeURIComponent(settings.metaCapiAccessToken)}`;
+    const outcome = await postToMetaWithRetry(url, payload);
 
-  if (outcome.ok) {
-    if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_accepted_at: new Date().toISOString() }).eq("id", logRow.id);
-    return { ok: true };
+    if (outcome.ok) {
+      if (logRowId) await supabaseService.from("purchase_tracking_log").update({ capi_accepted_at: new Date().toISOString() }).eq("id", logRowId);
+      return { ok: true };
+    }
+
+    // Release the claim so a genuine retry (the next webhook redelivery, or the 5-minute/daily
+    // reconciliation sweeps) can try again instead of being permanently marked "sent" when Meta
+    // actually rejected it.
+    await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
+    if (logRowId) await supabaseService.from("purchase_tracking_log").update({ capi_error: outcome.error }).eq("id", logRowId);
+    return { ok: false, error: outcome.error };
+  } catch (err) {
+    await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
+    const message = `Unexpected error reporting purchase: ${(err as Error).message}`;
+    if (logRowId) await supabaseService.from("purchase_tracking_log").update({ capi_error: message }).eq("id", logRowId);
+    return { ok: false, error: message };
   }
-
-  // Release the claim so a genuine retry (the next webhook redelivery, or the 5-minute/daily
-  // reconciliation sweeps) can try again instead of being permanently marked "sent" when Meta
-  // actually rejected it.
-  await supabaseService.from("orders").update({ purchase_event_sent_at: null }).eq("id", orderId);
-  if (logRow) await supabaseService.from("purchase_tracking_log").update({ capi_error: outcome.error }).eq("id", logRow.id);
-  return { ok: false, error: outcome.error };
 }
