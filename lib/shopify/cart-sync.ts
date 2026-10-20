@@ -7,7 +7,6 @@ import {
   cartGet,
   cartLinesAdd,
   cartLinesRemove,
-  cartLinesUpdate,
   type CartLineInput,
   type CartUserError,
   type StorefrontCart,
@@ -206,23 +205,49 @@ export async function syncShopifyCart(input: {
       if (!created) return emptyResult(null, [...warnings, ...extraWarnings]);
       cart = created;
     } else {
-      const currentByMerchandise = new Map(cart.lines.map((l) => [l.merchandiseId, l]));
+      // Shopify splits a single variant's quantity across MULTIPLE cart lines whenever an
+      // automatic quantity-based discount (e.g. "3 för 2") applies to it, to represent which
+      // units are discounted -- e.g. qty 3 of one variant can come back as one line of qty 2 and
+      // a second line of qty 1, both sharing the same merchandiseId. Grouping (not collapsing to
+      // the last line, which silently dropped the other line's quantity and caused the real
+      // production bug: the dropped line stayed in the cart untouched on every subsequent sync,
+      // so the total quantity -- and price -- crept upward every time the cart resynced).
+      const currentByMerchandise = new Map<string, { ids: string[]; quantity: number }>();
+      for (const l of cart.lines) {
+        const group = currentByMerchandise.get(l.merchandiseId);
+        if (group) {
+          group.ids.push(l.id);
+          group.quantity += l.quantity;
+        } else {
+          currentByMerchandise.set(l.merchandiseId, { ids: [l.id], quantity: l.quantity });
+        }
+      }
 
-      const toRemove = cart.lines.filter((l) => !desired.has(l.merchandiseId)).map((l) => l.id);
-      const toUpdate = [...desired.entries()]
-        .filter(([merchandiseId, qty]) => currentByMerchandise.has(merchandiseId) && currentByMerchandise.get(merchandiseId)!.quantity !== qty)
-        .map(([merchandiseId, quantity]) => ({ id: currentByMerchandise.get(merchandiseId)!.id, quantity }));
-      const toAdd: CartLineInput[] = [...desired.entries()]
-        .filter(([merchandiseId]) => !currentByMerchandise.has(merchandiseId))
-        .map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
+      const toRemove: string[] = [];
+      for (const [merchandiseId, group] of currentByMerchandise) {
+        if (!desired.has(merchandiseId)) toRemove.push(...group.ids);
+      }
+
+      const toAdd: CartLineInput[] = [];
+      for (const [merchandiseId, quantity] of desired.entries()) {
+        const group = currentByMerchandise.get(merchandiseId);
+        if (!group) {
+          toAdd.push({ merchandiseId, quantity });
+          continue;
+        }
+        // Already correct in total -- leave Shopify's own line split alone. Patching just one of
+        // several lines it's using to track a quantity discount (what this used to do) destabilized
+        // the discount itself, sometimes dropping it entirely on the very next sync.
+        if (group.quantity === quantity) continue;
+        // Actually changing: remove every line this variant currently has and add ONE fresh line
+        // with the full desired quantity, so Shopify's discount engine recomputes its allocation
+        // from a clean slate instead of being handed a half-updated split.
+        toRemove.push(...group.ids);
+        toAdd.push({ merchandiseId, quantity });
+      }
 
       if (toRemove.length > 0) {
         const { cart: updated, userErrors } = await cartLinesRemove(cart.id, toRemove);
-        if (updated) cart = updated;
-        extraWarnings.push(...describeUserErrors(userErrors));
-      }
-      if (toUpdate.length > 0) {
-        const { cart: updated, userErrors } = await cartLinesUpdate(cart.id, toUpdate);
         if (updated) cart = updated;
         extraWarnings.push(...describeUserErrors(userErrors));
       }
