@@ -1,28 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseBrowser as supabase } from "@/lib/supabase/browser-client";
 
 export function ContactForm() {
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
     setStatus("submitting");
+    setErrorMessage(null);
 
-    const { error } = await supabase.from("contact_submissions").insert({
-      name: (data.get("name") as string) || null,
-      email: data.get("email") as string,
-      phone: (data.get("phone") as string) || null,
-      body: data.get("body") as string,
-    });
-
-    if (error) {
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.get("name"),
+          email: data.get("email"),
+          phone: data.get("phone"),
+          body: data.get("body"),
+          website: data.get("website"),
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        setErrorMessage(json?.error ?? null);
+        setStatus("error");
+        return;
+      }
+    } catch {
       setStatus("error");
       return;
     }
+
     setStatus("done");
     form.reset();
   }
@@ -61,8 +74,15 @@ export function ContactForm() {
         </label>
         <textarea id="body" name="body" required rows={5} className="border border-line p-3 text-sm" />
       </div>
+      {/* Honeypot for spam bots: hidden from people and screen readers. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+        <label htmlFor="website">Webbplats</label>
+        <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+      </div>
       {status === "error" && (
-        <p className="text-xs text-red-700">Något gick fel. Försök igen eller maila oss direkt.</p>
+        <p className="text-xs text-red-700">
+          {errorMessage ?? "Något gick fel."} Försök igen eller maila oss direkt på support@jawhara.se.
+        </p>
       )}
       <button
         type="submit"
