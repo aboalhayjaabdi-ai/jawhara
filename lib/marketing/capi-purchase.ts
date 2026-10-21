@@ -15,7 +15,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 export type CapiPurchaseResult = { ok: true; skipped?: string } | { ok: false; error: string };
-export type PurchaseReportSource = "webhook" | "cron_sync" | "github_actions";
+export type PurchaseReportSource = "webhook" | "cron_sync" | "github_actions" | "pg_cron";
 export type RecoverySource = Exclude<PurchaseReportSource, "webhook">;
 
 type MetaCallOutcome = { ok: true } | { ok: false; error: string; retryable: boolean };
