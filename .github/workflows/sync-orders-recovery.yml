@@ -1,19 +1,13 @@
 name: Shopify order sync recovery sweep
 
-# Fast fallback for real-time Meta Purchase tracking: Vercel's Hobby plan only supports a
-# once-daily native Cron schedule, so this runs the same reconciliation endpoint every 5 minutes
-# instead -- GitHub Actions' documented minimum interval for scheduled workflows (shorter
-# intervals aren't reliably honored, and GitHub itself notes scheduled runs can be delayed,
-# especially under high load, so this is a fast recovery sweep, not a latency guarantee). The
-# real-time Shopify webhook is still the primary path; this only catches an order the webhook
-# missed, within a few minutes instead of up to a day.
-#
-# Offset by 2 minutes (:02, :07, :12, ...) rather than on the exact 5-minute mark: GitHub's own
-# docs call out the top of every hour (and, by extension, exact round-number ticks) as GitHub
-# Actions' highest-load, most delay-prone scheduling moments.
+# Formerly the 5-minute recovery sweep; superseded by a pg_cron job running directly inside
+# Supabase's own Postgres instance (see the one-off setup script), which is NOT subject to
+# GitHub's free-tier scheduling throttling -- confirmed empirically: this workflow's own scheduled
+# runs ended up roughly 2+ hours apart despite a 5-minute cron expression, while pg_cron fires
+# within a second of every scheduled tick. The automatic schedule trigger is removed to avoid
+# running two schedulers for the same job; workflow_dispatch is kept so this can still be run
+# manually (e.g. as an emergency fallback if the Supabase-side job is ever disabled).
 on:
-  schedule:
-    - cron: "2-57/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
