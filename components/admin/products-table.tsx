@@ -204,7 +204,7 @@ export function ProductsTable({ products, collections }: { products: ProductRow[
                   </div>
                 </td>
                 <td className="px-5 py-3">
-                  <Link href={`/admin/products/${p.id}`} className="font-medium text-gray-900 hover:underline">
+                  <Link href={`/admin/products/${p.id}`} prefetch={false} className="font-medium text-gray-900 hover:underline">
                     {p.title}
                   </Link>
                   <div className="text-xs text-gray-400">{p.variantCount} variant{p.variantCount === 1 ? "" : "er"}</div>

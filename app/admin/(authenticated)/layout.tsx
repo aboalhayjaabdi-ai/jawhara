@@ -1,29 +1,28 @@
 import { redirect } from "next/navigation";
-import { createAuthServerClient } from "@/lib/supabase/server-auth";
+import { getAdminSessionForLayout } from "@/lib/admin/auth";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminMobileNav } from "@/components/admin/admin-mobile-nav";
 import { AdminTopbar } from "@/components/admin/admin-topbar";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createAuthServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   // middleware.ts already checks admin_users membership before reaching here too -- this is the
   // second of three layers (middleware, this page-load check, and requireAdmin() re-checked
   // inside every mutating Server Action/route -- see lib/admin/auth.ts), kept even though
-  // middleware now covers the same ground, since a page-load check costs nothing extra here and
-  // a single layer is never trusted alone.
+  // middleware now covers the same ground, since a single layer is never trusted alone. Uses
+  // getAdminSessionForLayout()'s React-cache()-wrapped lookup rather than its own
+  // getUser()+admin_users call: when the page below also calls requireAdmin() directly (orders/
+  // products/dashboard/etc.), that previously meant 2 separate network round-trips to Supabase
+  // Auth plus 2 admin_users queries for the identical question in the SAME render; this makes it 1.
+  const { user, adminRow } = await getAdminSessionForLayout();
+
   let role: "admin" | "staff" | "fulfillment_staff" = "admin";
   let locale: "sv" | "zh" = "sv";
   if (user) {
-    const { data: adminRow } = await supabase.from("admin_users").select("id, role, locale, disabled").eq("auth_user_id", user.id).maybeSingle();
     if (!adminRow || adminRow.disabled) {
       redirect("/admin/login");
     }
-    role = adminRow.role;
-    locale = adminRow.locale ?? "sv";
+    role = adminRow.role as "admin" | "staff" | "fulfillment_staff";
+    locale = (adminRow.locale as "sv" | "zh") ?? "sv";
   }
 
   return (

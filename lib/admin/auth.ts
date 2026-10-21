@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { supabaseService } from "@/lib/supabase/service-client";
@@ -17,6 +18,35 @@ export type AdminSession = {
   locale: AdminLocale;
 };
 
+type RawAdminLookup = {
+  user: { id: string; email: string | null } | null;
+  adminRow: { id: string; role: string; disabled: boolean; locale: string | null } | null;
+};
+
+/**
+ * The actual getUser() network round-trip + admin_users query, wrapped in React's per-request
+ * `cache()` so every caller within the SAME render pass (app/admin/(authenticated)/layout.tsx and
+ * a page.tsx that also calls requireAdmin() directly, e.g. orders/products/dashboard) shares one
+ * result instead of each re-running it. This is pure deduplication of an identical question asked
+ * twice for the identical request -- not a weaker check: a Server Action is a separate request
+ * (new render pass, so a fresh cache + a fresh real check), and middleware's own getUser() call
+ * runs in a different execution phase entirely (outside React's render, so outside this cache) and
+ * still independently re-verifies on every request, before any rendering happens at all. Layout
+ * and a page both calling requireAdmin() was previously 2 full network round-trips to Supabase
+ * Auth plus 2 admin_users queries for a single page load, on top of middleware's own -- this cuts
+ * that render-time half back to 1.
+ */
+const lookupAdminSession = cache(async (): Promise<RawAdminLookup> => {
+  const supabase = await createAuthServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { user: null, adminRow: null };
+
+  const { data: adminRow } = await supabase.from("admin_users").select("id, role, disabled, locale").eq("auth_user_id", user.id).maybeSingle();
+  return { user: { id: user.id, email: user.email ?? null }, adminRow };
+});
+
 /**
  * Re-verifies the caller is a real admin, server-side -- call this first in every admin Server
  * Action / route handler that writes anything. This is the mutation-time guard, distinct from the
@@ -26,22 +56,29 @@ export type AdminSession = {
  * the way a page load can -- callers should let this throw propagate as a hard failure.
  */
 export async function requireAdmin(): Promise<AdminSession> {
-  const supabase = await createAuthServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, adminRow } = await lookupAdminSession();
   if (!user) redirect("/admin/login");
-
-  const { data: adminRow } = await supabase.from("admin_users").select("id, role, disabled, locale").eq("auth_user_id", user.id).maybeSingle();
   if (!adminRow || adminRow.disabled) throw new Error("Not authorized: no active admin_users row for this account.");
 
   return {
     userId: user.id,
     adminId: adminRow.id,
-    email: user.email ?? null,
+    email: user.email,
     role: adminRow.role as AdminRole,
     locale: (adminRow.locale as AdminLocale) ?? "sv",
   };
+}
+
+/**
+ * Same cached lookup as requireAdmin(), for app/admin/(authenticated)/layout.tsx -- which has
+ * different fallback behavior (defaults to role="admin"/"sv" when there's no user at all, since
+ * middleware already guarantees an authenticated active admin reached this layout; only redirects
+ * when a session exists but its admin_users row is missing/disabled). Never call this from a
+ * Server Action: it has no redirect for the "no user" case, so a mutation could proceed without an
+ * identified actor. Use requireAdmin() there instead.
+ */
+export async function getAdminSessionForLayout(): Promise<RawAdminLookup> {
+  return lookupAdminSession();
 }
 
 /**

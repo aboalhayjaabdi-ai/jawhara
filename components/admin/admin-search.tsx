@@ -82,7 +82,7 @@ export function AdminSearchField({ dark = false, onNavigate }: { dark?: boolean;
             <div className="mb-1">
               <div className="px-4 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Ordrar</div>
               {results.orders.map((o) => (
-                <Link key={o.id} href={`/admin/orders/${o.id}`} onClick={close} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-50">
+                <Link key={o.id} href={`/admin/orders/${o.id}`} prefetch={false} onClick={close} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-50">
                   <span className="font-medium text-gray-900">{o.order_number}</span>
                   <span className="text-gray-400">{formatMoney(o.total_price, o.currency_code)}</span>
                 </Link>

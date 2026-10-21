@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createAuthServerClient } from "@/lib/supabase/server-auth";
 import { requireAdmin } from "@/lib/admin/auth";
 import { getDashboardMetrics, getDashboardTasks, type DashboardRange } from "@/lib/admin/analytics";
 import { DateRangePicker } from "@/components/admin/date-range-picker";
@@ -39,14 +38,11 @@ export default async function AdminDashboardPage({
   const { range: rangeParam, from, to } = await searchParams;
   const range = (rangeParam as DashboardRange) || "30d";
 
-  const supabase = await createAuthServerClient();
-  const [{ data: userData }, metrics, tasks] = await Promise.all([
-    supabase.auth.getUser(),
-    getDashboardMetrics(range, from, to),
-    getDashboardTasks(),
-  ]);
+  // requireAdmin() above already resolved the signed-in user's email -- no need for a second,
+  // redundant auth.getUser() network round-trip just to read it again.
+  const [metrics, tasks] = await Promise.all([getDashboardMetrics(range, from, to), getDashboardTasks()]);
 
-  const firstName = userData.user?.email?.split("@")[0] ?? "";
+  const firstName = admin.email?.split("@")[0] ?? "";
   const salesChange = pctChange(metrics.totalSales, metrics.previous.totalSales);
   const ordersChange = pctChange(metrics.ordersCount, metrics.previous.ordersCount);
 

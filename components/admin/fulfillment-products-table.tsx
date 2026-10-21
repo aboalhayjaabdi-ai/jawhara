@@ -47,7 +47,7 @@ export function FulfillmentProductsTable({ products, locale }: { products: Fulfi
           {products.map((p) => (
             <tr key={p.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
               <td className="px-4 py-3">
-                <Link href={`/admin/products/${p.id}`} className="relative block h-12 w-12 overflow-hidden rounded-md bg-gray-100">
+                <Link href={`/admin/products/${p.id}`} prefetch={false} className="relative block h-12 w-12 overflow-hidden rounded-md bg-gray-100">
                   {p.thumbnailUrl ? (
                     <Image src={p.thumbnailUrl} alt={p.title} fill sizes="48px" className="object-cover" />
                   ) : (
@@ -56,7 +56,7 @@ export function FulfillmentProductsTable({ products, locale }: { products: Fulfi
                 </Link>
               </td>
               <td className="px-4 py-3">
-                <Link href={`/admin/products/${p.id}`} className="font-medium text-gray-900 hover:underline">
+                <Link href={`/admin/products/${p.id}`} prefetch={false} className="font-medium text-gray-900 hover:underline">
                   {p.title}
                 </Link>
               </td>

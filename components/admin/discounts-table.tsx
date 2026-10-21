@@ -134,7 +134,7 @@ export function DiscountsTable({ discounts }: { discounts: DiscountRow[] }) {
                   <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggle(d.id)} className="h-4 w-4 rounded border-gray-300" />
                 </td>
                 <td className="px-5 py-3">
-                  <Link href={`/admin/discounts/${d.id}`} className="font-medium text-gray-900 hover:underline">
+                  <Link href={`/admin/discounts/${d.id}`} prefetch={false} className="font-medium text-gray-900 hover:underline">
                     {d.title}
                   </Link>
                   {d.code && <div className="text-xs font-mono text-gray-400">{d.code}</div>}

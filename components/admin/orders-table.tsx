@@ -157,6 +157,7 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
             <Link
               key={o.id}
               href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`}
+              prefetch={false}
               className="block rounded-lg border border-gray-200 bg-white p-4 active:bg-gray-50"
             >
               <div className="flex items-baseline justify-between gap-3">
@@ -215,6 +216,7 @@ export function OrdersTable({ orders, viewingHidden = false, returnQuery = "" }:
                 <td className="px-5 py-3">
                   <Link
                     href={`/admin/orders/${o.id}${returnQuery ? `?from=${encodeURIComponent(returnQuery)}` : ""}`}
+                    prefetch={false}
                     className="flex items-center gap-1.5 font-medium text-gray-900 hover:underline"
                   >
                     {o.order_number}

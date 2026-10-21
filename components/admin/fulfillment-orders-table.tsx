@@ -91,7 +91,7 @@ export function FulfillmentOrdersTable({ orders, locale, returnQuery }: { orders
                   <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="h-4 w-4 rounded border-gray-300" />
                 </td>
                 <td className="px-4 py-3">
-                  <Link href={`/admin/orders/${o.id}?from=${encodeURIComponent(returnQuery)}`} className="flex items-center gap-1.5 font-medium text-gray-900 hover:underline">
+                  <Link href={`/admin/orders/${o.id}?from=${encodeURIComponent(returnQuery)}`} prefetch={false} className="flex items-center gap-1.5 font-medium text-gray-900 hover:underline">
                     {o.order_number}
                     {o.isTestOrder && (
                       <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">

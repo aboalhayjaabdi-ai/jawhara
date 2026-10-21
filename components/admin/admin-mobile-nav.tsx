@@ -80,6 +80,7 @@ export function AdminMobileNav({ email, role, locale }: { email: string | null; 
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={`flex items-center gap-3 rounded-md px-3 py-3 text-base ${
                   active ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-900 hover:text-white"
                 }`}

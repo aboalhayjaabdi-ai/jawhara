@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DashboardRange } from "@/lib/admin/analytics";
 
-const OPTIONS: { value: DashboardRange; label: string }[] = [
+const DEFAULT_OPTIONS: { value: DashboardRange; label: string }[] = [
   { value: "today", label: "Idag" },
   { value: "yesterday", label: "Igår" },
   { value: "7d", label: "Senaste 7 dagarna" },
@@ -12,7 +12,19 @@ const OPTIONS: { value: DashboardRange; label: string }[] = [
   { value: "month", label: "Denna månad" },
 ];
 
-export function DateRangePicker({ current, from, to }: { current: DashboardRange; from?: string; to?: string }) {
+export function DateRangePicker({
+  current,
+  from,
+  to,
+  basePath = "/admin",
+  options = DEFAULT_OPTIONS,
+}: {
+  current: DashboardRange;
+  from?: string;
+  to?: string;
+  basePath?: string;
+  options?: { value: DashboardRange; label: string }[];
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [customOpen, setCustomOpen] = useState(current === "custom");
@@ -24,7 +36,7 @@ export function DateRangePicker({ current, from, to }: { current: DashboardRange
     params.set("range", range);
     params.delete("from");
     params.delete("to");
-    router.push(`/admin?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   function applyCustom() {
@@ -33,12 +45,12 @@ export function DateRangePicker({ current, from, to }: { current: DashboardRange
     params.set("range", "custom");
     params.set("from", customFrom);
     params.set("to", customTo);
-    router.push(`/admin?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {OPTIONS.map((opt) => (
+      {options.map((opt) => (
         <button
           key={opt.value}
           type="button"

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Script from "next/script";
 import { getConsent, setConsent, type ConsentState } from "@/lib/marketing/consent";
 import { trackPageView } from "@/lib/marketing/events";
+import { logAnalyticsEvent } from "@/lib/marketing/first-party-analytics";
 
 /**
  * One combined client component (not split into separate banner/script components) so the
@@ -24,6 +25,20 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
     setConsentState(getConsent());
     setHydrated(true);
   }, []);
+
+  // First-party mirror of the Pixel inline script's own PageView above: fires exactly once per
+  // real page load (this component lives in the root layout, so it never remounts on client-side
+  // route changes). trackPageView()'s own logAnalyticsEvent call covers every later route change
+  // (it deliberately skips its own first run below, for the same reason), so the two can never
+  // double-count.
+  const loggedFirstPageView = useRef(false);
+  const trackingActiveForFirstLog = consent === "accepted";
+  useEffect(() => {
+    if (trackingActiveForFirstLog && !loggedFirstPageView.current) {
+      loggedFirstPageView.current = true;
+      logAnalyticsEvent("page_view");
+    }
+  }, [trackingActiveForFirstLog]);
 
   // The pixel's own init script below fires the very first PageView itself the moment it loads
   // (consent accepted) -- this effect covers every page after that. Without it, PageView only

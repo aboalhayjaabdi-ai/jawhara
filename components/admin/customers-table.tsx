@@ -143,7 +143,7 @@ export function CustomersTable({ customers }: { customers: CustomerRow[] }) {
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="h-4 w-4 rounded border-gray-300" />
                 </td>
                 <td className="px-5 py-3">
-                  <Link href={`/admin/customers/${c.id}`} className="font-medium text-gray-900 hover:underline">
+                  <Link href={`/admin/customers/${c.id}`} prefetch={false} className="font-medium text-gray-900 hover:underline">
                     {c.name || c.email || "Namnlös kund"}
                   </Link>
                   <div className="text-xs text-gray-400">{c.email ?? "—"}</div>

@@ -327,7 +327,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [...prev, { ...item, qty }];
     });
     setBump((b) => b + 1);
-    trackAddToCart({ id: item.variantId, title: item.title, price: item.price, currency: "SEK", quantity: qty });
+    trackAddToCart({ id: item.variantId, title: item.title, price: item.price, currency: "SEK", quantity: qty, productHandle: item.productHandle });
   }, []);
 
   const removeItem = useCallback((variantId: string) => {
