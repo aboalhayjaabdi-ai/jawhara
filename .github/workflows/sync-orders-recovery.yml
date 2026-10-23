@@ -1,0 +1,29 @@
+name: Shopify order sync recovery sweep
+
+# Fast fallback for real-time Meta Purchase tracking: Vercel's Hobby plan only supports a
+# once-daily native Cron schedule, so this runs the same reconciliation endpoint every 5 minutes
+# instead -- GitHub Actions' documented minimum interval for scheduled workflows (shorter
+# intervals aren't reliably honored, and GitHub itself notes scheduled runs can be delayed,
+# especially under high load, so this is a fast recovery sweep, not a latency guarantee). The
+# real-time Shopify webhook is still the primary path; this only catches an order the webhook
+# missed, within a few minutes instead of up to a day.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reconciliation endpoint
+        run: |
+          status=$(curl -sS -o response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.EXTERNAL_CRON_SECRET }}" \
+            https://www.jawhara.se/api/cron/sync-orders)
+          echo "HTTP status: $status"
+          cat response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Reconciliation call failed"
+            exit 1
+          fi
