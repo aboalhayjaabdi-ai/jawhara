@@ -81,12 +81,21 @@ function parseSpecContent(html: string): { rows: SpecRow[]; freeText: string[] }
     // comma like "22,5 cm", which is followed by a digit).
     const subParts = rest.split(/×|,\s*(?=[A-ZÅÄÖ])/).map((s) => s.trim()).filter(Boolean);
     const subLabelRe = /^([A-ZÅÄÖ][a-zA-ZåäöÅÄÖ]*)[:\s]+(\d.*)$/;
-    if (subParts.length > 1 && subParts.every((sp) => subLabelRe.test(sp))) {
-      const subRows = subParts.map((sp) => {
-        const sm = sp.match(subLabelRe)!;
-        return { label: sm[1], value: sm[2].trim() };
-      });
-      rows.push({ label, value: rest, subRows });
+    // A handful of real listings (e.g. bundles with two sizes) leave a second, unlabeled number
+    // trailing a sub-value, like "Höjd 20 cm, 14 cm" -- the comma there isn't followed by a
+    // capital letter so it survives the split above as part of the "Höjd" value. Detect that
+    // (a stray ", <digit>" inside a captured sub-value) and bail out of structuring the whole row
+    // rather than showing a misleading two-numbers-in-one-cell table.
+    const hasStrayNumber = (value: string) => /,\s*\d/.test(value);
+    const parsedSubRows =
+      subParts.length > 1 && subParts.every((sp) => subLabelRe.test(sp))
+        ? subParts.map((sp) => {
+            const sm = sp.match(subLabelRe)!;
+            return { label: sm[1], value: sm[2].trim() };
+          })
+        : null;
+    if (parsedSubRows && !parsedSubRows.some((sr) => hasStrayNumber(sr.value))) {
+      rows.push({ label, value: rest, subRows: parsedSubRows });
     } else {
       rows.push({ label, value: rest });
     }
@@ -150,7 +159,7 @@ function TrustIcon({ text }: { text: string }) {
 // layout's real icon row rather than a flat monochrome text-pill list.
 function PaymentBadges() {
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
       <span className="flex h-6 items-center rounded-[3px] bg-[#FFB3C7] px-2 text-[11px] font-bold text-black">Klarna</span>
       <span className="flex h-6 items-center rounded-[3px] bg-[#1A1F71] px-2 text-[11px] font-bold italic text-white">VISA</span>
       <span className="relative flex h-6 w-10 items-center justify-center rounded-[3px] border border-line bg-white">
@@ -219,18 +228,18 @@ function SpecTable({ html }: { html: string }) {
       ))}
       {rows.length > 0 && (
         <div className="mt-1 divide-y divide-line border-t border-line">
-          {rows.map((r) => (
-            <div key={r.label} className="py-3">
+          {rows.map((r, i) => (
+            <div key={`${r.label}-${i}`} className="py-3">
               <div className="flex items-baseline justify-between gap-4">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{r.label}</span>
-                {!r.subRows && <span className="text-right">{r.value}</span>}
+                <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-fg">{r.label}</span>
+                {!r.subRows && <span className="overflow-x-auto whitespace-nowrap text-right">{r.value}</span>}
               </div>
               {r.subRows && (
                 <div className="mt-2.5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {r.subRows.map((sr) => (
-                    <div key={sr.label}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted">{sr.label}</div>
-                      <div className="mt-0.5 text-fg">{sr.value}</div>
+                  {r.subRows.map((sr, j) => (
+                    <div key={`${sr.label}-${j}`} className="min-w-0">
+                      <div className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted">{sr.label}</div>
+                      <div className="mt-0.5 overflow-x-auto whitespace-nowrap text-fg">{sr.value}</div>
                     </div>
                   ))}
                 </div>
