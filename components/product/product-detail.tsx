@@ -52,6 +52,62 @@ function inventoryStatusText(v: Variant): string {
   return "Slut i lager";
 }
 
+// Small monochrome icons for the trust-line grid below -- matched to each line's content by
+// keyword rather than a new data field, so lib/product-templates.ts's existing trustLines
+// (plain strings, already authored per category) need no schema change to get icons.
+function TrustIcon({ text }: { text: string }) {
+  const t = text.toLowerCase();
+  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true } as const;
+  if (t.includes("retur") || t.includes("öppet köp") || t.includes("byte")) {
+    return (
+      <svg {...common}>
+        <path d="M3 12a9 9 0 1 1 3 6.7" />
+        <path d="M3 21v-5h5" />
+      </svg>
+    );
+  }
+  if (t.includes("frakt")) {
+    return (
+      <svg {...common}>
+        <path d="M3 7h11v9H3z" />
+        <path d="M14 10h4l3 3v3h-7z" />
+        <circle cx="7" cy="19" r="1.6" />
+        <circle cx="17.5" cy="19" r="1.6" />
+      </svg>
+    );
+  }
+  if (t.includes("klarna") || t.includes("betala")) {
+    return (
+      <svg {...common}>
+        <rect x="2.5" y="5.5" width="19" height="13" rx="1.6" />
+        <path d="M2.5 9.5h19" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+// Minimal, monochrome payment-method badges (outline + small-caps text, matching this page's own
+// button/pill style elsewhere) -- never a colorful brand-logo row, which wouldn't fit the site's
+// existing black-and-white visual language.
+const PAYMENT_METHODS = ["Klarna", "Visa", "Mastercard", "Apple Pay", "Google Pay"];
+function PaymentBadges() {
+  return (
+    <div className="mt-4 flex flex-wrap gap-1.5">
+      {PAYMENT_METHODS.map((m) => (
+        <span key={m} className="rounded-sm border border-line px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+          {m}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function AccordionRow({ heading, body, defaultOpen = false }: { heading: string; body: string; defaultOpen?: boolean }) {
   return (
     <details className="group border-b border-line py-4" open={defaultOpen}>
@@ -150,7 +206,7 @@ export function ProductDetail({
         <a href="/">Hem</a> / {title}
       </div>
 
-      <div className="grid gap-16 lg:grid-cols-[1fr_440px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_440px] lg:gap-16">
         <div className="relative">
           <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} jumpToIndex={galleryJumpIndex} />
           {onSale && (
@@ -226,7 +282,13 @@ export function ProductDetail({
           )}
 
           {content?.showInventoryStatus && variant && status === "active" && (
-            <div className="mt-3 text-xs text-muted">{inventoryStatusText(variant)}</div>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-muted">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${inventoryStatusText(variant) === "Slut i lager" ? "bg-rose-600" : "bg-emerald-600"}`}
+                aria-hidden
+              />
+              {inventoryStatusText(variant)}
+            </div>
           )}
 
           <button
@@ -243,22 +305,32 @@ export function ProductDetail({
               })
             }
             disabled={!variant || !isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)}
-            className="mt-7 flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
+            className="mt-7 flex h-14 w-full items-center justify-center gap-2 bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
-            {variant && isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)
-              ? "Lägg till i varukorgen"
-              : "Slut i lager"}
+            {variant && isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1) ? (
+              <>
+                Lägg till i varukorgen
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M5 12h14" />
+                  <path d="M13 6l6 6-6 6" />
+                </svg>
+              </>
+            ) : (
+              "Slut i lager"
+            )}
           </button>
 
+          <PaymentBadges />
+
           {content?.trustLines && (
-            <p className="mt-5 text-xs leading-6 text-muted">
-              {content.trustLines.map((line, i) => (
-                <span key={line}>
-                  — {line}
-                  {i < content.trustLines!.length - 1 && <br />}
-                </span>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
+              {content.trustLines.map((line) => (
+                <div key={line} className="flex items-center gap-2 text-xs leading-5 text-muted">
+                  <TrustIcon text={line} />
+                  {line}
+                </div>
               ))}
-            </p>
+            </div>
           )}
 
           <div className="mt-10 border-t border-line">
