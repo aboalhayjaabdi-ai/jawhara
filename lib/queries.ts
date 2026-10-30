@@ -29,30 +29,61 @@ export type ProductCard = {
   // size/color options instead offers a variant picker (see `variants` below) before adding.
   quickAddVariantId: string | null;
   variants: ProductCardVariant[];
+  // Real-time eligibility for the live "3 för 2" (or any other collection-scoped BXGY) automatic
+  // promotion -- derived from the product's actual collection memberships against the active
+  // discount's own buy_item_ids/get_item_ids, same read-only-gate pattern as
+  // isEligibleForWalletPromo. Never invented/guessed; bags/tillbehör are correctly excluded by
+  // construction since the real discount's collection list never includes them.
+  threeForTwoEligible: boolean;
 };
 
 function cheapestVariant<T extends { price: number }>(variants: T[]) {
   return variants.reduce((min, v) => (v.price < min.price ? v : min), variants[0]);
 }
 
-function toCard(p: {
-  title: string;
-  handle: string;
-  status?: string;
-  media: { storage_path: string; position: number; variant_id?: string | null }[];
-  product_variants: {
-    id?: string;
-    sku?: string | null;
-    price: number;
-    compare_at_price: number | null;
-    option1?: string | null;
-    option2?: string | null;
-    option3?: string | null;
-    inventory_quantity?: number;
-    inventory_tracked?: boolean;
-    inventory_policy?: string | null;
-  }[];
-}): ProductCard {
+/** Active collection-scoped BXGY discounts' real buy/get collection shopify_ids (e.g. the live
+ * "3 för 2" promotion's 20 real jewelry collections) -- cache()'d per request, same pattern as
+ * getProductByHandle. Read-only, public-RLS `discounts` table (already proven safe to read with
+ * the anon client by isEligibleForWalletPromo above). */
+export const getThreeForTwoEligibleCollectionIds = cache(async (): Promise<Set<string>> => {
+  const { data } = await supabase
+    .from("discounts")
+    .select("buy_item_ids, get_item_ids")
+    .eq("status", "active")
+    .eq("buy_item_type", "collection")
+    .eq("get_item_type", "collection")
+    .not("buy_quantity", "is", null)
+    .not("get_quantity", "is", null);
+  const ids = new Set<string>();
+  for (const d of data ?? []) {
+    for (const id of (d.buy_item_ids as string[] | null) ?? []) ids.add(id);
+    for (const id of (d.get_item_ids as string[] | null) ?? []) ids.add(id);
+  }
+  return ids;
+});
+
+function toCard(
+  p: {
+    title: string;
+    handle: string;
+    status?: string;
+    media: { storage_path: string; position: number; variant_id?: string | null }[];
+    product_variants: {
+      id?: string;
+      sku?: string | null;
+      price: number;
+      compare_at_price: number | null;
+      option1?: string | null;
+      option2?: string | null;
+      option3?: string | null;
+      inventory_quantity?: number;
+      inventory_tracked?: boolean;
+      inventory_policy?: string | null;
+    }[];
+    collection_products?: { collections: { shopify_id: string }[] | { shopify_id: string } | null }[] | null;
+  },
+  eligibleCollectionIds: Set<string> = new Set()
+): ProductCard {
   const sorted = [...p.media].sort((a, b) => a.position - b.position);
   const variant = p.product_variants.length ? cheapestVariant(p.product_variants) : null;
   // Real per-variant image links, same mechanism as getProductByHandle's variantImageIndex --
@@ -75,6 +106,11 @@ function toCard(p: {
       1
     );
   const available = p.product_variants.some(variantAvailable);
+  const threeForTwoEligible = (p.collection_products ?? []).some((cp) => {
+    const cs = cp.collections;
+    const list = Array.isArray(cs) ? cs : cs ? [cs] : [];
+    return list.some((c) => eligibleCollectionIds.has(c.shopify_id));
+  });
   return {
     title: p.title,
     handle: p.handle,
@@ -83,6 +119,7 @@ function toCard(p: {
     compareAtPrice: variant?.compare_at_price ?? null,
     sku,
     available,
+    threeForTwoEligible,
     quickAddVariantId: p.product_variants.length === 1 ? p.product_variants[0].id ?? null : null,
     variants: p.product_variants
       .filter((v) => v.id)
@@ -104,32 +141,38 @@ export async function getCollectionProductCards(handle: string, limit: number, o
   const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).single();
   if (!collection) return [];
 
-  const { data } = await supabase
-    .from("collection_products")
-    .select(
-      "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
-    )
-    .eq("collection_id", collection.id)
-    .eq("products.status", "active")
-    .order("position", { ascending: true })
-    .range(offset, offset + limit - 1);
+  const [{ data }, eligibleIds] = await Promise.all([
+    supabase
+      .from("collection_products")
+      .select(
+        "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id)))"
+      )
+      .eq("collection_id", collection.id)
+      .eq("products.status", "active")
+      .order("position", { ascending: true })
+      .range(offset, offset + limit - 1),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
-  return (data ?? []).map((row: any) => toCard(row.products));
+  return (data ?? []).map((row: any) => toCard(row.products, eligibleIds));
 }
 
 /** For /collections/all -- Shopify's built-in catalog-wide route; no backing `collections` row exists for it. */
 export async function getAllProductCards(limit: number, offset = 0): Promise<{ cards: ProductCard[]; total: number }> {
-  const { data, count } = await supabase
-    .from("products")
-    .select(
-      "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)",
-      { count: "exact" }
-    )
-    .eq("status", "active")
-    .order("title", { ascending: true })
-    .range(offset, offset + limit - 1);
+  const [{ data, count }, eligibleIds] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id))",
+        { count: "exact" }
+      )
+      .eq("status", "active")
+      .order("title", { ascending: true })
+      .range(offset, offset + limit - 1),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
-  return { cards: (data ?? []).map(toCard), total: count ?? 0 };
+  return { cards: (data ?? []).map((p) => toCard(p, eligibleIds)), total: count ?? 0 };
 }
 
 // Real Shopify sort options this theme actually exposes (snippets/sorting.liquid), minus
@@ -166,6 +209,7 @@ type RawProductRow = {
     inventory_tracked?: boolean;
     inventory_policy?: string | null;
   }[];
+  collection_products?: { collections: { shopify_id: string }[] | { shopify_id: string } | null }[] | null;
 };
 
 // Collection sizes in this catalog top out at a couple hundred products, so sorting/filtering by
@@ -174,7 +218,13 @@ type RawProductRow = {
 // against the full active product set for that collection/catalog, rather than adding a schema
 // migration for what isn't a real-scale problem here. The default "manual" path with no filters
 // never takes this route -- see getCollectionProductCards/getAllProductCards above, untouched.
-function sortFilterPaginate(rows: RawProductRow[], options: CollectionFilterOptions, limit: number, offset: number): { cards: ProductCard[]; total: number } {
+function sortFilterPaginate(
+  rows: RawProductRow[],
+  options: CollectionFilterOptions,
+  limit: number,
+  offset: number,
+  eligibleCollectionIds: Set<string> = new Set()
+): { cards: ProductCard[]; total: number } {
   let withMeta = rows.map((p) => {
     const variant = p.product_variants.length ? cheapestVariant(p.product_variants) : null;
     const available = p.product_variants.some((v) =>
@@ -214,7 +264,7 @@ function sortFilterPaginate(rows: RawProductRow[], options: CollectionFilterOpti
   }
 
   const total = withMeta.length;
-  const cards = withMeta.slice(offset, offset + limit).map((x) => toCard(x.p));
+  const cards = withMeta.slice(offset, offset + limit).map((x) => toCard(x.p, eligibleCollectionIds));
   return { cards, total };
 }
 
@@ -228,26 +278,34 @@ export async function getFilteredCollectionProducts(
   const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).single();
   if (!collection) return { cards: [], total: 0 };
 
-  const { data } = await supabase
-    .from("collection_products")
-    .select(
-      "products!inner(title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
-    )
-    .eq("collection_id", collection.id)
-    .eq("products.status", "active");
+  const [{ data }, eligibleIds] = await Promise.all([
+    supabase
+      .from("collection_products")
+      .select(
+        "products!inner(title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id)))"
+      )
+      .eq("collection_id", collection.id)
+      .eq("products.status", "active"),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
   const rows = ((data ?? []) as any[]).map((r) => r.products as RawProductRow);
-  return sortFilterPaginate(rows, options, limit, offset);
+  return sortFilterPaginate(rows, options, limit, offset, eligibleIds);
 }
 
 /** Same as getFilteredCollectionProducts, for /collections/all. */
 export async function getFilteredAllProducts(options: CollectionFilterOptions, limit: number, offset = 0): Promise<{ cards: ProductCard[]; total: number }> {
-  const { data } = await supabase
-    .from("products")
-    .select("title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)")
-    .eq("status", "active");
+  const [{ data }, eligibleIds] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id))"
+      )
+      .eq("status", "active"),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
-  return sortFilterPaginate((data ?? []) as RawProductRow[], options, limit, offset);
+  return sortFilterPaginate((data ?? []) as RawProductRow[], options, limit, offset, eligibleIds);
 }
 
 export { hasActiveFilter };
@@ -400,35 +458,53 @@ export async function isEligibleForWalletPromo(productShopifyId: string | null):
   return (data ?? []).some((d) => (d.buy_item_ids as string[] | null)?.includes(productShopifyId));
 }
 
+/** Real-time eligibility check for the "3 för 2"-style collection-scoped BXGY badge on the PDP --
+ * same read-only-gate pattern as isEligibleForWalletPromo above, but matched via the product's
+ * real collection memberships (the live discount is collection-scoped, not product-scoped). Never
+ * touches lib/discounts.ts's checkout-time calculation logic. */
+export async function isEligibleForThreeForTwo(productId: string): Promise<boolean> {
+  const [{ data: memberships }, eligibleIds] = await Promise.all([
+    supabase.from("collection_products").select("collections!inner(shopify_id)").eq("product_id", productId),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
+  return ((memberships ?? []) as any[]).some((m) => m.collections?.shopify_id && eligibleIds.has(m.collections.shopify_id));
+}
+
 /** "Passar med" -- manually curated complementary products (product_complementary), entirely
  * separate from getRelatedProductCards' automatic recommendations above. Only the admin's own
  * manual selections are ever returned, in the admin's own chosen order; excludes unpublished
  * products. */
 export async function getComplementaryProductCards(productId: string, limit = 8): Promise<ProductCard[]> {
-  const { data } = await supabase
-    .from("product_complementary")
-    .select(
-      "position, products!product_complementary_complementary_product_id_fkey!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
-    )
-    .eq("product_id", productId)
-    .eq("products.status", "active")
-    .order("position", { ascending: true })
-    .limit(limit);
+  const [{ data }, eligibleIds] = await Promise.all([
+    supabase
+      .from("product_complementary")
+      .select(
+        "position, products!product_complementary_complementary_product_id_fkey!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id)))"
+      )
+      .eq("product_id", productId)
+      .eq("products.status", "active")
+      .order("position", { ascending: true })
+      .limit(limit),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
-  return (data ?? []).map((row: any) => toCard(row.products));
+  return (data ?? []).map((row: any) => toCard(row.products, eligibleIds));
 }
 
 export async function searchProductCards(query: string, limit = 24): Promise<ProductCard[]> {
   if (!query.trim()) return [];
-  const { data } = await supabase
-    .from("products")
-    .select(
-      "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
-    )
-    .eq("status", "active")
-    .ilike("title", `%${query}%`)
-    .limit(limit);
-  return (data ?? []).map(toCard);
+  const [{ data }, eligibleIds] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id))"
+      )
+      .eq("status", "active")
+      .ilike("title", `%${query}%`)
+      .limit(limit),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
+  return (data ?? []).map((p) => toCard(p, eligibleIds));
 }
 
 // Real Shopify used its own ML-based recommendation engine (routes.product_recommendations_url),
@@ -473,20 +549,23 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
   // the dedup/pick logic below stays sequential (so results still prefer the most-specific
   // collection first, exactly as before), but the network round trips themselves no longer wait
   // on each other, which used to serialize 2-3+ extra round trips onto every product page load.
-  const perCollectionResults = await Promise.all(
-    withCounts.map((collection) =>
-      supabase
-        .from("collection_products")
-        .select(
-          "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
-        )
-        .eq("collection_id", collection.id)
-        .eq("products.status", "active")
-        .order("position", { ascending: true })
-        .limit(limit * 2)
-        .then(({ data }) => (data ?? []) as any[])
-    )
-  );
+  const [perCollectionResults, eligibleIds] = await Promise.all([
+    Promise.all(
+      withCounts.map((collection) =>
+        supabase
+          .from("collection_products")
+          .select(
+            "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id)))"
+          )
+          .eq("collection_id", collection.id)
+          .eq("products.status", "active")
+          .order("position", { ascending: true })
+          .limit(limit * 2)
+          .then(({ data }) => (data ?? []) as any[])
+      )
+    ),
+    getThreeForTwoEligibleCollectionIds(),
+  ]);
 
   const picked: any[] = [];
   const seenHandles = new Set([excludeHandle]);
@@ -502,7 +581,7 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
     }
   }
 
-  const cards = picked.map(toCard);
+  const cards = picked.map((p) => toCard(p, eligibleIds));
   // Prefer purchasable products -- a stable sort keeps the collection's own relative ordering
   // within each availability group.
   cards.sort((a, b) => Number(b.available) - Number(a.available));

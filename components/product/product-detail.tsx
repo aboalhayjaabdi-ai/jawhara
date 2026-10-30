@@ -80,6 +80,7 @@ export function ProductDetail({
   complementaryProducts,
   variantImageIndex,
   walletPromoEligible,
+  threeForTwoEligible,
 }: {
   title: string;
   handle: string;
@@ -103,6 +104,9 @@ export function ProductDetail({
    * buy_item_ids. Gates the "Välj din plånbok här" link independently of content.offerMessage,
    * since some products share the same display template without being discount-eligible. */
   walletPromoEligible: boolean;
+  /** Real-time "3 för 2" (or any other collection-scoped BXGY) eligibility -- resolved server-side
+   * by the parent page via lib/queries.ts's isEligibleForThreeForTwo. */
+  threeForTwoEligible: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCartActions();
@@ -130,6 +134,9 @@ export function ProductDetail({
         { productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity },
         1
       ),
+      // Recently-viewed is a flattened point-in-time snapshot (see comment below) -- the "3 för 2"
+      // badge isn't part of that scope, same as the already-established quick-add cut.
+      threeForTwoEligible: false,
       quickAddVariantId: variants.length === 1 ? variants[0].id : null,
       // Recently-viewed is a flattened point-in-time snapshot (see lib/recently-viewed.ts) --
       // multi-variant quick-add there is out of scope for this round, same as before.
@@ -156,6 +163,11 @@ export function ProductDetail({
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
               Rea
+            </div>
+          )}
+          {threeForTwoEligible && (
+            <div className="absolute right-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
+              3 för 2
             </div>
           )}
         </div>
