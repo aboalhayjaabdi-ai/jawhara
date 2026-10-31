@@ -142,7 +142,7 @@ function CollectionGrid({
         <SortFilterBar />
       </div>
 
-      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-6 pt-2 lg:grid-cols-4 lg:gap-7">
+      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-4 pt-2 lg:grid-cols-3 lg:gap-7">
         {products.map((p: any) => (
           <ProductCard key={p.handle} product={p} />
         ))}

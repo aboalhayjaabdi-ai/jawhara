@@ -39,8 +39,8 @@ export async function ProductListSection({
       <div
         className={
           layout === "carousel"
-            ? "grid grid-flow-col auto-cols-[45%] gap-6 overflow-x-auto lg:auto-cols-[23.5%]"
-            : "grid grid-cols-2 gap-6 lg:grid-cols-4 lg:gap-7"
+            ? "grid grid-flow-col auto-cols-[47%] gap-4 overflow-x-auto lg:auto-cols-[31%] lg:gap-7"
+            : "grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-7"
         }
       >
         {products.map((p) => (
