@@ -67,7 +67,12 @@ export async function GET() {
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      // 1h previously meant an admin's collection/catalog edit could sit invisible to Meta's
+      // crawler for up to an hour after a manual "Hämta nu" refresh -- confirmed live (a 70-product
+      // collection change didn't show up in the canonical feed response until this cache expired,
+      // same data appearing instantly on a cache-busted URL). 5 min matches this app's other
+      // revalidate windows and keeps the feed cheap to serve without that lag.
+      "Cache-Control": "public, max-age=300, s-maxage=300",
     },
   });
 }
