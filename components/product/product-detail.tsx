@@ -463,25 +463,29 @@ export function ProductDetail({
 
           {content?.offerMessage && (
             <div className="relative mt-6 border border-line p-1">
-              <div className="relative border border-line/60 bg-[#f7f7f7] p-5">
-                {content.offerMessage.image && (
-                  <div className="absolute right-5 top-5 h-16 w-16 overflow-hidden bg-bg sm:h-20 sm:w-20">
-                    <Image src={content.offerMessage.image} alt="" fill className="object-contain p-1.5" sizes="80px" />
+              <div className="border border-line/60 bg-[#f7f7f7] p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                        <rect x="3" y="8" width="18" height="4" rx="1" />
+                        <path d="M12 8v13" />
+                        <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+                        <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+                      </svg>
+                      Erbjudande
+                    </div>
+                    <div className="mt-3 text-xl font-medium uppercase leading-tight tracking-[0.04em] sm:text-2xl">
+                      {content.offerMessage.heading}
+                    </div>
                   </div>
-                )}
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-                    <rect x="3" y="8" width="18" height="4" rx="1" />
-                    <path d="M12 8v13" />
-                    <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
-                    <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
-                  </svg>
-                  Erbjudande
+                  {content.offerMessage.image && (
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden sm:h-20 sm:w-20">
+                      <Image src={content.offerMessage.image} alt="" fill className="object-contain" sizes="80px" />
+                    </div>
+                  )}
                 </div>
-                <div className="mt-3 max-w-[85%] text-xl font-medium uppercase leading-tight tracking-[0.04em] sm:text-2xl">
-                  {content.offerMessage.heading}
-                </div>
-                <p className="mt-4 max-w-[85%] text-sm leading-7 text-muted">{content.offerMessage.body}</p>
+                <p className="mt-4 text-sm leading-7 text-muted">{content.offerMessage.body}</p>
                 {walletPromoEligible && content.offerMessage.href && (
                   <Link
                     href={content.offerMessage.href}
