@@ -16,6 +16,25 @@ function stripHtml(html: string | null): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// Meta/Google cap custom_label_0 at 100 characters -- confirmed live (7 of 432 products, each in
+// up to 10 collections, produced a 103-117 char joined string and Meta flagged every one of them
+// as "value too long" on every feed upload). Packs as many whole handles as fit under that budget
+// (shortest first, so a heavily-tagged product keeps the most labels rather than silently losing
+// whichever handles happened to sort last) instead of ever emitting an invalid, truncated field.
+const CUSTOM_LABEL_MAX_LENGTH = 100;
+function buildCustomLabel0(handles: string[]): string {
+  const sorted = [...handles].sort((a, b) => a.length - b.length);
+  const kept: string[] = [];
+  let length = 0;
+  for (const handle of sorted) {
+    const addedLength = kept.length === 0 ? handle.length : handle.length + 1; // +1 for the joining comma
+    if (length + addedLength > CUSTOM_LABEL_MAX_LENGTH) continue;
+    kept.push(handle);
+    length += addedLength;
+  }
+  return kept.join(",");
+}
+
 /**
  * Public, Google Shopping / Meta Catalog-compatible product feed -- RSS 2.0 with the standard
  * <g:*> namespace both platforms accept. Generated entirely from real, active Supabase product
@@ -35,7 +54,7 @@ export async function GET() {
       // Commerce Manager product-set rules match this with "Custom label 0" -> "Contains" ->
       // "<handle>", which selects a product that's in multiple collections for every matching set
       // (a single-value field couldn't).
-      const customLabel0 = p.collectionHandles.join(",");
+      const customLabel0 = buildCustomLabel0(p.collectionHandles);
 
       return `
     <item>
