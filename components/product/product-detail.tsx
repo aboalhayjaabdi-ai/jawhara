@@ -195,9 +195,8 @@ function UspIcon({ text }: { text: string }) {
   if (t.includes("kvalit") || t.includes("premium") || t.includes("material")) {
     return (
       <svg {...common}>
-        <path d="M4 9l4-6h8l4 6-10 12z" />
-        <path d="M4 9h16" />
-        <path d="M9 3l-2 6M15 3l2 6" />
+        <path d="M6 3h12l4 6-10 12L2 9z" strokeLinejoin="round" />
+        <path d="M2 9h20" />
       </svg>
     );
   }
