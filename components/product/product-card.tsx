@@ -63,6 +63,9 @@ export function ProductCard({ product }: { product: ProductCardType }) {
         {product.available && onSale && (
           <div className="absolute left-3 top-3 bg-fg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">Rea</div>
         )}
+        {product.available && product.threeForTwo && (
+          <div className="absolute right-3 top-3 bg-fg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">3 för 2</div>
+        )}
         <LinkPendingIndicator />
         {showQuickAdd && (
           <div ref={pickerRef} className="absolute bottom-3 right-3">

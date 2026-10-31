@@ -328,6 +328,7 @@ export function ProductDetail({
   complementaryProducts,
   variantImageIndex,
   walletPromoEligible,
+  threeForTwoEligible,
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
   // content_ids actually match a real catalog item instead of a variant id the catalog has no
@@ -355,6 +356,10 @@ export function ProductDetail({
    * buy_item_ids. Gates the "Välj din plånbok här" link independently of content.offerMessage,
    * since some products share the same display template without being discount-eligible. */
   walletPromoEligible: boolean;
+  /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForThreeForTwo --
+   * same real, live "3 för 2" collection scope the grid cards (ProductCard) use, so the badge
+   * keeps showing on this product's own page instead of disappearing on click, matching "Rea". */
+  threeForTwoEligible: boolean;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
   const { addItem } = useCartActions();
@@ -387,6 +392,7 @@ export function ProductDetail({
       // Recently-viewed is a flattened point-in-time snapshot (see lib/recently-viewed.ts) --
       // multi-variant quick-add there is out of scope for this round, same as before.
       variants: [],
+      threeForTwo: threeForTwoEligible,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
@@ -409,6 +415,11 @@ export function ProductDetail({
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
               Rea
+            </div>
+          )}
+          {threeForTwoEligible && (
+            <div className="absolute right-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
+              3 för 2
             </div>
           )}
         </div>
