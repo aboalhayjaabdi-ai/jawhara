@@ -1,6 +1,19 @@
 import { getProductFeedItems } from "@/lib/queries";
+import { storagePathFromMediaUrl } from "@/lib/supabase/media";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
+
+// Meta's own image-fetch crawler leaves a large, stable fraction of the catalog stuck at
+// image_fetch_status "NO_STATUS" when g:image_link points straight at the Supabase storage
+// domain (confirmed live via the Graph API) -- that domain sits behind Cloudflare bot-management
+// and serves every object as non-cacheable regardless of its real stored cache-control, so every
+// crawl attempt re-hits bot scoring at the origin. jawhara.se has none of that and is already
+// where Meta's own feed fetcher pulls this very feed from daily with zero errors, so product
+// images are proxied through the same domain (app/img/[...path]/route.ts) instead.
+function imageLink(url: string): string {
+  const storagePath = storagePathFromMediaUrl(url);
+  return storagePath ? `${SITE_URL}/img/${storagePath}` : url;
+}
 
 function escapeXml(value: string): string {
   return value
@@ -62,7 +75,7 @@ export async function GET() {
       <title>${escapeXml(p.title)}</title>
       <description>${escapeXml(description || p.title)}</description>
       <link>${escapeXml(link)}</link>
-      ${p.image ? `<g:image_link>${escapeXml(p.image)}</g:image_link>` : ""}
+      ${p.image ? `<g:image_link>${escapeXml(imageLink(p.image))}</g:image_link>` : ""}
       <g:availability>${availability}</g:availability>
       <g:price>${regularPrice.toFixed(2)} ${p.currency}</g:price>
       ${salePriceXml}
