@@ -127,10 +127,74 @@ async function resolveItems(itemType: "all" | "product" | "collection" | null, l
   return { items: { collectionIds: gids.filter((g): g is string => !!g) }, warnings };
 }
 
-function itemsToDiscountItemsInput(items: ItemsInput): Record<string, unknown> {
+// On an update, Shopify's DiscountProducts/DiscountCollections inputs are a DIFF
+// (productsToAdd/productsToRemove, add/remove) against whatever is already on the live discount
+// -- they are never a replacement list. Passing only "add" fields (as a bare target-list would)
+// silently leaves every item that fell out of this sync's target list still active on Shopify,
+// which is exactly how a removed buy/get item (e.g. "Valfri Plånbok" dropping gift sets from the
+// buy side) could keep discounting for real at checkout despite Supabase and Shopify's `title`
+// visibly agreeing with the edit. `current` carries the live GIDs this discount already has on
+// Shopify (fetched by fetchCurrentBxgyItems below) so both directions of the diff are always sent.
+function itemsToDiscountItemsInput(items: ItemsInput, current?: { productIds: string[]; collectionIds: string[] }): Record<string, unknown> {
   if ("all" in items) return { all: true };
-  if ("productIds" in items) return { products: { productsToAdd: items.productIds } };
-  return { collections: { add: items.collectionIds } };
+  if ("productIds" in items) {
+    if (!current) return { products: { productsToAdd: items.productIds } };
+    const currentSet = new Set(current.productIds);
+    const targetSet = new Set(items.productIds);
+    return {
+      products: {
+        productsToAdd: items.productIds.filter((id) => !currentSet.has(id)),
+        productsToRemove: current.productIds.filter((id) => !targetSet.has(id)),
+      },
+    };
+  }
+  if (!current) return { collections: { add: items.collectionIds } };
+  const currentSet = new Set(current.collectionIds);
+  const targetSet = new Set(items.collectionIds);
+  return {
+    collections: {
+      add: items.collectionIds.filter((id) => !currentSet.has(id)),
+      remove: current.collectionIds.filter((id) => !targetSet.has(id)),
+    },
+  };
+}
+
+type CurrentBxgyItems = { buy: { productIds: string[]; collectionIds: string[] }; get: { productIds: string[]; collectionIds: string[] } };
+
+function extractItemIds(items: any): { productIds: string[]; collectionIds: string[] } {
+  return {
+    productIds: (items?.products?.nodes ?? []).map((n: any) => n.id),
+    collectionIds: (items?.collections?.nodes ?? []).map((n: any) => n.id),
+  };
+}
+
+// Fetches what a BXGY discount (automatic or code) currently has live on Shopify, so
+// itemsToDiscountItemsInput can diff against real state instead of only ever adding. Returns null
+// for a brand-new discount (no shopify_discount_id yet) or if the node can no longer be found --
+// callers then fall back to the add-only input, same as before this fix.
+async function fetchCurrentBxgyItems(discountId: string): Promise<CurrentBxgyItems | null> {
+  const ITEMS_FRAGMENT = `
+    items {
+      ... on DiscountProducts { products(first: 250) { nodes { id } } }
+      ... on DiscountCollections { collections(first: 250) { nodes { id } } }
+    }
+  `;
+  const data = await shopifyGraphQL<{
+    discountNode: { discount: { customerBuys?: { items: any }; customerGets?: { items: any } } } | null;
+  }>(
+    `query($id: ID!) {
+      discountNode(id: $id) {
+        discount {
+          ... on DiscountAutomaticBxgy { customerBuys { ${ITEMS_FRAGMENT} } customerGets { ${ITEMS_FRAGMENT} } }
+          ... on DiscountCodeBxgy { customerBuys { ${ITEMS_FRAGMENT} } customerGets { ${ITEMS_FRAGMENT} } }
+        }
+      }
+    }`,
+    { id: discountId }
+  );
+  const discount = data.discountNode?.discount;
+  if (!discount?.customerBuys || !discount?.customerGets) return null;
+  return { buy: extractItemIds(discount.customerBuys.items), get: extractItemIds(discount.customerGets.items) };
 }
 
 function combinesWithInput(d: DiscountRow) {
@@ -144,6 +208,7 @@ function combinesWithInput(d: DiscountRow) {
 type MutationOutcome = { shopifyDiscountId: string | null; userErrors: { message: string }[] };
 
 async function createOrUpdateAutomaticBxgy(d: DiscountRow, buyItems: ItemsInput, getItems: ItemsInput): Promise<MutationOutcome> {
+  const current = d.shopify_discount_id ? await fetchCurrentBxgyItems(d.shopify_discount_id) : null;
   const input = {
     title: d.title,
     startsAt: d.starts_at,
@@ -151,10 +216,10 @@ async function createOrUpdateAutomaticBxgy(d: DiscountRow, buyItems: ItemsInput,
     combinesWith: combinesWithInput(d),
     context: { all: "ALL" },
     usesPerOrderLimit: d.uses_per_order_limit != null ? String(d.uses_per_order_limit) : null,
-    customerBuys: { value: { quantity: String(d.buy_quantity) }, items: itemsToDiscountItemsInput(buyItems) },
+    customerBuys: { value: { quantity: String(d.buy_quantity) }, items: itemsToDiscountItemsInput(buyItems, current?.buy) },
     customerGets: {
       value: { discountOnQuantity: { quantity: String(d.get_quantity), effect: { percentage: Number(d.get_percentage ?? 0) / 100 } } },
-      items: itemsToDiscountItemsInput(getItems),
+      items: itemsToDiscountItemsInput(getItems, current?.get),
     },
   };
   if (d.shopify_discount_id) {
@@ -182,6 +247,7 @@ async function createOrUpdateAutomaticBxgy(d: DiscountRow, buyItems: ItemsInput,
 }
 
 async function createOrUpdateCodeBxgy(d: DiscountRow, buyItems: ItemsInput, getItems: ItemsInput): Promise<MutationOutcome> {
+  const current = d.shopify_discount_id ? await fetchCurrentBxgyItems(d.shopify_discount_id) : null;
   const input = {
     title: d.title,
     code: d.code,
@@ -192,10 +258,10 @@ async function createOrUpdateCodeBxgy(d: DiscountRow, buyItems: ItemsInput, getI
     usesPerOrderLimit: d.uses_per_order_limit,
     usageLimit: d.usage_limit,
     appliesOncePerCustomer: d.applies_once_per_customer,
-    customerBuys: { value: { quantity: String(d.buy_quantity) }, items: itemsToDiscountItemsInput(buyItems) },
+    customerBuys: { value: { quantity: String(d.buy_quantity) }, items: itemsToDiscountItemsInput(buyItems, current?.buy) },
     customerGets: {
       value: { discountOnQuantity: { quantity: String(d.get_quantity), effect: { percentage: Number(d.get_percentage ?? 0) / 100 } } },
-      items: itemsToDiscountItemsInput(getItems),
+      items: itemsToDiscountItemsInput(getItems, current?.get),
     },
   };
   if (d.shopify_discount_id) {
