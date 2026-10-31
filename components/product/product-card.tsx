@@ -36,6 +36,7 @@ export function ProductCard({ product }: { product: ProductCardType }) {
 
   function addVariant(variantId: string, price: number, compareAtPrice: number | null, variantTitle: string, image: string | null) {
     addItem({
+      productId: product.id,
       variantId,
       productHandle: product.handle,
       title: product.title,

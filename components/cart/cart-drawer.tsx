@@ -97,6 +97,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       if (!items.some((i) => i.variantId === giftBoxOffer.variantId)) {
         addItem(
           {
+            productId: giftBoxOffer.productId,
             variantId: giftBoxOffer.variantId,
             productHandle: giftBoxOffer.productHandle,
             title: giftBoxOffer.title,

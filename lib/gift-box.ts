@@ -3,6 +3,7 @@ import { mediaUrl } from "./supabase/media";
 import { isVariantAvailable } from "./inventory";
 
 export type GiftBoxOffer = {
+  productId: string;
   variantId: string;
   productHandle: string;
   title: string;
@@ -17,7 +18,7 @@ export async function getGiftBoxOffer(): Promise<GiftBoxOffer | null> {
   const { data: product } = await supabase
     .from("products")
     .select(
-      "handle, title, status, media(storage_path, position), product_variants(id, price, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, handle, title, status, media(storage_path, position), product_variants(id, price, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("handle", "presentask")
     .maybeSingle();
@@ -40,6 +41,7 @@ export async function getGiftBoxOffer(): Promise<GiftBoxOffer | null> {
   const sortedMedia = [...(product.media ?? [])].sort((a, b) => a.position - b.position);
 
   return {
+    productId: product.id,
     variantId: variant.id,
     productHandle: product.handle,
     title: product.title,

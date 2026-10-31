@@ -116,13 +116,18 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
 
     const { data: items } = await supabaseService
       .from("order_items")
-      .select("variant_id, quantity, unit_price, discounted_unit_price")
+      .select("product_id, quantity, unit_price, discounted_unit_price")
       .eq("order_id", orderId);
 
+    // Meta's product catalog is product-level, not variant-level (one catalog item per
+    // products.id -- see app/feed/products.xml's g:id) -- contents[].id has to be product_id, the
+    // same id the catalog uses as retailer_id, or Meta can never match this Purchase event back to
+    // a real catalog item for dynamic ads/retargeting (confirmed live: a variant_id never matches
+    // any retailer_id in the catalog, since variants and products are separate tables/UUIDs).
     const contents = (items ?? [])
-      .filter((i) => i.variant_id)
+      .filter((i) => i.product_id)
       .map((i) => ({
-        id: i.variant_id as string,
+        id: i.product_id as string,
         quantity: i.quantity,
         item_price: Number(i.discounted_unit_price ?? i.unit_price),
       }));
