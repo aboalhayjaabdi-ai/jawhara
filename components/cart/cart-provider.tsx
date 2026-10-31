@@ -326,7 +326,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((prev) => {
       const existing = prev.find((i) => i.variantId === item.variantId);
       if (existing) {
-        return prev.map((i) => (i.variantId === item.variantId ? { ...i, qty: i.qty + qty } : i));
+        // Refresh every field from this fresh `item` (not just qty) on top of the stored one --
+        // otherwise a cart line added before productId existed on CartItem stays stuck with
+        // productId undefined forever, since it would never go through the `return [...prev,
+        // { ...item, qty }]` branch below again for the same variant.
+        return prev.map((i) => (i.variantId === item.variantId ? { ...i, ...item, qty: i.qty + qty } : i));
       }
       return [...prev, { ...item, qty }];
     });

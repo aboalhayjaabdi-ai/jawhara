@@ -78,7 +78,11 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
         value: subtotal,
         currency: "SEK",
         itemCount: items.reduce((sum, i) => sum + i.qty, 0),
-        contents: items.map((i) => ({ id: i.productId, quantity: i.qty })),
+        // Filters out any line still missing productId -- a cart saved in a browser before this
+        // field existed on CartItem, never touched again (re-added, qty-adjusted) since. Never
+        // sends a null/undefined content_id to Meta; the Shopify-side checkout itself is keyed on
+        // variantId throughout and is completely unaffected either way.
+        contents: items.filter((i) => i.productId).map((i) => ({ id: i.productId, quantity: i.qty })),
       });
       // isCheckingOut stays true: the browser is navigating away (window.location.href), so there's
       // no later render on THIS page load that needs it reset -- the pageshow listener above is
