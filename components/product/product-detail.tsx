@@ -314,6 +314,7 @@ function SpecTable({ html }: { html: string }) {
 }
 
 export function ProductDetail({
+  productId,
   title,
   handle,
   status,
@@ -328,6 +329,10 @@ export function ProductDetail({
   variantImageIndex,
   walletPromoEligible,
 }: {
+  // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
+  // content_ids actually match a real catalog item instead of a variant id the catalog has no
+  // entry for (the catalog is product-level, not variant-level).
+  productId: string;
   title: string;
   handle: string;
   status: string;
@@ -367,6 +372,7 @@ export function ProductDetail({
   useEffect(() => {
     if (!variant) return;
     addRecentlyViewed({
+      id: productId,
       title,
       handle,
       image: images[0] ?? null,
@@ -387,7 +393,7 @@ export function ProductDetail({
 
   useEffect(() => {
     if (!variant) return;
-    trackViewContent({ id: variant.id, title, price: variant.price, currency: "SEK", productHandle: handle });
+    trackViewContent({ id: productId, title, price: variant.price, currency: "SEK", productHandle: handle });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle, variant?.id]);
 
@@ -515,6 +521,7 @@ export function ProductDetail({
             onClick={() =>
               variant &&
               addItem({
+                productId,
                 variantId: variant.id,
                 productHandle: handle,
                 title,

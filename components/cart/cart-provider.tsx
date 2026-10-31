@@ -8,6 +8,10 @@ import { trackAddToCart } from "@/lib/marketing/events";
 import type { CheckoutTotals } from "@/lib/discounts";
 
 export type CartItem = {
+  // products.id -- same id the Meta/Google feed uses as g:id, so AddToCart's content_ids actually
+  // matches a real catalog item (the catalog is product-level, not variant-level; see
+  // lib/marketing/capi-purchase.ts for the same fix on the server-side Purchase event).
+  productId: string;
   variantId: string;
   productHandle: string;
   title: string;
@@ -322,12 +326,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((prev) => {
       const existing = prev.find((i) => i.variantId === item.variantId);
       if (existing) {
-        return prev.map((i) => (i.variantId === item.variantId ? { ...i, qty: i.qty + qty } : i));
+        // Refresh every field from this fresh `item` (not just qty) on top of the stored one --
+        // otherwise a cart line added before productId existed on CartItem stays stuck with
+        // productId undefined forever, since it would never go through the `return [...prev,
+        // { ...item, qty }]` branch below again for the same variant.
+        return prev.map((i) => (i.variantId === item.variantId ? { ...i, ...item, qty: i.qty + qty } : i));
       }
       return [...prev, { ...item, qty }];
     });
     setBump((b) => b + 1);
-    trackAddToCart({ id: item.variantId, title: item.title, price: item.price, currency: "SEK", quantity: qty, productHandle: item.productHandle });
+    trackAddToCart({ id: item.productId, title: item.title, price: item.price, currency: "SEK", quantity: qty, productHandle: item.productHandle });
   }, []);
 
   const removeItem = useCallback((variantId: string) => {

@@ -49,6 +49,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
 
   return (
     <ProductDetail
+      productId={product.id}
       title={product.title}
       handle={product.handle}
       status={product.status}

@@ -36,7 +36,13 @@ export default function KassaPage() {
         router.replace("/");
         return;
       }
-      trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
+      trackInitiateCheckout({
+        value: subtotal,
+        currency: "SEK",
+        itemCount: items.reduce((sum, i) => sum + i.qty, 0),
+        // Same guard as the cart drawer's own InitiateCheckout call -- see its comment.
+        contents: items.filter((i) => i.productId).map((i) => ({ id: i.productId, quantity: i.qty })),
+      });
       // On success goToCheckout already navigated the browser away (window.location.href) --
       // nothing left to render.
     })();

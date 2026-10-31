@@ -42,9 +42,24 @@ export function trackAddToCart(params: { id: string; title: string; price: numbe
   logAnalyticsEvent("add_to_cart", { productHandle: params.productHandle, productTitle: params.title });
 }
 
-export function trackInitiateCheckout(params: { value: number; currency: string; itemCount: number }) {
+export function trackInitiateCheckout(params: {
+  value: number;
+  currency: string;
+  itemCount: number;
+  // One per distinct cart line, products.id (same id used as retailer_id in the Meta catalog --
+  // see lib/queries.ts's ProductCard.id) -- without these Meta can't tie an abandoned cart back
+  // to the real catalog items for retargeting, same gap trackViewContent/trackAddToCart had.
+  contents: { id: string; quantity: number }[];
+}) {
   if (typeof window === "undefined") return;
-  window.fbq?.("track", "InitiateCheckout", { value: params.value, currency: params.currency, num_items: params.itemCount });
+  window.fbq?.("track", "InitiateCheckout", {
+    content_ids: params.contents.map((c) => c.id),
+    contents: params.contents,
+    content_type: "product",
+    value: params.value,
+    currency: params.currency,
+    num_items: params.itemCount,
+  });
   window.gtag?.("event", "begin_checkout", { value: params.value, currency: params.currency });
   logAnalyticsEvent("initiate_checkout");
 }
