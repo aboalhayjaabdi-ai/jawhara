@@ -304,19 +304,55 @@ export type ProductFeedItem = {
   compareAtPrice: number | null;
   currency: string;
   available: boolean;
+  // Every real collection (by handle) this product belongs to -- a product can be in several,
+  // so this is an array, not a single value. Rendered into the feed as a comma-joined
+  // custom_label (Meta/Google's own recommended mechanism for product-set rules): one rule per
+  // collection with a "contains <handle>" match recreates a per-collection product set in
+  // Commerce Manager, which is how a specific collection gets imported for a Meta ad set.
+  collectionHandles: string[];
 };
+
+/** collection_products has well over 1000 rows, past PostgREST's default page cap -- paginates
+ * explicitly instead of trusting one unbounded select to return everything, which would silently
+ * truncate the feed's collection labels to whatever sorted into the first page. */
+async function fetchAllCollectionProductLinks(): Promise<{ product_id: string; collections: { handle: string } | null }[]> {
+  const PAGE_SIZE = 1000;
+  const all: { product_id: string; collections: { handle: string } | null }[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data } = await supabase
+      .from("collection_products")
+      .select("product_id, collections(handle)")
+      .range(offset, offset + PAGE_SIZE - 1);
+    const page = (data ?? []) as any[];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return all;
+}
 
 /** Real, active catalog data for the public Google Shopping/Meta-catalog-compatible product feed
  * (app/feed/products.xml). Every value here is already-real Supabase data -- nothing is invented
  * for the feed. */
 export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
-  const { data } = await supabase
-    .from("products")
-    .select(
-      "id, title, handle, description_html, status, media(storage_path, position), product_variants(price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)"
-    )
-    .eq("status", "active")
-    .order("title", { ascending: true });
+  const [{ data }, collectionLinks] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, title, handle, description_html, status, media(storage_path, position), product_variants(price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy)"
+      )
+      .eq("status", "active")
+      .order("title", { ascending: true }),
+    fetchAllCollectionProductLinks(),
+  ]);
+
+  const collectionHandlesByProductId = new Map<string, string[]>();
+  for (const link of collectionLinks) {
+    const handle = link.collections?.handle;
+    if (!handle) continue;
+    const existing = collectionHandlesByProductId.get(link.product_id) ?? [];
+    existing.push(handle);
+    collectionHandlesByProductId.set(link.product_id, existing);
+  }
 
   return (data ?? []).map((p: any) => {
     const card = toCard(p);
@@ -328,6 +364,7 @@ export async function getProductFeedItems(): Promise<ProductFeedItem[]> {
       image: card.image,
       price: card.price,
       compareAtPrice: card.compareAtPrice,
+      collectionHandles: collectionHandlesByProductId.get(p.id) ?? [],
       currency: "SEK",
       available: card.available,
     };

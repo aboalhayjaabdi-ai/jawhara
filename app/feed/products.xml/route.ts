@@ -32,6 +32,10 @@ export async function GET() {
         p.compareAtPrice != null && p.compareAtPrice > p.price ? `<g:sale_price>${p.price.toFixed(2)} ${p.currency}</g:sale_price>` : "";
       const regularPrice = p.compareAtPrice != null && p.compareAtPrice > p.price ? p.compareAtPrice : p.price;
       const description = stripHtml(p.descriptionHtml).slice(0, 5000);
+      // Commerce Manager product-set rules match this with "Custom label 0" -> "Contains" ->
+      // "<handle>", which selects a product that's in multiple collections for every matching set
+      // (a single-value field couldn't).
+      const customLabel0 = p.collectionHandles.join(",");
 
       return `
     <item>
@@ -46,6 +50,7 @@ export async function GET() {
       <g:condition>new</g:condition>
       <g:brand>Jawhara</g:brand>
       <g:identifier_exists>false</g:identifier_exists>
+      ${customLabel0 ? `<g:custom_label_0>${escapeXml(customLabel0)}</g:custom_label_0>` : ""}
     </item>`;
     })
     .join("");
