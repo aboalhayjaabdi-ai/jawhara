@@ -156,6 +156,51 @@ function TrustIcon({ text }: { text: string }) {
   );
 }
 
+// Icon badges for the USP grid below -- matched to each item's own heading/body text by keyword,
+// same approach as TrustIcon, so content.uspBlock (plain strings, authored per category) needs no
+// schema change to get icons.
+function UspIcon({ text }: { text: string }) {
+  const t = text.toLowerCase();
+  const common = { width: 26, height: 26, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.4, "aria-hidden": true } as const;
+  if (t.includes("vatten")) {
+    return (
+      <svg {...common}>
+        <path d="M12 3c-4 5-7 8.8-7 12.5a7 7 0 0 0 14 0C19 11.8 16 8 12 3z" />
+      </svg>
+    );
+  }
+  if (t.includes("byte") || t.includes("retur")) {
+    return (
+      <svg {...common}>
+        <path d="M3 12a9 9 0 1 1 3 6.7" />
+        <path d="M3 21v-5h5" />
+      </svg>
+    );
+  }
+  if (t.includes("kvalit") || t.includes("premium") || t.includes("material")) {
+    return (
+      <svg {...common}>
+        <path d="M4 9l4-6h8l4 6-10 12z" />
+        <path d="M4 9h16" />
+        <path d="M9 3l-2 6M15 3l2 6" />
+      </svg>
+    );
+  }
+  if (t.includes("garanti")) {
+    return (
+      <svg {...common}>
+        <path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M12 3l1.5 6L20 10l-6.5 1L12 17l-1.5-6L4 10l6.5-1z" />
+    </svg>
+  );
+}
+
 // Small, recognizable payment-method badges in each brand's own color, matching the reference
 // layout's real icon row rather than a flat monochrome text-pill list.
 function PaymentBadges() {
@@ -539,11 +584,14 @@ export function ProductDetail({
 
       {content?.uspBlock && (
         <div className="mt-16 border-t border-line pt-14">
-          <div className="grid grid-cols-2 gap-10 text-center lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {content.uspBlock.map((item) => (
-              <div key={item.heading}>
-                <div className="text-sm font-semibold">{item.heading}</div>
-                <p className="mt-2 text-xs leading-6 text-muted">{item.body}</p>
+              <div key={item.heading} className="flex flex-col items-center border border-line bg-[#f7f7f7] px-5 py-9 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-bg">
+                  <UspIcon text={`${item.heading} ${item.body}`} />
+                </div>
+                <div className="mt-5 text-sm font-semibold uppercase tracking-wide">{item.heading}</div>
+                <p className="mt-2.5 text-xs leading-6 text-muted">{item.body}</p>
               </div>
             ))}
           </div>
