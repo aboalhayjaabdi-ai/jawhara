@@ -558,6 +558,8 @@ export function ProductDetail({
             )}
           </button>
 
+          <p className="mt-2.5 text-center text-[11px] text-muted">Tullavgifter samt frakt och skatter ingår.</p>
+
           <PaymentBadges />
 
           {content?.trustLines && (
