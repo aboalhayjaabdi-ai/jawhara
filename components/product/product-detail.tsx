@@ -52,6 +52,34 @@ function decodeEntities(s: string): string {
 
 type SpecRow = { label: string; value: string; subRows?: { label: string; value: string }[] };
 
+const SUB_LABEL_RE = /^([A-ZÅÄÖ][a-zA-ZåäöÅÄÖ]*)[:\s]+(\d.*)$/;
+
+// Turns the ×/comma-split pieces of a "Mått:" value into {label, value} sub-rows, or returns null
+// when there's nothing to structure (a single piece) or a piece can't be safely interpreted.
+// Real bag listings sometimes drop the label on the third measurement ("Bredd 25 cm, Höjd 20 cm,
+// 14 cm") -- when that trailing piece is bare and Bredd+Höjd are already present, it's always the
+// missing Djup (confirmed against the source data), so it's inferred by position rather than left
+// as an unlabeled, confusing trailing number.
+function buildSubRows(subParts: string[]): { label: string; value: string }[] | null {
+  if (subParts.length < 2) return null;
+  const out: { label: string; value: string }[] = [];
+  for (let i = 0; i < subParts.length; i++) {
+    const m = subParts[i].match(SUB_LABEL_RE);
+    if (m) {
+      out.push({ label: m[1], value: m[2].trim() });
+      continue;
+    }
+    const bareValue = /^\d.*$/.test(subParts[i]) ? subParts[i] : null;
+    const haveLabels = out.map((o) => o.label);
+    if (bareValue && i === subParts.length - 1 && haveLabels.includes("Bredd") && haveLabels.includes("Höjd") && !haveLabels.includes("Djup")) {
+      out.push({ label: "Djup", value: bareValue.trim() });
+      continue;
+    }
+    return null;
+  }
+  return out;
+}
+
 // Real product descriptions are plain, inconsistently-shaped HTML authored per category --
 // rings/earrings are pure prose with no labels at all, while necklaces/bags/wallets/gift sets use
 // "Label: value" lines (sometimes a compound "Mått: Bredd: X × Höjd: Y × Djup: Z"). This extracts
@@ -78,28 +106,15 @@ function parseSpecContent(html: string): { rows: SpecRow[]; freeText: string[] }
     const [, label, rest] = m;
     // Real "Mått:" values come in two shapes: "Bredd: 25 cm × Längd: 13 cm" (colon sub-labels) and
     // "Längd 22 cm, Bredd 12 cm, Djup 9 cm" (space-separated, comma-joined). Split on "×" (always
-    // safe) or a comma followed by a capitalized word (a new sub-label, never a Swedish decimal
-    // comma like "22,5 cm", which is followed by a digit).
-    const subParts = rest.split(/×|,\s*(?=[A-ZÅÄÖ])/).map((s) => s.trim()).filter(Boolean);
-    const subLabelRe = /^([A-ZÅÄÖ][a-zA-ZåäöÅÄÖ]*)[:\s]+(\d.*)$/;
-    // A handful of real listings (e.g. bundles with two sizes) leave a second, unlabeled number
-    // trailing a sub-value, like "Höjd 20 cm, 14 cm" -- the comma there isn't followed by a
-    // capital letter so it survives the split above as part of the "Höjd" value. Detect that
-    // (a stray ", <digit>" inside a captured sub-value) and bail out of structuring the whole row
-    // rather than showing a misleading two-numbers-in-one-cell table.
-    const hasStrayNumber = (value: string) => /,\s*\d/.test(value);
-    const parsedSubRows =
-      subParts.length > 1 && subParts.every((sp) => subLabelRe.test(sp))
-        ? subParts.map((sp) => {
-            const sm = sp.match(subLabelRe)!;
-            return { label: sm[1], value: sm[2].trim() };
-          })
-        : null;
-    if (parsedSubRows && !parsedSubRows.some((sr) => hasStrayNumber(sr.value))) {
-      rows.push({ label, value: rest, subRows: parsedSubRows });
-    } else {
-      rows.push({ label, value: rest });
-    }
+    // safe), a comma followed by a capitalized word (a new sub-label), or a comma straight after a
+    // unit letter and before a bare digit ("cm, 14" -- a second, unlabeled measurement) -- never a
+    // Swedish decimal comma like "22,5 cm", which sits directly between two digits with no letter
+    // before it.
+    const subParts = rest
+      .split(/×|,\s*(?=[A-ZÅÄÖ])|(?<=[a-zA-Zåäö]),\s*(?=\d)/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    rows.push({ label, value: rest, subRows: buildSubRows(subParts) ?? undefined });
   }
   return { rows, freeText };
 }
@@ -280,7 +295,9 @@ function SpecTable({ html }: { html: string }) {
                 {!r.subRows && <span className="overflow-x-auto whitespace-nowrap text-right text-[15px]">{r.value}</span>}
               </div>
               {r.subRows && (
-                <div className="mt-3 grid grid-cols-2 gap-6 sm:grid-cols-3">
+                // Always one row, however many sub-measurements there are -- never wraps to a
+                // second line, however narrow the screen.
+                <div className="mt-3 grid gap-3 sm:gap-6" style={{ gridTemplateColumns: `repeat(${r.subRows.length}, minmax(0, 1fr))` }}>
                   {r.subRows.map((sr, j) => (
                     <div key={`${sr.label}-${j}`} className="min-w-0">
                       <div className="whitespace-nowrap text-[10.5px] tracking-[0.12em] text-muted uppercase">{sr.label}</div>
