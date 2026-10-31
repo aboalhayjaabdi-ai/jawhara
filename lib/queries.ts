@@ -18,6 +18,10 @@ export type ProductCardVariant = {
 };
 
 export type ProductCard = {
+  // Meta/Google feed's g:id (see getProductFeedItems) is this same products.id -- carried through
+  // every card so add-to-cart/view-content tracking can send a content_id that actually matches a
+  // real catalog item, instead of a variant id the catalog has no entry for.
+  id: string;
   title: string;
   handle: string;
   image: string | null;
@@ -36,6 +40,7 @@ function cheapestVariant<T extends { price: number }>(variants: T[]) {
 }
 
 function toCard(p: {
+  id: string;
   title: string;
   handle: string;
   status?: string;
@@ -76,6 +81,7 @@ function toCard(p: {
     );
   const available = p.product_variants.some(variantAvailable);
   return {
+    id: p.id,
     title: p.title,
     handle: p.handle,
     image: sorted[0] ? mediaUrl(sorted[0].storage_path) : null,
@@ -107,7 +113,7 @@ export async function getCollectionProductCards(handle: string, limit: number, o
   const { data } = await supabase
     .from("collection_products")
     .select(
-      "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+      "position, products!inner(id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
     )
     .eq("collection_id", collection.id)
     .eq("products.status", "active")
@@ -122,7 +128,7 @@ export async function getAllProductCards(limit: number, offset = 0): Promise<{ c
   const { data, count } = await supabase
     .from("products")
     .select(
-      "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)",
+      "id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)",
       { count: "exact" }
     )
     .eq("status", "active")
@@ -149,6 +155,7 @@ function hasActiveFilter(options: CollectionFilterOptions): boolean {
 }
 
 type RawProductRow = {
+  id: string;
   title: string;
   handle: string;
   status?: string;
@@ -231,7 +238,7 @@ export async function getFilteredCollectionProducts(
   const { data } = await supabase
     .from("collection_products")
     .select(
-      "products!inner(title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+      "products!inner(id, title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
     )
     .eq("collection_id", collection.id)
     .eq("products.status", "active");
@@ -244,7 +251,7 @@ export async function getFilteredCollectionProducts(
 export async function getFilteredAllProducts(options: CollectionFilterOptions, limit: number, offset = 0): Promise<{ cards: ProductCard[]; total: number }> {
   const { data } = await supabase
     .from("products")
-    .select("title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)")
+    .select("id, title, handle, status, created_at, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)")
     .eq("status", "active");
 
   return sortFilterPaginate((data ?? []) as RawProductRow[], options, limit, offset);
@@ -445,7 +452,7 @@ export async function getComplementaryProductCards(productId: string, limit = 8)
   const { data } = await supabase
     .from("product_complementary")
     .select(
-      "position, products!product_complementary_complementary_product_id_fkey!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+      "position, products!product_complementary_complementary_product_id_fkey!inner(id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
     )
     .eq("product_id", productId)
     .eq("products.status", "active")
@@ -460,7 +467,7 @@ export async function searchProductCards(query: string, limit = 24): Promise<Pro
   const { data } = await supabase
     .from("products")
     .select(
-      "title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
+      "id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy)"
     )
     .eq("status", "active")
     .ilike("title", `%${query}%`)
@@ -515,7 +522,7 @@ export async function getRelatedProductCards(productId: string, excludeHandle: s
       supabase
         .from("collection_products")
         .select(
-          "position, products!inner(title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
+          "position, products!inner(id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy))"
         )
         .eq("collection_id", collection.id)
         .eq("products.status", "active")
