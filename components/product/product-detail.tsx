@@ -202,17 +202,17 @@ function AccordionRow({
   index?: number;
 }) {
   return (
-    <details className="group border-b border-line py-4" open={defaultOpen}>
-      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold uppercase tracking-wide">
+    <details className="group border-b border-line py-5" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-medium uppercase tracking-[0.14em]">
         <span>
-          {index != null && <span className="mr-2 text-muted">{String(index).padStart(2, "0")}</span>}
+          {index != null && <span className="mr-3 text-[11px] tracking-normal text-muted">{String(index).padStart(2, "0")}</span>}
           {heading}
         </span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="shrink-0 transition-transform group-open:rotate-180" aria-hidden>
           <path d="M6 9l6 6 6-6" />
         </svg>
       </summary>
-      <div className="mt-3 text-[13px] leading-7 text-muted [&_p]:mb-2">
+      <div className="mt-4 border-t-2 border-fg pt-4 text-[13px] leading-7 text-muted [&_p]:mb-2">
         {children ?? (body != null && <div dangerouslySetInnerHTML={{ __html: body }} />)}
       </div>
     </details>
@@ -227,19 +227,19 @@ function SpecTable({ html }: { html: string }) {
         <p key={i}>{t}</p>
       ))}
       {rows.length > 0 && (
-        <div className="mt-1 divide-y divide-line border-t border-line">
+        <div className="divide-y divide-line">
           {rows.map((r, i) => (
-            <div key={`${r.label}-${i}`} className="py-3">
+            <div key={`${r.label}-${i}`} className="py-5 first:pt-0">
               <div className="flex items-baseline justify-between gap-4">
-                <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-fg">{r.label}</span>
-                {!r.subRows && <span className="overflow-x-auto whitespace-nowrap text-right">{r.value}</span>}
+                <span className="shrink-0 whitespace-nowrap text-[11px] tracking-[0.14em] text-muted uppercase">{r.label}</span>
+                {!r.subRows && <span className="overflow-x-auto whitespace-nowrap text-right text-[15px]">{r.value}</span>}
               </div>
               {r.subRows && (
-                <div className="mt-2.5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="mt-3 grid grid-cols-2 gap-6 sm:grid-cols-3">
                   {r.subRows.map((sr, j) => (
                     <div key={`${sr.label}-${j}`} className="min-w-0">
-                      <div className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted">{sr.label}</div>
-                      <div className="mt-0.5 overflow-x-auto whitespace-nowrap text-fg">{sr.value}</div>
+                      <div className="whitespace-nowrap text-[10.5px] tracking-[0.12em] text-muted uppercase">{sr.label}</div>
+                      <div className="mt-1 overflow-x-auto whitespace-nowrap text-[15px] text-fg">{sr.value}</div>
                     </div>
                   ))}
                 </div>
