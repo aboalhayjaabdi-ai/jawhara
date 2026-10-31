@@ -74,7 +74,12 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       // Fires right as the customer actually leaves for checkout, not merely when a page loads --
       // the old /kassa page fired this on mount, which no longer happens since checkout now
       // redirects straight to Shopify instead of routing through it.
-      trackInitiateCheckout({ value: subtotal, currency: "SEK", itemCount: items.reduce((sum, i) => sum + i.qty, 0) });
+      trackInitiateCheckout({
+        value: subtotal,
+        currency: "SEK",
+        itemCount: items.reduce((sum, i) => sum + i.qty, 0),
+        contents: items.map((i) => ({ id: i.productId, quantity: i.qty })),
+      });
       // isCheckingOut stays true: the browser is navigating away (window.location.href), so there's
       // no later render on THIS page load that needs it reset -- the pageshow listener above is
       // what resets it for the only way the customer sees this button again (browser back). This
