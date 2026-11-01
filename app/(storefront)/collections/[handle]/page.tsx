@@ -87,22 +87,22 @@ export default async function CollectionPage({
     return <CollectionGrid title="Alla produkter" description={null} products={cards} total={total} page={page} />;
   }
 
-  // meta and the product query don't depend on each other -- fetched in parallel rather than
-  // serially (meta used to be awaited alone first, adding a full extra round trip before the
-  // product query even started).
-  const [meta, [products, total]] = await Promise.all([
-    getCollectionMeta(handle),
+  // meta is a tiny single-row lookup, awaited alone first since the tile query below needs its
+  // template_suffix value before it can even start. The product query doesn't depend on meta at
+  // all, so it joins the tile query below instead -- both start together right after meta
+  // resolves, rather than either one waiting on the other.
+  const meta = await getCollectionMeta(handle);
+  if (!meta) notFound();
+
+  const [[products, total], tiles] = await Promise.all([
     filtered
       ? getFilteredCollectionProducts(handle, filterOptions, PAGE_SIZE, offset).then((r) => [r.cards, r.total] as const)
       : Promise.all([getCollectionProductCards(handle, PAGE_SIZE, offset), getCollectionProductCount(handle)]),
+    // Small, single-purpose query (two indexed lookups) -- resolved here as part of the same
+    // initial render instead of its own Suspense-streamed component, so the subcollection tiles
+    // never visibly pop in after the rest of the page has already painted.
+    getCollectionTileGroup(meta.template_suffix, handle),
   ]);
-  if (!meta) notFound();
-
-  // Needs meta.template_suffix, so it can't join the Promise.all above -- small, single-purpose
-  // query (two indexed lookups), resolved here as part of the same initial render instead of its
-  // own Suspense-streamed component, so the subcollection tiles never visibly pop in after the
-  // rest of the page has already painted.
-  const tiles = await getCollectionTileGroup(meta.template_suffix, handle);
 
   return (
     <CollectionGrid
