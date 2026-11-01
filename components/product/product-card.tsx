@@ -12,7 +12,7 @@ function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
 }
 
-export function ProductCard({ product }: { product: ProductCardType }) {
+export function ProductCard({ product, priority = false }: { product: ProductCardType; priority?: boolean }) {
   const { addItem } = useCartActions();
   const onSale = product.compareAtPrice != null && product.compareAtPrice > product.price;
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -53,7 +53,16 @@ export function ProductCard({ product }: { product: ProductCardType }) {
     <Link href={`/products/${product.handle}`} className="block">
       <div className="relative aspect-square bg-[#f4f4f4]">
         <div className="absolute inset-0 overflow-hidden">
-          {product.image && <Image src={product.image} alt={product.title} fill className="object-contain" sizes="(min-width: 1024px) 25vw, 50vw" />}
+          {product.image && (
+            <Image
+              src={product.image}
+              alt={product.title}
+              fill
+              priority={priority}
+              sizes="(min-width: 1024px) 25vw, 50vw"
+              className="object-contain"
+            />
+          )}
         </div>
         {!product.available && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/10">

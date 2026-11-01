@@ -149,8 +149,11 @@ function CollectionGrid({
       </div>
 
       <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-4 pt-2 lg:grid-cols-3 lg:gap-7">
-        {products.map((p: any) => (
-          <ProductCard key={p.handle} product={p} />
+        {products.map((p: any, i: number) => (
+          // The first row (2 cols mobile, 3 desktop) is the real LCP candidate on this page --
+          // there's no hero above it, unlike the homepage. next/image lazy-loads by default, which
+          // was silently delaying discovery of exactly the image Core Web Vitals measures.
+          <ProductCard key={p.handle} product={p} priority={i < 4} />
         ))}
       </div>
 
