@@ -94,13 +94,23 @@ export function ProductGallery({
   return (
     <>
       {carousel}
-      <div className="hidden w-full gap-3 lg:grid lg:grid-cols-2">
-        {images.map((img, i) => (
-          <div key={img + i} className="relative aspect-square overflow-hidden bg-[#f4f4f4]">
-            <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-contain" />
-          </div>
-        ))}
-      </div>
+      {/* A single image in a 2-column grid only ever fills the first cell, leaving the second one
+          (and the rest of the gallery's intended width) visibly blank on desktop -- full-width
+          instead once there's nothing to actually show side by side, matching the mobile
+          carousel's own treatment of a single image above. */}
+      {images.length === 1 ? (
+        <div className="relative hidden aspect-square w-full overflow-hidden bg-[#f4f4f4] lg:block">
+          <Image src={images[0]} alt={title} fill priority sizes="55vw" className="object-contain" />
+        </div>
+      ) : (
+        <div className="hidden w-full gap-3 lg:grid lg:grid-cols-2">
+          {images.map((img, i) => (
+            <div key={img + i} className="relative aspect-square overflow-hidden bg-[#f4f4f4]">
+              <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-contain" />
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
