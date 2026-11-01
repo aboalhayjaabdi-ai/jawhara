@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import type { Metadata } from "next";
 import {
   getAllCollectionHandles,
@@ -13,6 +12,7 @@ import {
   type CollectionFilterOptions,
   type CollectionSort,
 } from "@/lib/queries";
+import { getCollectionTileGroup, type CollectionTile } from "@/lib/collection-tiles";
 import { ProductCard } from "@/components/product/product-card";
 import { SubcategoryTiles } from "@/components/collection/subcategory-tiles";
 import { SortFilterBar } from "@/components/collection/sort-filter-bar";
@@ -87,12 +87,22 @@ export default async function CollectionPage({
     return <CollectionGrid title="Alla produkter" description={null} products={cards} total={total} page={page} />;
   }
 
-  const meta = await getCollectionMeta(handle);
+  // meta and the product query don't depend on each other -- fetched in parallel rather than
+  // serially (meta used to be awaited alone first, adding a full extra round trip before the
+  // product query even started).
+  const [meta, [products, total]] = await Promise.all([
+    getCollectionMeta(handle),
+    filtered
+      ? getFilteredCollectionProducts(handle, filterOptions, PAGE_SIZE, offset).then((r) => [r.cards, r.total] as const)
+      : Promise.all([getCollectionProductCards(handle, PAGE_SIZE, offset), getCollectionProductCount(handle)]),
+  ]);
   if (!meta) notFound();
 
-  const [products, total] = filtered
-    ? await getFilteredCollectionProducts(handle, filterOptions, PAGE_SIZE, offset).then((r) => [r.cards, r.total] as const)
-    : await Promise.all([getCollectionProductCards(handle, PAGE_SIZE, offset), getCollectionProductCount(handle)]);
+  // Needs meta.template_suffix, so it can't join the Promise.all above -- small, single-purpose
+  // query (two indexed lookups), resolved here as part of the same initial render instead of its
+  // own Suspense-streamed component, so the subcollection tiles never visibly pop in after the
+  // rest of the page has already painted.
+  const tiles = await getCollectionTileGroup(meta.template_suffix, handle);
 
   return (
     <CollectionGrid
@@ -101,7 +111,7 @@ export default async function CollectionPage({
       products={products}
       total={total}
       page={page}
-      templateSuffix={meta.template_suffix}
+      tiles={tiles}
     />
   );
 }
@@ -112,14 +122,14 @@ function CollectionGrid({
   products,
   total,
   page,
-  templateSuffix = null,
+  tiles = [],
 }: {
   title: string;
   description: string | null;
   products: { handle: string }[];
   total: number;
   page: number;
-  templateSuffix?: string | null;
+  tiles?: CollectionTile[];
 }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
@@ -132,11 +142,7 @@ function CollectionGrid({
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
       </div>
 
-      {/* Its own separate async query -- streamed in via Suspense so it never holds up the main
-          product grid (the same fix applied to the product page's related/complementary sections). */}
-      <Suspense fallback={null}>
-        <SubcategoryTiles templateSuffix={templateSuffix} />
-      </Suspense>
+      <SubcategoryTiles tiles={tiles} />
 
       <div className="mb-8">
         <SortFilterBar />

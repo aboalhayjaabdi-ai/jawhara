@@ -1,9 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getCollectionTileGroup } from "@/lib/collection-tiles";
+import type { CollectionTile } from "@/lib/collection-tiles";
 
-export async function SubcategoryTiles({ templateSuffix }: { templateSuffix: string | null }) {
-  const tiles = await getCollectionTileGroup(templateSuffix);
+// Plain presentational component -- the caller resolves getCollectionTileGroup() itself, in
+// parallel with the page's other data (see app/(storefront)/collections/[handle]/page.tsx), so
+// this never needs its own Suspense boundary. A separate Suspense-streamed async component here
+// was the cause of the subcollection row visibly popping in after the rest of the page had
+// already painted -- this query is small and fast enough to just be part of the page's single
+// initial render instead.
+export function SubcategoryTiles({ tiles }: { tiles: CollectionTile[] }) {
   if (tiles.length === 0) return null;
 
   return (
