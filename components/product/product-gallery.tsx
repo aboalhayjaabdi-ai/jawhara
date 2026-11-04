@@ -51,7 +51,7 @@ export function ProductGallery({
       <div
         ref={trackRef}
         onScroll={handleScroll}
-        className="flex aspect-square w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+        className="flex aspect-[4/5] w-full snap-x snap-mandatory overflow-x-auto scroll-smooth lg:aspect-square"
         style={{ scrollbarWidth: "none" }}
       >
         {images.map((img, i) => (
