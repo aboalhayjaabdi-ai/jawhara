@@ -411,7 +411,7 @@ export function ProductDetail({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_440px] lg:gap-16">
         <div className="relative -mx-6 lg:mx-0">
-          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} jumpToIndex={galleryJumpIndex} />
+          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "carousel"} jumpToIndex={galleryJumpIndex} />
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
               Rea
