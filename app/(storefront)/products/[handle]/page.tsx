@@ -63,6 +63,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
       complementaryProducts={<ComplementaryProducts productId={product.id} />}
       variantImageIndex={product.variantImageIndex}
+      variantGallery={product.variantGallery}
       walletPromoEligible={walletPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
     />

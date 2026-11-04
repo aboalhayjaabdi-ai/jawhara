@@ -434,6 +434,18 @@ export async function getAllProductHandles(): Promise<string[]> {
   return (data ?? []).map((p) => p.handle as string);
 }
 
+/** Products tagged with this show only the selected color's photo + the shared photos on the PDP. */
+export const GALLERY_PER_VARIANT_TAG = "galleri-per-variant";
+
+export type VariantGallery = {
+  /** First photo linked to each variant (media.variant_id), by variant id. */
+  imageByVariantId: Record<string, string>;
+  /** Photos not linked to any variant, in stored order -- shown after the selected color's photo. */
+  sharedImages: string[];
+  /** Variant whose photo is at the lowest position, i.e. the one collection cards display. */
+  defaultVariantId: string;
+};
+
 // cache() dedupes this within a single request: the product page's generateMetadata() and its
 // page component both call this with the same handle -- without it, that's two full serial
 // round trips to Supabase before the page can start rendering. Reviews are embedded directly in
@@ -464,7 +476,28 @@ export const getProductByHandle = cache(async (handle: string) => {
     if (m.variant_id) variantImageIndex[m.variant_id] = i;
   });
 
-  return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex };
+  // Opt-in "one gallery per color" mode (tag GALLERY_PER_VARIANT_TAG, e.g. Noélle Mini): instead of
+  // one long gallery with every color's photo, the PDP shows only the selected variant's own photo
+  // first, followed by the product's shared photos (media with no variant_id) in their stored order.
+  // The color whose photo sits at position 0 is the one the collection cards show, so it is also
+  // the color a visitor lands on.
+  let variantGallery: VariantGallery | null = null;
+  if ((product.tags ?? []).includes(GALLERY_PER_VARIANT_TAG)) {
+    const imageByVariantId: Record<string, string> = {};
+    const sharedImages: string[] = [];
+    let defaultVariantId: string | null = null;
+    for (const m of sortedMedia) {
+      if (m.variant_id) {
+        if (!imageByVariantId[m.variant_id]) imageByVariantId[m.variant_id] = mediaUrl(m.storage_path);
+        if (defaultVariantId === null) defaultVariantId = m.variant_id;
+      } else {
+        sharedImages.push(mediaUrl(m.storage_path));
+      }
+    }
+    if (defaultVariantId) variantGallery = { imageByVariantId, sharedImages, defaultVariantId };
+  }
+
+  return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex, variantGallery };
 });
 
 /** Real-time eligibility check for the "Valfri Plånbok" wallet promo link -- matches the exact

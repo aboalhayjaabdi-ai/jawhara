@@ -7,6 +7,7 @@ import { useCartActions } from "@/components/cart/cart-provider";
 import { isVariantAvailable } from "@/lib/inventory";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import type { ProductTemplateContent } from "@/lib/product-templates";
+import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { ProductGallery } from "@/components/product/product-gallery";
@@ -327,6 +328,7 @@ export function ProductDetail({
   relatedProducts,
   complementaryProducts,
   variantImageIndex,
+  variantGallery,
   walletPromoEligible,
   threeForTwoEligible,
 }: {
@@ -351,6 +353,9 @@ export function ProductDetail({
   complementaryProducts: React.ReactNode;
   /** Real per-variant image links (Shopify's own variant.image), keyed by variant id. */
   variantImageIndex: Record<string, number>;
+  /** Set for products tagged "galleri-per-variant" (e.g. Noélle Mini): the gallery then shows only
+   * the selected variant's photo first, followed by the shared photos -- see getProductByHandle. */
+  variantGallery: VariantGallery | null;
   /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForWalletPromo --
    * whether this product's real shopify_id is in the live "Valfri Plånbok" discount's
    * buy_item_ids. Gates the "Välj din plånbok här" link independently of content.offerMessage,
@@ -361,7 +366,12 @@ export function ProductDetail({
    * keeps showing on this product's own page instead of disappearing on click, matching "Rea". */
   threeForTwoEligible: boolean;
 }) {
-  const [selectedOption, setSelectedOption] = useState<string | null>(sizeOptions[0] ?? null);
+  // With a per-variant gallery, land on the color whose photo the collection cards show (position
+  // 0) rather than simply the first variant in the list.
+  const [selectedOption, setSelectedOption] = useState<string | null>(() => {
+    const defaultVariant = variantGallery ? variants.find((v) => v.id === variantGallery.defaultVariantId) : undefined;
+    return defaultVariant?.option1 ?? sizeOptions[0] ?? null;
+  });
   const { addItem } = useCartActions();
 
   const variant = useMemo(() => {
@@ -369,7 +379,14 @@ export function ProductDetail({
     return variants.find((v) => v.option1 === selectedOption) ?? variants[0];
   }, [variants, selectedOption, sizeOptions.length]);
 
-  const galleryJumpIndex = variant ? variantImageIndex[variant.id] : undefined;
+  // Per-variant gallery: selected color's photo at position 0, then the shared photos exactly as
+  // before. Otherwise the full gallery, jumping to the selected variant's own photo.
+  const galleryImages = useMemo(() => {
+    if (!variantGallery) return images;
+    const own = (variant && variantGallery.imageByVariantId[variant.id]) ?? variantGallery.imageByVariantId[variantGallery.defaultVariantId];
+    return own ? [own, ...variantGallery.sharedImages] : images;
+  }, [variantGallery, variant, images]);
+  const galleryJumpIndex = variant && !variantGallery ? variantImageIndex[variant.id] : undefined;
 
   const onSale = variant?.compare_at_price != null && variant.compare_at_price > variant.price;
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
@@ -411,7 +428,7 @@ export function ProductDetail({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_440px] lg:gap-16">
         <div className="relative -mx-6 lg:mx-0">
-          <ProductGallery images={images} title={title} layout={content?.galleryLayout ?? "grid"} jumpToIndex={galleryJumpIndex} />
+          <ProductGallery key={variantGallery ? variant?.id : undefined} images={galleryImages} title={title} layout={content?.galleryLayout ?? "grid"} jumpToIndex={galleryJumpIndex} />
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
               Rea
@@ -539,7 +556,7 @@ export function ProductDetail({
                 variantTitle: normalizeVariantTitle(variant.title) ?? "",
                 price: variant.price,
                 compareAtPrice: variant.compare_at_price,
-                image: images[galleryJumpIndex ?? 0] ?? null,
+                image: (variantGallery ? galleryImages[0] : images[galleryJumpIndex ?? 0]) ?? null,
               })
             }
             disabled={!variant || !isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)}
