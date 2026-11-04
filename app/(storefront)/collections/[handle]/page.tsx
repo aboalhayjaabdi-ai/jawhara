@@ -148,7 +148,7 @@ function CollectionGrid({
         <SortFilterBar />
       </div>
 
-      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-4 pt-2 lg:grid-cols-3 lg:gap-7">
+      <div id={GRID_ANCHOR_ID} className="grid grid-cols-2 gap-2 pt-2 lg:grid-cols-3 lg:gap-7">
         {products.map((p: any, i: number) => (
           // The first row (2 cols mobile, 3 desktop) is the real LCP candidate on this page --
           // there's no hero above it, unlike the homepage. next/image lazy-loads by default, which
