@@ -21,7 +21,7 @@ export default function NewProductTemplatePage() {
           sizeGuideHref: null,
           offerMessage: null,
           showInventoryStatus: true,
-          galleryLayout: "grid",
+          galleryLayout: "carousel",
         }}
       />
     </div>
