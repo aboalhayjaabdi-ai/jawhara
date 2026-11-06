@@ -3,20 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireFullAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { stripe } from "@/lib/stripe/server";
 import { getStripeRefundablePayment } from "@/lib/orders/refund-guard";
 import { sendRefundNotificationEmail } from "@/lib/email/refund-notification";
 import { buildEmailLineItems } from "@/lib/email/build-line-items";
 
 export type RefundLineInput = { orderItemId: string; quantity: number; amount: number };
-export type RefundResult = { ok: true; refundId: string; mode: "stripe" | "manual" } | { ok: false; error: string };
+export type RefundResult = { ok: true; refundId: string; mode: "manual" } | { ok: false; error: string };
 
 /**
- * The only place in the admin UI that can create a refund. Branches on
- * getStripeRefundablePayment() -- the single shared guard -- so a historical Shopify-origin order
- * (or a manual order marked "paid outside the system") can NEVER reach stripe.refunds.create():
- * when no refundable Stripe payment exists, this writes a manual_historical refund row only, with
- * zero Stripe API calls of any kind.
+ * The only place in the admin UI that can create a refund. Never moves money: Shopify orders are
+ * refunded in Shopify Admin, and historical orders paid through Stripe (no longer integrated) must
+ * be refunded in the Stripe Dashboard -- this only records manual refunds for orders with no
+ * payment-provider money on them.
  */
 export async function createRefund(
   orderId: string,
@@ -47,58 +45,28 @@ export async function createRefund(
 
   const refundablePayment = await getStripeRefundablePayment(orderId);
 
-  let refundId: string;
-  let mode: "stripe" | "manual";
-
   if (refundablePayment) {
-    let stripeRefund;
-    try {
-      stripeRefund = await stripe.refunds.create({
-        payment_intent: refundablePayment.stripePaymentIntentId,
-        amount: Math.round(input.amount * 100),
-      });
-    } catch (err) {
-      return { ok: false, error: `Stripe-återbetalning misslyckades: ${(err as Error).message}` };
-    }
-
-    const { data: refundRow, error } = await supabaseService
-      .from("refunds")
-      .insert({
-        order_id: orderId,
-        return_id: input.returnId ?? null,
-        stripe_refund_id: stripeRefund.id,
-        kind: isFull ? "full" : "partial",
-        amount: input.amount,
-        reason: input.reason || null,
-        created_by: admin.adminId,
-      })
-      .select("id")
-      .single();
-    if (error || !refundRow) return { ok: false, error: error?.message ?? "Kunde inte spara återbetalningen." };
-    refundId = refundRow.id;
-    mode = "stripe";
-
-    await supabaseService
-      .from("payments")
-      .update({ status: isFull ? "refunded" : "partially_refunded" })
-      .eq("id", refundablePayment.paymentId);
-  } else {
-    const { data: refundRow, error } = await supabaseService
-      .from("refunds")
-      .insert({
-        order_id: orderId,
-        return_id: input.returnId ?? null,
-        kind: "manual_historical",
-        amount: input.amount,
-        reason: input.reason || null,
-        created_by: admin.adminId,
-      })
-      .select("id")
-      .single();
-    if (error || !refundRow) return { ok: false, error: error?.message ?? "Kunde inte spara återbetalningen." };
-    refundId = refundRow.id;
-    mode = "manual";
+    return {
+      ok: false,
+      error: "Den här ordern betalades via Stripe, som inte längre är kopplat till Jawhara. Gör återbetalningen direkt i Stripe Dashboard (dashboard.stripe.com).",
+    };
   }
+
+  const mode = "manual" as const;
+  const { data: refundRow, error } = await supabaseService
+    .from("refunds")
+    .insert({
+      order_id: orderId,
+      return_id: input.returnId ?? null,
+      kind: "manual_historical",
+      amount: input.amount,
+      reason: input.reason || null,
+      created_by: admin.adminId,
+    })
+    .select("id")
+    .single();
+  if (error || !refundRow) return { ok: false, error: error?.message ?? "Kunde inte spara återbetalningen." };
+  const refundId = refundRow.id;
 
   if (input.lineItems?.length) {
     await supabaseService
@@ -142,7 +110,7 @@ export async function createRefund(
     await sendRefundNotificationEmail({ to: order.email, orderNumber: order.order_number, refundAmount: input.amount, reason: input.reason, items: lineItems });
   }
 
-  await logAdminAction(admin.adminId, mode === "stripe" ? "orders.refund_stripe" : "orders.refund_manual", "order", orderId, {
+  await logAdminAction(admin.adminId, "orders.refund_manual", "order", orderId, {
     refundId,
     amount: input.amount,
     reason: input.reason ?? null,

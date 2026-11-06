@@ -17,7 +17,7 @@ export function ManualOrderForm() {
   const [results, setResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
-  const [paymentMode, setPaymentMode] = useState<"stripe_link" | "mark_paid">("stripe_link");
+  const [paymentMode, setPaymentMode] = useState<"shopify_invoice" | "mark_paid">("shopify_invoice");
   const [error, setError] = useState<string | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -83,7 +83,7 @@ export function ManualOrderForm() {
       }
       if (result.checkoutUrl) {
         setCheckoutUrl(result.checkoutUrl);
-      } else {
+      } else if (result.orderId) {
         router.push(`/admin/orders/${result.orderId}`);
       }
     });
@@ -92,8 +92,8 @@ export function ManualOrderForm() {
   if (checkoutUrl) {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="text-sm font-medium text-gray-900">Ordern är skapad.</div>
-        <p className="mt-2 text-sm text-gray-500">Skicka denna betalningslänk till kunden:</p>
+        <div className="text-sm font-medium text-gray-900">Fakturan är skapad i Shopify.</div>
+        <p className="mt-2 text-sm text-gray-500">Skicka denna betalningslänk till kunden. Ordern dyker upp i orderlistan när kunden har betalat.</p>
         <div className="mt-3 flex items-center gap-2">
           <input readOnly value={checkoutUrl} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700" />
           <button
@@ -195,8 +195,8 @@ export function ManualOrderForm() {
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Betalning</div>
         <div className="flex gap-4 text-sm">
           <label className="flex items-center gap-2">
-            <input type="radio" checked={paymentMode === "stripe_link"} onChange={() => setPaymentMode("stripe_link")} />
-            Skicka betalningslänk (Stripe)
+            <input type="radio" checked={paymentMode === "shopify_invoice"} onChange={() => setPaymentMode("shopify_invoice")} />
+            Skicka betalningslänk (Shopify)
           </label>
           <label className="flex items-center gap-2">
             <input type="radio" checked={paymentMode === "mark_paid"} onChange={() => setPaymentMode("mark_paid")} />

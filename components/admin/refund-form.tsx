@@ -7,7 +7,7 @@ export function RefundForm({ orderId, maxAmount, currency }: { orderId: string; 
   const [amount, setAmount] = useState(maxAmount);
   const [reason, setReason] = useState("");
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<{ mode: "stripe" | "manual" } | null>(null);
+  const [result, setResult] = useState<{ mode: "manual" } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -39,7 +39,7 @@ export function RefundForm({ orderId, maxAmount, currency }: { orderId: string; 
 
       {result && (
         <div className="mb-3 text-xs text-emerald-600">
-          {result.mode === "stripe" ? "Återbetalning skickad via Stripe." : "Återbetalning registrerad manuellt (ingen Stripe-betalning fanns att återbetala)."}
+          Återbetalning registrerad manuellt.
         </div>
       )}
 
