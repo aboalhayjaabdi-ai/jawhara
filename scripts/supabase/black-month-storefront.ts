@@ -40,6 +40,7 @@ const ID = {
   oldBags: "66c814b7-dda6-4b69-87d7-f0135314f463",
   collectionsText: "68f38182-a9ba-4b86-9764-b788fec1285b",
   collectionLinks: "7baca4d4-c0b8-434a-98ab-ea027630dc9b",
+  marquee: "27acaba3-40be-43e8-85c7-e1a1850011d1",
 };
 const BLACK_MONTH_HEADING = "BLACK MONTH – VÅRA BÄSTA ERBJUDANDEN";
 
@@ -60,6 +61,10 @@ function buildLayout(current: Section[]): Section[] {
       mobileObjectPosition: "50% 22%",
     },
   };
+  // Rolling text (KLARNA · 14 DAGARS ÖPPET KÖP · FRI FRAKT) stays directly under the banner, with
+  // "BLACK MONTH" added first.
+  const marqueeItems = (get(ID.marquee).config.items as string[]).filter((i) => i !== "BLACK MONTH");
+  const marquee: Section = { ...get(ID.marquee), visible: true, config: { ...get(ID.marquee).config, items: ["BLACK MONTH", ...marqueeItems] } };
   // 2. Black Month
   const blackMonth: Section = {
     id: randomUUID(),
@@ -108,12 +113,12 @@ function buildLayout(current: Section[]): Section[] {
     config: { collectionHandle: "gift-sets", heading: "Gift Sets", limit: 6, layout: "carousel", unique: true, buttonText: "Se alla", buttonHref: "/collections/gift-sets" },
   };
 
-  const placed = new Set([ID.hero, ID.oldBestsellers, ID.oldBags, ID.collectionLinks]);
+  const placed = new Set([ID.hero, ID.marquee, ID.oldBestsellers, ID.oldBags, ID.collectionLinks]);
   const rest = current
     .filter((s) => !placed.has(s.id))
     .map((s) => (s.id === ID.collectionsText ? { ...s, visible: false } : s));
 
-  return [hero, blackMonth, bestsellers, bags, categories, jewelry, giftSets, ...rest];
+  return [hero, marquee, blackMonth, bestsellers, bags, categories, jewelry, giftSets, ...rest];
 }
 
 const hasBlackMonth = (sections: Section[]) => sections.some((s) => s.type === "product_list" && (s.config as any).collectionHandle === "black-month");
