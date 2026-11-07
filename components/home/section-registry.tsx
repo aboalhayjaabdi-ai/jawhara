@@ -41,9 +41,9 @@ export function SectionRenderer({ section, products, isFirstProductList = false 
     case "hero":
       if (!c.desktopImage || !c.buttonText || !c.buttonHref) return null;
       return c.variant === "split-bottom" ? (
-        <Hero key={section.id} variant="split-bottom" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} heading={c.heading ?? ""} />
+        <Hero key={section.id} variant="split-bottom" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} heading={c.heading ?? ""} />
       ) : (
-        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} />
+        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} />
       );
     case "marquee":
       if (!Array.isArray(c.items) || c.items.length === 0) return null;

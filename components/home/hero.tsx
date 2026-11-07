@@ -13,10 +13,14 @@ type HeroProps = {
   /** Optional CSS object-position for the mobile image, e.g. "50% 25%" to keep text near the top of
    * the image in frame when mobileHeight crops it. Only changes how the image is framed, never the file. */
   mobileObjectPosition?: string;
+  /** "contain": the whole image is always shown, never cropped (letterboxed on black where the
+   * banner's shape differs from the image's). Default "cover" fills the banner, cropping edges. */
+  fit?: "cover" | "contain";
 } & ({ variant: "centered-cta" } | { variant: "split-bottom"; heading: string });
 
 export function Hero(props: HeroProps) {
-  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition } = props;
+  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition, fit = "cover" } = props;
+  const fitClass = fit === "contain" ? "object-contain" : "object-cover";
   // Caps the default mobile height to whatever the mobile image's own aspect ratio (585:1040, its
   // real uploaded size) can cover at the current viewport width without cropping its sides -- a
   // tall `height` like 100vh on a narrow phone otherwise forces object-cover to zoom in and crop
@@ -29,18 +33,19 @@ export function Hero(props: HeroProps) {
   } as React.CSSProperties;
 
   return (
-    <div className="relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)]" style={style}>
+    <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""}`} style={style}>
       <Image
         src={mobileImage ?? desktopImage}
         alt=""
         fill
         priority
         sizes="100vw"
-        className="object-cover md:hidden"
+        className={`${fitClass} md:hidden`}
         style={mobileObjectPosition ? { objectPosition: mobileObjectPosition } : undefined}
       />
-      <Image src={desktopImage} alt="" fill priority sizes="100vw" className="hidden object-cover md:block" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+      <Image src={desktopImage} alt="" fill priority sizes="100vw" className={`hidden ${fitClass} md:block`} />
+      {/* No darkening overlay in "contain" mode -- the image is shown exactly as supplied. */}
+      {fit !== "contain" && <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />}
 
       {props.variant === "centered-cta" ? (
         <div className="absolute inset-x-0 bottom-12 flex justify-center px-6">
