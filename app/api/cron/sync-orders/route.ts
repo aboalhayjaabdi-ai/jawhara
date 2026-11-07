@@ -27,14 +27,15 @@ import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  const source =
-    authHeader === `Bearer ${process.env.CRON_SECRET}`
-      ? "cron_sync"
-      : authHeader === `Bearer ${process.env.EXTERNAL_CRON_SECRET}`
-        ? "github_actions"
-        : authHeader === `Bearer ${process.env.SUPABASE_CRON_SECRET}`
-          ? "pg_cron"
-          : null;
+  // An unset secret must never match: `Bearer ${undefined}` is the literal "Bearer undefined".
+  const matches = (secret: string | undefined) => !!secret && authHeader === `Bearer ${secret}`;
+  const source = matches(process.env.CRON_SECRET)
+    ? "cron_sync"
+    : matches(process.env.EXTERNAL_CRON_SECRET)
+      ? "github_actions"
+      : matches(process.env.SUPABASE_CRON_SECRET)
+        ? "pg_cron"
+        : null;
   if (!source) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
