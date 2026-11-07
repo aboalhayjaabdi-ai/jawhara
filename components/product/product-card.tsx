@@ -7,6 +7,9 @@ import type { ProductCard as ProductCardType } from "@/lib/queries";
 import { useCartActions } from "@/components/cart/cart-provider";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { LinkPendingIndicator } from "@/components/ui/link-pending-indicator";
+import { SALE_LABEL } from "@/lib/campaign";
+
+const BADGE_CLASS = "bg-fg px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-bg sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -69,11 +72,14 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
             <span className="bg-bg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-fg">Slut i lager</span>
           </div>
         )}
-        {product.available && onSale && (
-          <div className="absolute left-3 top-3 bg-fg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">Rea</div>
-        )}
-        {product.available && product.threeForTwo && (
-          <div className="absolute right-3 top-3 bg-fg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">3 för 2</div>
+        {product.available && (onSale || product.threeForTwo) && (
+          // Stacked in one column (never side by side) so two labels can't collide on narrow
+          // mobile cards. Label text comes from lib/campaign.ts ("Black Month" during the
+          // campaign, "Rea" otherwise).
+          <div className="absolute left-2 top-2 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
+            {onSale && <span className={BADGE_CLASS}>{SALE_LABEL}</span>}
+            {product.threeForTwo && <span className={BADGE_CLASS}>3 för 2</span>}
+          </div>
         )}
         <LinkPendingIndicator />
         {showQuickAdd && (

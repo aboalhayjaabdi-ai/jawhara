@@ -10,6 +10,7 @@ import type { ProductTemplateContent } from "@/lib/product-templates";
 import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
+import { SALE_LABEL } from "@/lib/campaign";
 import { ProductGallery } from "@/components/product/product-gallery";
 
 type Variant = {
@@ -331,6 +332,8 @@ export function ProductDetail({
   variantGallery,
   walletPromoEligible,
   threeForTwoEligible,
+  promoBox = null,
+  salePriceNote = null,
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
   // content_ids actually match a real catalog item instead of a variant id the catalog has no
@@ -365,6 +368,12 @@ export function ProductDetail({
    * same real, live "3 för 2" collection scope the grid cards (ProductCard) use, so the badge
    * keeps showing on this product's own page instead of disappearing on click, matching "Rea". */
   threeForTwoEligible: boolean;
+  /** Campaign info box shown just under the price (e.g. Black Month "3 för 2" on eligible jewelry).
+   * Decided server-side by the parent page from lib/campaign.ts; null renders nothing. */
+  promoBox?: { heading: string; body: string } | null;
+  /** Short line under the price, only rendered while the selected variant has a compare-at price
+   * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
+  salePriceNote?: string | null;
 }) {
   // With a per-variant gallery, land on the color whose photo the collection cards show (position
   // 0) rather than simply the first variant in the list.
@@ -431,7 +440,7 @@ export function ProductDetail({
           <ProductGallery key={variantGallery ? variant?.id : undefined} images={galleryImages} title={title} layout={content?.galleryLayout ?? "carousel"} jumpToIndex={galleryJumpIndex} />
           {onSale && (
             <div className="absolute left-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
-              Rea
+              {SALE_LABEL}
             </div>
           )}
           {threeForTwoEligible && (
@@ -460,6 +469,16 @@ export function ProductDetail({
             <div className="mt-4 flex items-baseline gap-2">
               <span className="text-xl font-semibold">{formatSek(variant.price)}</span>
               {onSale && <span className="text-sm text-muted line-through">{formatSek(variant.compare_at_price!)}</span>}
+            </div>
+          )}
+          {variant && onSale && salePriceNote && (
+            <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
+          )}
+
+          {promoBox && (
+            <div className="mt-5 border border-line bg-[#f7f7f7] px-4 py-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em]">{promoBox.heading}</div>
+              <p className="mt-1.5 text-[13px] leading-5 text-muted">{promoBox.body}</p>
             </div>
           )}
 

@@ -82,9 +82,19 @@ export function SectionEditPanel({
               <input value={config.buttonHref ?? ""} onChange={(e) => set("buttonHref", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">Höjd (CSS, t.ex. 720px eller 100vh)</label>
+              <input value={config.height ?? ""} onChange={(e) => set("height", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Höjd på mobil (valfri, CSS)</label>
+              <input value={config.mobileHeight ?? ""} onChange={(e) => set("mobileHeight", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+            </div>
+          </div>
           <div>
-            <label className="text-xs text-gray-500">Höjd (CSS, t.ex. 720px eller 100vh)</label>
-            <input value={config.height ?? ""} onChange={(e) => set("height", e.target.value)} className="mt-1 w-32 rounded-md border border-gray-200 px-3 py-2 text-sm" />
+            <label className="text-xs text-gray-500">Mobilbildens fokus (valfri, CSS object-position, t.ex. 50% 25%)</label>
+            <input value={config.mobileObjectPosition ?? ""} onChange={(e) => set("mobileObjectPosition", e.target.value)} className="mt-1 w-40 rounded-md border border-gray-200 px-3 py-2 text-sm" />
           </div>
         </>
       )}
@@ -142,6 +152,32 @@ export function SectionEditPanel({
               <input value={config.buttonHref ?? ""} onChange={(e) => set("buttonHref", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">Sortering</label>
+              <select value={config.sort ?? "manual"} onChange={(e) => set("sort", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                <option value="manual">Kollektionens ordning</option>
+                <option value="best-selling">Mest sålda (verklig försäljning, 90 dagar)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Stil</label>
+              <select value={config.style ?? "default"} onChange={(e) => set("style", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                <option value="default">Standard</option>
+                <option value="campaign">Kampanj (centrerad rubrik, knapp under)</option>
+              </select>
+            </div>
+          </div>
+          {config.style === "campaign" && (
+            <div>
+              <label className="text-xs text-gray-500">Introtext (valfri)</label>
+              <input value={config.intro ?? ""} onChange={(e) => set("intro", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={config.unique === true} onChange={(e) => set("unique", e.target.checked)} />
+            Hoppa över produkter som redan visas i sektioner ovanför
+          </label>
         </>
       )}
 

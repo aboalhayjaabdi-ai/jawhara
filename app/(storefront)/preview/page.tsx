@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin/auth";
 import { getDraftSections, getVersionSections } from "@/lib/admin/storefront-layout";
-import { SectionRenderer } from "@/components/home/section-registry";
+import { SectionList } from "@/components/home/section-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +26,7 @@ export default async function StorefrontPreviewPage({ searchParams }: { searchPa
       <div className="sticky top-0 z-40 bg-amber-400 px-4 py-1.5 text-center text-xs font-semibold uppercase tracking-wide text-amber-950">
         {version ? `Förhandsgranskning — version ${version} (ej publicerad)` : "Förhandsgranskning — utkast (ej publicerad)"}
       </div>
-      {(sections ?? []).map((s) => (
-        <SectionRenderer key={s.id} section={s} />
-      ))}
+      <SectionList sections={sections ?? []} />
     </>
   );
 }

@@ -7,21 +7,38 @@ type HeroProps = {
   buttonText: string;
   buttonHref: string;
   height?: string;
+  /** Optional separate height below the md breakpoint (CSS length). When unset, mobile keeps the
+   * original behavior: `height` capped to what the 585:1040 mobile image covers without cropping. */
+  mobileHeight?: string;
+  /** Optional CSS object-position for the mobile image, e.g. "50% 25%" to keep text near the top of
+   * the image in frame when mobileHeight crops it. Only changes how the image is framed, never the file. */
+  mobileObjectPosition?: string;
 } & ({ variant: "centered-cta" } | { variant: "split-bottom"; heading: string });
 
 export function Hero(props: HeroProps) {
-  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px" } = props;
+  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition } = props;
+  // Caps the default mobile height to whatever the mobile image's own aspect ratio (585:1040, its
+  // real uploaded size) can cover at the current viewport width without cropping its sides -- a
+  // tall `height` like 100vh on a narrow phone otherwise forces object-cover to zoom in and crop
+  // text baked into the image off both edges. On wider screens (desktop image/layout) this calc()
+  // always exceeds the configured height, so min() just uses that height as before.
+  const defaultHeight = `min(${height}, calc(100vw * 1040 / 585))`;
+  const style = {
+    "--hero-h": mobileHeight ? height : defaultHeight,
+    "--hero-h-mobile": mobileHeight ?? defaultHeight,
+  } as React.CSSProperties;
+
   return (
-    <div
-      className="relative overflow-hidden"
-      // Caps the rendered height to whatever the mobile image's own aspect ratio (585:1040, its
-      // real uploaded size) can cover at the current viewport width without cropping its sides --
-      // a tall `height` like 100vh on a narrow phone otherwise forces object-cover to zoom in and
-      // crop text baked into the image off both edges. On wider screens (desktop image/layout)
-      // this calc() always exceeds the configured height, so min() just uses that height as before.
-      style={{ height: `min(${height}, calc(100vw * 1040 / 585))` }}
-    >
-      <Image src={mobileImage ?? desktopImage} alt="" fill priority sizes="100vw" className="object-cover md:hidden" />
+    <div className="relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)]" style={style}>
+      <Image
+        src={mobileImage ?? desktopImage}
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover md:hidden"
+        style={mobileObjectPosition ? { objectPosition: mobileObjectPosition } : undefined}
+      />
       <Image src={desktopImage} alt="" fill priority sizes="100vw" className="hidden object-cover md:block" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
 

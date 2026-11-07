@@ -136,6 +136,38 @@ export async function getCollectionProductCards(handle: string, limit: number, o
   return (data ?? []).map((row: any) => toCard(row.products, threeForTwoCollectionIds));
 }
 
+/** Active product ids in a collection, in the collection's own order -- a light, id-only query used
+ * to rank/filter a collection before fetching full cards (see lib/product-sections.ts). */
+export async function getCollectionProductIds(handle: string): Promise<string[]> {
+  const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).maybeSingle();
+  if (!collection) return [];
+  const { data } = await supabase
+    .from("collection_products")
+    .select("product_id, position, products!inner(status)")
+    .eq("collection_id", collection.id)
+    .eq("products.status", "active")
+    .order("position", { ascending: true })
+    .limit(1000);
+  return (data ?? []).map((r: any) => r.product_id as string);
+}
+
+/** Product cards for specific (active) product ids, returned in the same order as `ids`. */
+export async function getProductCardsByIds(ids: string[]): Promise<ProductCard[]> {
+  if (ids.length === 0) return [];
+  const [{ data }, threeForTwoCollectionIds] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, title, handle, status, media(storage_path, position, variant_id), product_variants(id, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), collection_products(collections(shopify_id))"
+      )
+      .eq("status", "active")
+      .in("id", ids),
+    getThreeForTwoCollectionIds(),
+  ]);
+  const byId = new Map((data ?? []).map((row: any) => [row.id as string, toCard(row, threeForTwoCollectionIds)]));
+  return ids.map((id) => byId.get(id)).filter(Boolean) as ProductCard[];
+}
+
 /** For /collections/all -- Shopify's built-in catalog-wide route; no backing `collections` row exists for it. */
 export async function getAllProductCards(limit: number, offset = 0): Promise<{ cards: ProductCard[]; total: number }> {
   const [{ data, count }, threeForTwoCollectionIds] = await Promise.all([

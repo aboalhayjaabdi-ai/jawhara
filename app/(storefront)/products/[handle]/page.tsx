@@ -5,6 +5,7 @@ import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
 import { ComplementaryProducts } from "@/components/product/complementary-products";
+import { BLACK_MONTH } from "@/lib/campaign";
 
 export const revalidate = 60;
 
@@ -48,6 +49,12 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
     isEligibleForThreeForTwo(product.id),
   ]);
 
+  // Black Month additions (lib/campaign.ts). The 3 för 2 box only appears on products that are
+  // genuinely in the live "3 för 2" discount's scope; the bag line only on bag templates.
+  const isBag = (BLACK_MONTH.bagTemplateKeys as readonly string[]).includes(product.template_suffix ?? "");
+  const promoBox = BLACK_MONTH.active && threeForTwoEligible ? { heading: BLACK_MONTH.threeForTwo.pdpHeading, body: BLACK_MONTH.threeForTwo.pdpBody } : null;
+  const salePriceNote = BLACK_MONTH.active && isBag ? BLACK_MONTH.bagPriceNote : null;
+
   return (
     <ProductDetail
       productId={product.id}
@@ -66,6 +73,8 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variantGallery={product.variantGallery}
       walletPromoEligible={walletPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
+      promoBox={promoBox}
+      salePriceNote={salePriceNote}
     />
   );
 }
