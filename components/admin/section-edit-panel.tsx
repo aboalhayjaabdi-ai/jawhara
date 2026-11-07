@@ -97,6 +97,10 @@ export function SectionEditPanel({
             <input value={config.mobileObjectPosition ?? ""} onChange={(e) => set("mobileObjectPosition", e.target.value)} className="mt-1 w-40 rounded-md border border-gray-200 px-3 py-2 text-sm" />
           </div>
           <div>
+            <label className="text-xs text-gray-500">Text högst upp (valfri, ej klickbar)</label>
+            <input value={config.topText ?? ""} onChange={(e) => set("topText", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+          </div>
+          <div>
             <label className="text-xs text-gray-500">Bildanpassning</label>
             <select value={config.fit ?? "cover"} onChange={(e) => set("fit", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
               <option value="cover">Fyll bannern (kan beskära kanter)</option>
