@@ -40,7 +40,10 @@ export function Hero(props: HeroProps) {
   } as React.CSSProperties;
 
   return (
-    <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""} ${overlayHeader ? "-mt-[68px]" : ""}`} style={style}>
+    <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""} ${overlayHeader ? "-mt-[68px]" : ""}`}
+      style={style}
+      data-hero-overlay={overlayHeader ? "" : undefined}
+    >
       <Image
         src={mobileImage ?? desktopImage}
         alt=""

@@ -9,7 +9,7 @@ import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
 import { CookieConsentAndTracking } from "@/components/marketing/cookie-consent-and-tracking";
-import { getSiteMenus, getLogoUrl, getPublishedHomeSections, homeHeroOverlaysHeader } from "@/lib/queries";
+import { getSiteMenus, getLogoUrl } from "@/lib/queries";
 import { getPublicMarketingIds } from "@/lib/admin/marketing-settings";
 import { getGiftBoxOffer } from "@/lib/gift-box";
 
@@ -43,23 +43,20 @@ const getCachedSiteMenus = unstable_cache(getSiteMenus, ["layout-site-menus"], {
 const getCachedLogoUrl = unstable_cache(getLogoUrl, ["layout-logo-url"], { revalidate: 60 });
 const getCachedPublicMarketingIds = unstable_cache(getPublicMarketingIds, ["layout-public-marketing-ids"], { revalidate: 60 });
 const getCachedGiftBoxOffer = unstable_cache(getGiftBoxOffer, ["layout-gift-box-offer"], { revalidate: 60 });
-// Whether the homepage banner sits under a transparent header (homepage only -- see Header).
-const getCachedHomeHeaderOverlay = unstable_cache(async () => homeHeroOverlaysHeader(await getPublishedHomeSections()), ["layout-home-header-overlay"], { revalidate: 60 });
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [menus, logoUrl, marketingIds, giftBoxOffer, homeHeaderOverlay] = await Promise.all([
+  const [menus, logoUrl, marketingIds, giftBoxOffer] = await Promise.all([
     getCachedSiteMenus(),
     getCachedLogoUrl(),
     getCachedPublicMarketingIds(),
     getCachedGiftBoxOffer(),
-    getCachedHomeHeaderOverlay(),
   ]);
   return (
     <html lang="sv">
       <body className={`${newsreader.variable} ${redHatText.variable} font-sans`}>
         <CartProvider>
           <AnnouncementBar />
-          <Header navItems={menus.mainMenu} logoUrl={logoUrl} overlayOnHome={homeHeaderOverlay} />
+          <Header navItems={menus.mainMenu} logoUrl={logoUrl} />
           <main>{children}</main>
           <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer giftBoxOffer={giftBoxOffer} />

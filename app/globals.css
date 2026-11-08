@@ -15,3 +15,19 @@ input,
 button {
   border-radius: 0;
 }
+
+/* Transparent header over the homepage banner (components/home/hero.tsx "overlayHeader" sets
+   [data-hero-overlay]); back to the normal white header once scrolled (components/layout/header.tsx
+   sets [data-scrolled]). Pages without such a banner are unaffected. */
+body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) {
+  background-color: transparent;
+  border-color: transparent;
+  color: #ffffff;
+}
+body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [data-site-logo] {
+  filter: brightness(0) invert(1);
+}
+body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [data-cart-count] {
+  background-color: #ffffff;
+  color: #000000;
+}
