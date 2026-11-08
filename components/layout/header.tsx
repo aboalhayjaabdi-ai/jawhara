@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useCart, useJustAdded } from "@/components/cart/cart-provider";
 import { PriorityNav } from "@/components/layout/priority-nav";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
@@ -22,13 +24,34 @@ const FALLBACK_NAV_ITEMS: NavLink[] = [
   { title: "Tillbehör", href: "/collections/tillbehor" },
 ];
 
-export function Header({ navItems, logoUrl }: { navItems?: NavLink[]; logoUrl?: string | null }) {
+export const HEADER_HEIGHT_PX = 68;
+
+export function Header({ navItems, logoUrl, overlayOnHome = false }: { navItems?: NavLink[]; logoUrl?: string | null; overlayOnHome?: boolean }) {
   const { count, open } = useCart();
   const justAdded = useJustAdded(500);
   const NAV_ITEMS = navItems && navItems.length > 0 ? navItems : FALLBACK_NAV_ITEMS;
 
+  // Homepage only, and only when its first section is a banner set to "overlayHeader": the header
+  // starts transparent on top of the banner image (white logo/icons/links), then returns to its
+  // normal white look as soon as the visitor scrolls. Every other page is unchanged.
+  const pathname = usePathname();
+  const overlay = overlayOnHome && pathname === "/";
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    if (!overlay) return;
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [overlay]);
+  const transparent = overlay && !scrolled;
+
   return (
-    <header className="sticky top-0 z-30 flex h-[68px] items-center border-b border-line bg-bg">
+    <header
+      className={`sticky top-0 z-30 flex h-[68px] items-center border-b motion-safe:transition-colors motion-safe:duration-300 ${
+        transparent ? "border-transparent bg-transparent text-white" : "border-line bg-bg"
+      }`}
+    >
       <div className="mx-auto grid w-full max-w-[1440px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6 lg:px-14">
         <div className="min-w-0">
           <div className="md:hidden">
@@ -40,7 +63,7 @@ export function Header({ navItems, logoUrl }: { navItems?: NavLink[]; logoUrl?: 
         </div>
 
         <Link href="/" className="col-start-2 shrink-0 justify-self-center">
-          <Image src={logoUrl || "/brand/logo.png"} alt="Jawhara" width={126} height={35} priority className="h-[35px] w-auto object-contain" />
+          <Image src={logoUrl || "/brand/logo.png"} alt="Jawhara" width={126} height={35} priority className={`h-[35px] w-auto object-contain ${transparent ? "brightness-0 invert" : ""}`} />
         </Link>
 
         <div className="col-start-3 flex shrink-0 items-center justify-end gap-4 sm:gap-5">
@@ -62,7 +85,7 @@ export function Header({ navItems, logoUrl }: { navItems?: NavLink[]; logoUrl?: 
             </svg>
             {count > 0 && (
               <span
-                className={`absolute -right-2 -top-2 flex h-[16px] w-[16px] items-center justify-center rounded-full bg-fg text-[9px] font-bold text-bg ${
+                className={`absolute -right-2 -top-2 flex h-[16px] w-[16px] items-center justify-center rounded-full text-[9px] font-bold ${transparent ? "bg-white text-black" : "bg-fg text-bg"} ${
                   justAdded ? "motion-safe:animate-cart-pop" : ""
                 }`}
               >

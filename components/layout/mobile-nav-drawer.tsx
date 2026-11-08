@@ -83,7 +83,7 @@ export function MobileNavDrawer({ items }: { items: NavItem[] }) {
       />
       <div
         ref={panelRef}
-        className="fixed inset-y-0 left-0 z-40 flex w-[82vw] max-w-[320px] flex-col bg-bg"
+        className="fixed inset-y-0 left-0 z-40 flex w-[82vw] max-w-[320px] flex-col bg-bg text-fg"
       >
         <nav aria-label="Primär" className="flex flex-1 flex-col overflow-y-auto py-6">
           {items.map((item) => (

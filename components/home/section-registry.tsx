@@ -5,7 +5,7 @@ import { ProductListSection } from "@/components/home/product-list";
 import { CollectionLinks } from "@/components/home/collection-links";
 import { FeaturedProductSection } from "@/components/home/featured-product";
 import { ComparisonSlider } from "@/components/home/comparison-slider";
-import type { HomeSection, ProductCard } from "@/lib/queries";
+import { homeHeroOverlaysHeader, type HomeSection, type ProductCard } from "@/lib/queries";
 import { resolveProductListsInOrder } from "@/lib/product-sections";
 
 /**
@@ -33,7 +33,18 @@ export async function resolveSectionProducts(sections: HomeSection[]): Promise<M
  * config is missing a required field (e.g. a brand-new, not-yet-configured section) is skipped
  * rather than crashing the page.
  */
-export function SectionRenderer({ section, products, isFirstProductList = false }: { section: HomeSection; products?: ProductCard[]; isFirstProductList?: boolean }) {
+export function SectionRenderer({
+  section,
+  products,
+  isFirstProductList = false,
+  overlayHeader = false,
+}: {
+  section: HomeSection;
+  products?: ProductCard[];
+  isFirstProductList?: boolean;
+  /** Set by SectionList only for the live homepage's first section (see homeHeroOverlaysHeader). */
+  overlayHeader?: boolean;
+}) {
   if (!section.visible) return null;
   const c = section.config as any;
 
@@ -43,7 +54,7 @@ export function SectionRenderer({ section, products, isFirstProductList = false 
       return c.variant === "split-bottom" ? (
         <Hero key={section.id} variant="split-bottom" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} heading={c.heading ?? ""} />
       ) : (
-        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} topText={c.topText || undefined} />
+        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} topText={c.topText || undefined} overlayHeader={overlayHeader} />
       );
     case "marquee":
       if (!Array.isArray(c.items) || c.items.length === 0) return null;
@@ -84,13 +95,16 @@ export function SectionRenderer({ section, products, isFirstProductList = false 
 }
 
 /** Renders a full section list (live homepage or admin preview). */
-export async function SectionList({ sections }: { sections: HomeSection[] }) {
+export async function SectionList({ sections, allowHeaderOverlay = false }: { sections: HomeSection[]; allowHeaderOverlay?: boolean }) {
+  // Only the live homepage gets the transparent-header banner -- the admin preview renders under
+  // its own preview bar and a normal header, so it keeps the regular layout.
+  const overlayId = allowHeaderOverlay && homeHeroOverlaysHeader(sections) ? sections.find((s) => s.visible)?.id : undefined;
   const products = await resolveSectionProducts(sections);
   const firstProductListId = sections.find((s) => s.visible && s.type === "product_list")?.id;
   return (
     <>
       {sections.map((s) => (
-        <SectionRenderer key={s.id} section={s} products={products.get(s.id)} isFirstProductList={s.id === firstProductListId} />
+        <SectionRenderer key={s.id} section={s} products={products.get(s.id)} isFirstProductList={s.id === firstProductListId} overlayHeader={s.id === overlayId} />
       ))}
     </>
   );

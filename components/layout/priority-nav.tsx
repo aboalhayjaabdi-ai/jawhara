@@ -105,7 +105,7 @@ export function PriorityNav({ items }: { items: NavItem[] }) {
               </svg>
             </button>
             {isOpen && (
-              <div role="menu" className="absolute left-0 top-full z-50 mt-3 min-w-[180px] border border-line bg-bg py-2 shadow-sm">
+              <div role="menu" className="absolute left-0 top-full z-50 mt-3 min-w-[180px] border border-line bg-bg py-2 text-fg shadow-sm">
                 {overflowItems.map((item) => (
                   <Link
                     key={item.href}

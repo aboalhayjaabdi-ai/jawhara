@@ -19,10 +19,14 @@ type HeroProps = {
   /** Optional non-clickable headline near the top of the banner (centered-cta variant), set in the
    * same typeface as the button but larger. */
   topText?: string;
+  /** Homepage only (first section): pull the banner up underneath the sticky header, which is
+   * transparent at the top of the page (see components/layout/header.tsx). Everything shown on the
+   * banner keeps its on-screen position -- only the image now also fills the area behind the header. */
+  overlayHeader?: boolean;
 } & ({ variant: "centered-cta" } | { variant: "split-bottom"; heading: string });
 
 export function Hero(props: HeroProps) {
-  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition, fit = "cover", topText } = props;
+  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition, fit = "cover", topText, overlayHeader = false } = props;
   const fitClass = fit === "contain" ? "object-contain" : "object-cover";
   // Caps the default mobile height to whatever the mobile image's own aspect ratio (585:1040, its
   // real uploaded size) can cover at the current viewport width without cropping its sides -- a
@@ -36,7 +40,7 @@ export function Hero(props: HeroProps) {
   } as React.CSSProperties;
 
   return (
-    <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""}`} style={style}>
+    <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""} ${overlayHeader ? "-mt-[68px]" : ""}`} style={style}>
       <Image
         src={mobileImage ?? desktopImage}
         alt=""
@@ -51,7 +55,7 @@ export function Hero(props: HeroProps) {
       {fit !== "contain" && <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />}
 
       {props.variant === "centered-cta" && topText && (
-        <div className="pointer-events-none absolute inset-x-0 top-10 flex justify-center px-4 md:top-14">
+        <div className={`pointer-events-none absolute inset-x-0 flex justify-center px-4 ${overlayHeader ? "top-[108px] md:top-[124px]" : "top-10 md:top-14"}`}>
           <p
             className="whitespace-nowrap text-center font-serif text-[clamp(32px,10vw,64px)] font-bold uppercase leading-none tracking-wide text-white"
             style={{ textShadow: "0 1px 8px rgba(0,0,0,.3)" }}

@@ -97,6 +97,12 @@ export function SectionEditPanel({
             <input value={config.mobileObjectPosition ?? ""} onChange={(e) => set("mobileObjectPosition", e.target.value)} className="mt-1 w-40 rounded-md border border-gray-200 px-3 py-2 text-sm" />
           </div>
           <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={config.overlayHeader === true} onChange={(e) => set("overlayHeader", e.target.checked)} />
+              Genomskinlig meny ovanpå bilden (bara när bannern är första sektionen på startsidan)
+            </label>
+          </div>
+          <div>
             <label className="text-xs text-gray-500">Text högst upp (valfri, ej klickbar)</label>
             <input value={config.topText ?? ""} onChange={(e) => set("topText", e.target.value)} className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
           </div>

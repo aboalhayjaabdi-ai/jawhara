@@ -711,6 +711,15 @@ export async function getPublishedHomeSections(page = "home"): Promise<HomeSecti
   return (data?.sections as HomeSection[] | undefined) ?? [];
 }
 
+/** True when the homepage's first visible section is a banner set to sit underneath a transparent
+ * header ("overlayHeader"). Shared by the root layout (header) and SectionList (banner) so both
+ * always agree. */
+export function homeHeroOverlaysHeader(sections: HomeSection[]): boolean {
+  const first = sections.find((s) => s.visible);
+  const c = first?.config as any;
+  return first?.type === "hero" && c?.overlayHeader === true && Boolean(c?.desktopImage && c?.buttonText && c?.buttonHref);
+}
+
 export type NavLink = { title: string; href: string };
 export type SiteMenus = { mainMenu: NavLink[]; footer: NavLink[]; about: NavLink[]; terms: NavLink[]; social: NavLink[] };
 

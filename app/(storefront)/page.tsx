@@ -9,5 +9,5 @@ import { SectionList } from "@/components/home/section-registry";
 // 0021_phase7_storefront_seed.sql for the exact original content this replaced.
 export default async function HomePage() {
   const sections = await getPublishedHomeSections();
-  return <SectionList sections={sections} />;
+  return <SectionList sections={sections} allowHeaderOverlay />;
 }
