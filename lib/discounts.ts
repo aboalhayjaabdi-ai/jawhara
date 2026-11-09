@@ -46,6 +46,28 @@ export type AppliedDiscountLine = {
   freeVariantIds?: string[]; // which cart variant lines got a free unit (bxgy only)
 };
 
+/** Display-only progress for one active automatic buy-X-get-Y promotion, derived from the exact
+ * same unit pools and formulas the pricing loop below uses -- never an input to pricing. Lets the
+ * cart show "1/3 smycken" or "1 av 2 gratis plånböcker" without re-implementing campaign rules
+ * client-side. Only present for promotions that were actually eligible to apply to this cart
+ * (an exclusive code can keep an automatic promotion out entirely; it then has no entry here). */
+export type PromoProgress = {
+  discountId: string;
+  title: string;
+  // "same": buy-set === get-set (e.g. "3 för 2" on jewelry collections) -- every
+  // (buyQuantity + getQuantity) qualifying units earn getQuantity free.
+  // "split": disjoint buy/get sets (e.g. "Valfri Plånbok": buy a bag, get a wallet).
+  shape: "same" | "split";
+  buyQuantity: number;
+  getQuantity: number;
+  maxApplications: number | null; // uses_per_order_limit
+  buyUnits: number; // qualifying "buy" units in the cart (for "same": the shared pool)
+  getUnits: number; // qualifying "get" units in the cart (for "same": equals buyUnits)
+  applications: number; // how many times the promotion is earned by this cart (after the cap)
+  freeUnits: number; // units actually made free
+  amountOff: number; // SEK actually discounted by this promotion
+};
+
 export type CheckoutTotals = {
   lines: { variantId: string; productId: string; qty: number; unitPrice: number; lineTotal: number }[];
   subtotal: number;
@@ -67,6 +89,7 @@ export type CheckoutTotals = {
   // "3 för 2"), independent of whether this cart currently earns a free unit from it. Display
   // only -- never used for pricing. See computeCheckoutTotals for how it's derived.
   eligibleDiscountsByVariant: Record<string, string[]>;
+  promoProgress: PromoProgress[];
 };
 
 /**
@@ -236,6 +259,7 @@ export async function computeCheckoutTotals(
   }
 
   const appliedDiscounts: AppliedDiscountLine[] = [];
+  const promoProgress: PromoProgress[] = [];
 
   for (const d of toApply) {
     if (d.buy_quantity != null && d.get_quantity != null) {
@@ -250,6 +274,10 @@ export async function computeCheckoutTotals(
         JSON.stringify([...(d.buy_item_ids ?? [])].sort()) === JSON.stringify([...(d.get_item_ids ?? [])].sort());
 
       let freeUnits: { variantId: string; price: number }[] = [];
+      // Display-only bookkeeping for promoProgress (below) -- same numbers the pricing uses.
+      let progressBuyUnits = 0;
+      let progressGetUnits = 0;
+      let progressApplications = 0;
 
       if (buySameAsGet) {
         const pool = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids)));
@@ -257,12 +285,34 @@ export async function computeCheckoutTotals(
         const applications = Math.floor(pool.length / groupSize);
         const capped = d.uses_per_order_limit != null ? Math.min(applications, d.uses_per_order_limit) : applications;
         freeUnits = pool.slice(0, capped * d.get_quantity);
+        progressBuyUnits = progressGetUnits = pool.length;
+        progressApplications = capped;
       } else {
         const buyUnits = units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids));
         const getUnits = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.get_item_type, d.get_item_ids)));
         const applications = Math.floor(buyUnits.length / d.buy_quantity!);
         const capped = d.uses_per_order_limit != null ? Math.min(applications, d.uses_per_order_limit) : applications;
         freeUnits = getUnits.slice(0, capped * d.get_quantity);
+        progressBuyUnits = buyUnits.length;
+        progressGetUnits = getUnits.length;
+        progressApplications = capped;
+      }
+
+      if (d.kind === "automatic") {
+        const pct = Number(d.get_percentage ?? 0) / 100;
+        promoProgress.push({
+          discountId: d.id,
+          title: d.title,
+          shape: buySameAsGet ? "same" : "split",
+          buyQuantity: d.buy_quantity,
+          getQuantity: d.get_quantity,
+          maxApplications: d.uses_per_order_limit,
+          buyUnits: progressBuyUnits,
+          getUnits: progressGetUnits,
+          applications: progressApplications,
+          freeUnits: freeUnits.length,
+          amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100,
+        });
       }
 
       if (freeUnits.length > 0) {
@@ -303,6 +353,7 @@ export async function computeCheckoutTotals(
     errors,
     discountNotices,
     eligibleDiscountsByVariant,
+    promoProgress,
     codeDiscountId: codeMatch?.id ?? null,
   };
 }

@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
       total: 0,
       errors: [],
       discountNotices: [],
+      eligibleDiscountsByVariant: {},
+      promoProgress: [],
     });
   }
 

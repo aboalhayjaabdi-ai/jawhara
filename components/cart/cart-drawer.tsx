@@ -8,6 +8,8 @@ import { normalizeVariantTitle } from "@/lib/variant-title";
 import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 import type { GiftBoxOffer } from "@/lib/gift-box";
+import { CartOffers } from "./cart-offers";
+import { CartRecommendations } from "./cart-recommendations";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -16,11 +18,14 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, subtotal } =
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, subtotal, lastAdded } =
     useCart();
   const { totals, loading, fetchError } = useCartTotals();
 
   const [codeInput, setCodeInput] = useState("");
+  // The code field starts collapsed so the fixed footer stays compact (total + checkout always in
+  // view); it opens on demand, and stays open while there's a message to show.
+  const [codeOpen, setCodeOpen] = useState(false);
   const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [applyingCode, setApplyingCode] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -54,6 +59,15 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       clearCheckoutTimeout();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, close]);
 
   // Syncs the cart to Shopify one last time (never trusting the debounced background sync's
   // possibly-stale state) and, only once that confirms a real checkoutUrl for these exact items,
@@ -180,7 +194,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
         }`}
       />
       <aside
-        className={`fixed inset-0 z-50 flex flex-col bg-bg transition-transform duration-300 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px] lg:shadow-2xl ${
+        aria-label="Varukorg"
+        className={`fixed inset-0 z-50 flex flex-col bg-bg transition-transform duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px] lg:shadow-2xl ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -191,6 +206,28 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
         </button>
       </div>
       <div className="mx-auto h-px w-full max-w-xl border-t border-line" />
+
+      {lastAdded && items.some((i) => i.variantId === lastAdded.item.variantId) && (
+        // Re-keyed per add so the short slide-in replays for every new product, including ones
+        // added from the recommendations below while the cart stays open.
+        <div key={lastAdded.at} role="status" aria-live="polite" className="cart-confirm mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3">
+          <div className="flex items-center gap-3 border border-line bg-[#f7f7f7] p-2.5 pr-3">
+            <div className="relative h-12 w-12 flex-shrink-0 bg-bg">
+              {lastAdded.item.image && <Image src={lastAdded.item.image} alt="" fill sizes="48px" className="object-contain" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]">✓ Tillagd i varukorgen!</div>
+              <div className="mt-0.5 truncate text-xs">
+                {lastAdded.item.title}
+                {normalizeVariantTitle(lastAdded.item.variantTitle) ? ` · ${normalizeVariantTitle(lastAdded.item.variantTitle)}` : ""}
+              </div>
+              <div className="text-xs text-muted">
+                {lastAdded.qty} st · {formatSek(lastAdded.item.price * lastAdded.qty)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-xl flex-col gap-6 px-6 py-6">
@@ -284,27 +321,29 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               ))}
             </div>
           )}
-        </div>
-      </div>
 
-      <div className="flex-shrink-0 border-t border-line bg-bg">
-        <div className="mx-auto max-w-xl px-6 py-5">
+          {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
+
           {giftBoxOffer && items.length > 0 && (
-            <label className="mb-4 flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
+            <label className="flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={giftBoxInCart}
                 onChange={(e) => toggleGiftBox(e.target.checked)}
                 className="h-4 w-4 flex-shrink-0"
               />
-              <span>
-                Lägg till en presentask för {formatSek(giftBoxOffer.price)}
-              </span>
+              <span>Lägg till en presentask för {formatSek(giftBoxOffer.price)}</span>
             </label>
           )}
 
+          <CartRecommendations items={items} totals={totals} />
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 border-t border-line bg-bg">
+        <div className="mx-auto max-w-xl px-6 pb-5 pt-4">
           {items.length > 0 && (
-            <div className="mb-4">
+            <div className="mb-3">
               {discountCode ? (
                 <div className="flex items-center justify-between border border-line px-3 py-2.5 text-sm">
                   <span>
@@ -314,9 +353,14 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                     Ta bort
                   </button>
                 </div>
+              ) : !codeOpen && !codeMessage ? (
+                <button type="button" onClick={() => setCodeOpen(true)} className="text-xs text-muted underline underline-offset-4">
+                  Har du en rabattkod?
+                </button>
               ) : (
                 <div className="flex gap-2">
                   <input
+                    autoFocus
                     type="text"
                     value={codeInput}
                     onChange={(e) => setCodeInput(e.target.value)}
@@ -346,7 +390,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           )}
 
           {items.length > 0 && (
-            <div className="mb-4">
+            <div className="mb-3">
               {summary ? (
                 <>
                   <div className="flex items-center justify-between text-sm text-muted">

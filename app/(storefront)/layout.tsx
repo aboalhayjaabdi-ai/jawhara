@@ -7,7 +7,6 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { CartProvider } from "@/components/cart/cart-provider";
 import { CartDrawer } from "@/components/cart/cart-drawer";
-import { AddToCartToast } from "@/components/cart/add-to-cart-toast";
 import { CookieConsentAndTracking } from "@/components/marketing/cookie-consent-and-tracking";
 import { getSiteMenus, getLogoUrl } from "@/lib/queries";
 import { getPublicMarketingIds } from "@/lib/admin/marketing-settings";
@@ -60,7 +59,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main>{children}</main>
           <Footer footerLinks={menus.footer} aboutLinks={menus.about} termsLinks={menus.terms} socialLinks={menus.social} />
           <CartDrawer giftBoxOffer={giftBoxOffer} />
-          <AddToCartToast />
           <CookieConsentAndTracking metaPixelId={marketingIds.metaPixelId} ga4MeasurementId={marketingIds.ga4MeasurementId} />
         </CartProvider>
       </body>

@@ -78,3 +78,15 @@ body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [dat
 @media (prefers-reduced-motion: reduce) {
   .pagination-pending { animation: none; }
 }
+
+/* Cart drawer: the "✓ Tillagd i varukorgen!" confirmation slides in softly on every add. */
+@keyframes cart-confirm-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cart-confirm {
+  animation: cart-confirm-in 260ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cart-confirm { animation: none; }
+}

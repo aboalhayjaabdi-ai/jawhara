@@ -65,6 +65,9 @@ type CartState = {
   // only, never blocks adding/removing/checking out, since Supabase (not this) is what prices and
   // gates the visible Jawhara cart in Phase 2.
   shopifyWarnings: string[];
+  // The most recent addItem() call (item snapshot + quantity added), shown as the cart drawer's
+  // "✓ Tillagd i varukorgen!" confirmation. Cleared whenever the drawer closes.
+  lastAdded: { item: Omit<CartItem, "qty">; qty: number; at: number } | null;
 };
 
 type CartContextValue = CartState & CartActions;
@@ -114,6 +117,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [discountCode, setDiscountCodeState] = useState<string | null>(null);
   const [shopifyCartId, setShopifyCartId] = useState<string | null>(null);
   const [shopifyWarnings, setShopifyWarnings] = useState<string[]>([]);
+  const [lastAdded, setLastAdded] = useState<CartState["lastAdded"]>(null);
 
   useEffect(() => {
     try {
@@ -335,6 +339,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [...prev, { ...item, qty }];
     });
     setBump((b) => b + 1);
+    // Every add opens the side cart (instead of a separate toast) so the customer immediately
+    // sees what was added, the active offers and the checkout button -- without leaving the page.
+    setLastAdded({ item, qty, at: Date.now() });
+    setIsOpen(true);
     trackAddToCart({ id: item.productId, title: item.title, price: item.price, currency: "SEK", quantity: qty, productHandle: item.productHandle });
   }, []);
 
@@ -351,7 +359,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const open = useCallback(() => setIsOpen(true), []);
-  const close = useCallback(() => setIsOpen(false), []);
+  const close = useCallback(() => {
+    setIsOpen(false);
+    setLastAdded(null);
+  }, []);
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const count = items.reduce((sum, i) => sum + i.qty, 0);
@@ -361,8 +372,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [open, close, addItem, removeItem, setQty, setDiscountCode, goToCheckout]
   );
   const state = useMemo<CartState>(
-    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings }),
-    [items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings]
+    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded }),
+    [items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded]
   );
 
   return (
