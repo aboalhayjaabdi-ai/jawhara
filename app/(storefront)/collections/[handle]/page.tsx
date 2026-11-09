@@ -22,10 +22,18 @@ export const revalidate = 60;
 
 const PAGE_SIZE = 24;
 const GRID_ANCHOR_ID = "produktrutnat";
-// Small campaign line shown directly under the title of specific collections only.
-const COLLECTION_PROMOS: Record<string, { text: string; emphasis: string }> = {
-  "vaskor-och-tillbehor": { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!" },
+// Small campaign line shown directly under the collection title, keyed by the collection's
+// template group -- so the main "Väskor" collection and every bag sub-collection (LV, CC, H, ...)
+// all get it. Handles in `exclude` share the group's template but aren't part of the offer
+// (gift sets aren't in the "Valfri Plånbok" discount).
+const COLLECTION_PROMOS: Record<string, { text: string; emphasis: string; exclude?: string[] }> = {
+  vaskor: { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!", exclude: ["gift-sets"] },
 };
+
+function promoFor(templateSuffix: string | null, handle: string) {
+  const promo = templateSuffix ? COLLECTION_PROMOS[templateSuffix] : undefined;
+  return promo && !promo.exclude?.includes(handle) ? promo : undefined;
+}
 const VALID_SORTS: CollectionSort[] = ["manual", "price-asc", "price-desc", "title-asc", "title-desc", "created-desc", "created-asc"];
 
 // Same reasoning as the product page's generateStaticParams (see lib/queries.ts's
@@ -111,7 +119,7 @@ export default async function CollectionPage({
       total={total}
       page={page}
       tiles={tiles}
-      promo={COLLECTION_PROMOS[handle]}
+      promo={promoFor(meta.template_suffix, handle)}
     />
   );
 }
