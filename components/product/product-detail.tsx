@@ -11,7 +11,6 @@ import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { SALE_LABEL } from "@/lib/campaign";
-import { selloCheckoutUrl } from "@/lib/sello";
 import { ProductGallery } from "@/components/product/product-gallery";
 
 type Variant = {
@@ -398,11 +397,6 @@ export function ProductDetail({
   }, [variantGallery, variant, images]);
   const galleryJumpIndex = variant && !variantGallery ? variantImageIndex[variant.id] : undefined;
 
-  const selloUrl = selloCheckoutUrl(handle);
-  const variantAvailable =
-    !!variant &&
-    isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1);
-
   const onSale = variant?.compare_at_price != null && variant.compare_at_price > variant.price;
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
 
@@ -570,18 +564,6 @@ export function ProductDetail({
             </div>
           )}
 
-          {selloUrl && variantAvailable ? (
-            <a
-              href={selloUrl}
-              className="mt-7 flex h-14 w-full items-center justify-center gap-2 bg-fg text-xs font-semibold uppercase tracking-widest text-bg"
-            >
-              Köp nu
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <path d="M5 12h14" />
-                <path d="M13 6l6 6-6 6" />
-              </svg>
-            </a>
-          ) : (
           <button
             onClick={() =>
               variant &&
@@ -611,7 +593,6 @@ export function ProductDetail({
               "Slut i lager"
             )}
           </button>
-          )}
 
           <PaymentBadges />
 
