@@ -30,8 +30,9 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
   );
 }
 
-const BOX = "border border-line bg-[#f7f7f7] px-4 py-3.5";
-const LINK_BUTTON = "btn-fx mt-3 inline-flex h-9 items-center border border-fg bg-bg px-4 text-[10px] font-semibold uppercase tracking-[0.16em]";
+// A compact strip pinned at the top of the cart (under the header), separated by a thin divider.
+const STRIP = "mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3";
+const LINK_BUTTON = "btn-fx inline-flex h-8 flex-shrink-0 items-center border border-fg bg-bg px-3 text-[10px] font-semibold uppercase tracking-[0.14em]";
 
 export function CartOffers({ totals, onNavigate }: { totals: CheckoutTotals | null; onNavigate: () => void }) {
   // Only the jewelry progress lives here -- the free-wallet choice is handled entirely by the
@@ -46,24 +47,24 @@ export function CartOffers({ totals, onNavigate }: { totals: CheckoutTotals | nu
   if (!showJewelry || !jewelry) return null;
 
   return (
-    <div className={BOX}>
+    <div className={STRIP}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">{jewelry.title}</span>
         <span className="text-[11px] text-muted">
           {jewelryActive ? groupSize : jewelry.buyUnits}/{groupSize}
         </span>
       </div>
-      <div className="mt-2.5">
+      <div className="mt-2">
         <ProgressBar value={jewelryActive ? groupSize : jewelry.buyUnits} max={groupSize} />
       </div>
       {jewelryActive ? (
-        <p className="mt-2.5 text-[13px] leading-5">
+        <p className="mt-2 text-xs leading-5">
           Din {jewelry.title}-rabatt är aktiverad!{" "}
           <span className="text-muted">Du sparar {formatSek(jewelry.amountOff)}.</span>
         </p>
       ) : (
-        <>
-          <p className="mt-2.5 text-[13px] leading-5">
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <p className="text-xs leading-5">
             {groupSize - jewelry.buyUnits === 1
               ? "Bara 1 smycke kvar tills du får det billigaste på köpet!"
               : `Lägg till ${groupSize - jewelry.buyUnits} smycken till och få det billigaste på köpet!`}
@@ -71,7 +72,7 @@ export function CartOffers({ totals, onNavigate }: { totals: CheckoutTotals | nu
           <Link href={JEWELRY_HREF} onClick={onNavigate} className={LINK_BUTTON}>
             Välj fler smycken →
           </Link>
-        </>
+        </div>
       )}
     </div>
   );

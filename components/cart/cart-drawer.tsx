@@ -32,6 +32,13 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     return () => window.clearTimeout(timeout);
   }, [lastAdded]);
 
+  // The cart no longer has a discount-code field (codes can still be entered in Shopify's own
+  // checkout). A code saved earlier in this browser would otherwise keep applying invisibly, with
+  // no way to see or remove it here -- so it's cleared.
+  useEffect(() => {
+    if (discountCode) setDiscountCode(null);
+  }, [discountCode, setDiscountCode]);
+
   // While the cart is open, the page behind it must not scroll -- only the cart's own list does.
   useEffect(() => {
     if (!isOpen) return;
@@ -46,12 +53,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     };
   }, [isOpen]);
 
-  const [codeInput, setCodeInput] = useState("");
-  // The code field starts collapsed so the fixed footer stays compact (total + checkout always in
-  // view); it opens on demand, and stays open while there's a message to show.
-  const [codeOpen, setCodeOpen] = useState(false);
-  const [codeMessage, setCodeMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const [applyingCode, setApplyingCode] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const checkoutTimeoutRef = useRef<number | null>(null);
@@ -161,47 +162,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     }
   }
 
-  // Applies a code by handing it to the shared, authoritative totals fetch (setDiscountCode
-  // triggers useCartTotals to re-fetch) -- this function never decides acceptance/amount itself,
-  // it only reads back what the server already computed and reflects that in the UI.
-  async function applyCode() {
-    const code = codeInput.trim();
-    if (!code || applyingCode) return;
-    setCodeMessage(null);
-    setApplyingCode(true);
-    try {
-      const res = await fetch("/api/cart/totals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: code }),
-      });
-      const data = await res.json();
-      const codeError = (data.errors as string[] | undefined)?.find((e) => e.toLowerCase().includes("rabattkod"));
-      if (codeError) {
-        setCodeMessage({ kind: "error", text: codeError });
-        return;
-      }
-      const applied = (data.appliedDiscounts as { discountId: string; amountOff: number }[] | undefined)?.find(
-        (d) => d.discountId === data.codeDiscountId
-      );
-      setDiscountCode(code);
-      setCodeInput("");
-      setCodeMessage({
-        kind: "ok",
-        text: applied ? `Rabattkod tillagd: -${formatSek(applied.amountOff)}` : "Rabattkod tillagd, men gav ingen rabatt på denna varukorg.",
-      });
-    } catch {
-      setCodeMessage({ kind: "error", text: "Kunde inte kontrollera rabattkoden. Försök igen." });
-    } finally {
-      setApplyingCode(false);
-    }
-  }
-
-  function removeCode() {
-    setDiscountCode(null);
-    setCodeMessage(null);
-  }
-
   // The gift box upsell is only offered alongside jewelry -- "jewelry" = anything the live
   // "3 för 2" jewelry promotion covers (eligibleDiscountsByVariant comes from the same discount
   // data, independent of whether a code currently blocks the promotion).
@@ -257,6 +217,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           </div>
         </div>
       )}
+
+      {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto flex max-w-xl flex-col gap-6 px-6 py-6">
@@ -351,10 +313,14 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </div>
           )}
 
-          {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
+          <CartRecommendations items={items} totals={totals} />
+        </div>
+      </div>
 
+      <div className="flex-shrink-0 border-t border-line bg-bg">
+        <div className="mx-auto max-w-xl px-6 pb-5 pt-4">
           {giftBoxOffer && hasJewelry && (
-            <label className="flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
+            <label className="mb-3 flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={giftBoxInCart}
@@ -363,59 +329,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               />
               <span>Lägg till en presentask för {formatSek(giftBoxOffer.price)}</span>
             </label>
-          )}
-
-          <CartRecommendations items={items} totals={totals} />
-        </div>
-      </div>
-
-      <div className="flex-shrink-0 border-t border-line bg-bg">
-        <div className="mx-auto max-w-xl px-6 pb-5 pt-4">
-          {items.length > 0 && (
-            <div className="mb-3">
-              {discountCode ? (
-                <div className="flex items-center justify-between border border-line px-3 py-2.5 text-sm">
-                  <span>
-                    Rabattkod: <strong>{discountCode}</strong>
-                  </span>
-                  <button onClick={removeCode} className="text-xs text-muted underline">
-                    Ta bort
-                  </button>
-                </div>
-              ) : !codeOpen && !codeMessage ? (
-                <button type="button" onClick={() => setCodeOpen(true)} className="text-xs text-muted underline underline-offset-4">
-                  Har du en rabattkod?
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    autoFocus
-                    type="text"
-                    value={codeInput}
-                    onChange={(e) => setCodeInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        applyCode();
-                      }
-                    }}
-                    disabled={applyingCode}
-                    placeholder="Rabattkod"
-                    className="h-11 flex-1 border border-line px-3 text-sm uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal disabled:opacity-60"
-                  />
-                  <button
-                    onClick={applyCode}
-                    disabled={!codeInput.trim() || applyingCode}
-                    className="btn-fx h-11 border border-fg px-4 text-xs font-semibold uppercase tracking-widest disabled:opacity-40"
-                  >
-                    {applyingCode ? "..." : "Använd"}
-                  </button>
-                </div>
-              )}
-              {codeMessage && (
-                <p className={`mt-1.5 text-xs ${codeMessage.kind === "error" ? "text-red-700" : "text-muted"}`}>{codeMessage.text}</p>
-              )}
-            </div>
           )}
 
           {items.length > 0 && (
