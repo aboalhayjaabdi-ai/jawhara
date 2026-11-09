@@ -135,10 +135,7 @@ function CollectionGrid({
   return (
     <div className="mx-auto max-w-[1328px] px-6 py-14 lg:px-14">
       <div className="pb-8 text-center">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          {total} {total === 1 ? "PRODUKT" : "PRODUKTER"}
-        </div>
-        <h1 className="mt-3 text-4xl">{title}</h1>
+        <h1 className="text-4xl">{title}</h1>
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
       </div>
 
