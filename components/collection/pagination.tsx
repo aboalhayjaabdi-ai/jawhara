@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { PaginationPending } from "./pagination-pending";
 
 // Standard "windowed" page-number algorithm: always shows the first and last page, plus one
 // page on either side of the current page, collapsing any gap into a single "…". Keeps the row
@@ -66,9 +67,10 @@ export function Pagination({
         <Link
           href={hrefFor(currentPage - 1)}
           aria-label="Föregående sida"
-          className="btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
+          className="btn-fx relative flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
           ‹
+          <PaginationPending>‹</PaginationPending>
         </Link>
       ) : (
         <span aria-hidden className="flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm text-muted opacity-40">
@@ -88,11 +90,12 @@ export function Pagination({
             aria-current={p === currentPage ? "page" : undefined}
             className={
               p === currentPage
-                ? "btn-fx flex h-9 min-w-9 items-center justify-center border border-fg bg-fg px-2 text-xs font-semibold text-bg"
-                : "btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-xs font-semibold"
+                ? "btn-fx relative flex h-9 min-w-9 items-center justify-center border border-fg bg-fg px-2 text-xs font-semibold text-bg"
+                : "btn-fx relative flex h-9 min-w-9 items-center justify-center border border-line px-2 text-xs font-semibold"
             }
           >
             {p}
+            {p !== currentPage && <PaginationPending>{p}</PaginationPending>}
           </Link>
         )
       )}
@@ -101,9 +104,10 @@ export function Pagination({
         <Link
           href={hrefFor(currentPage + 1)}
           aria-label="Nästa sida"
-          className="btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
+          className="btn-fx relative flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
           ›
+          <PaginationPending>›</PaginationPending>
         </Link>
       ) : (
         <span aria-hidden className="flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm text-muted opacity-40">
