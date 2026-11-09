@@ -22,6 +22,10 @@ export const revalidate = 60;
 
 const PAGE_SIZE = 24;
 const GRID_ANCHOR_ID = "produktrutnat";
+// Small campaign line shown directly under the title of specific collections only.
+const COLLECTION_PROMOS: Record<string, { text: string; emphasis: string }> = {
+  "vaskor-och-tillbehor": { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!" },
+};
 const VALID_SORTS: CollectionSort[] = ["manual", "price-asc", "price-desc", "title-asc", "title-desc", "created-desc", "created-asc"];
 
 // Same reasoning as the product page's generateStaticParams (see lib/queries.ts's
@@ -112,6 +116,7 @@ export default async function CollectionPage({
       total={total}
       page={page}
       tiles={tiles}
+      promo={COLLECTION_PROMOS[handle]}
     />
   );
 }
@@ -123,6 +128,7 @@ function CollectionGrid({
   total,
   page,
   tiles = [],
+  promo,
 }: {
   title: string;
   description: string | null;
@@ -130,6 +136,7 @@ function CollectionGrid({
   total: number;
   page: number;
   tiles?: CollectionTile[];
+  promo?: { text: string; emphasis: string };
 }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
@@ -137,6 +144,20 @@ function CollectionGrid({
       <div className="pb-8 text-center">
         <h1 className="text-4xl">{title}</h1>
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
+        {promo && (
+          <div className="mx-auto mt-5 flex max-w-xl items-center justify-center gap-3 border border-line bg-[#f7f7f7] px-4 py-3 text-left sm:px-6">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0" aria-hidden>
+              <rect x="3" y="8" width="18" height="4" rx="1" />
+              <path d="M12 8v13" />
+              <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+              <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+            </svg>
+            <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
+            <p className="text-[13px] leading-snug sm:text-sm">
+              {promo.text} <span className="font-semibold">{promo.emphasis}</span>
+            </p>
+          </div>
+        )}
       </div>
 
       <SubcategoryTiles tiles={tiles} />
