@@ -120,7 +120,7 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
   }
 
   return (
-    <section aria-label={HEADINGS[shownMode]} className="border-t border-line pt-5">
+    <section aria-label={HEADINGS[shownMode]} className="pt-1">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">{HEADINGS[shownMode]}</h3>
         <div className="hidden gap-1.5 [@media(hover:hover)]:flex">

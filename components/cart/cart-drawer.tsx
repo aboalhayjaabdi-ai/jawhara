@@ -22,6 +22,30 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     useCart();
   const { totals, loading, fetchError } = useCartTotals();
 
+  // "✓ Tillagd i varukorgen!" is a short-lived confirmation: shown for each new add, then it
+  // fades out (the item itself stays visible in the list below).
+  const [confirmAt, setConfirmAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!lastAdded) return;
+    setConfirmAt(lastAdded.at);
+    const timeout = window.setTimeout(() => setConfirmAt((at) => (at === lastAdded.at ? null : at)), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [lastAdded]);
+
+  // While the cart is open, the page behind it must not scroll -- only the cart's own list does.
+  useEffect(() => {
+    if (!isOpen) return;
+    const html = document.documentElement;
+    const prevHtml = html.style.overflow;
+    const prevBody = document.body.style.overflow;
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
+    };
+  }, [isOpen]);
+
   const [codeInput, setCodeInput] = useState("");
   // The code field starts collapsed so the fixed footer stays compact (total + checkout always in
   // view); it opens on demand, and stays open while there's a message to show.
@@ -178,6 +202,11 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     setCodeMessage(null);
   }
 
+  // The gift box upsell is only offered alongside jewelry -- "jewelry" = anything the live
+  // "3 för 2" jewelry promotion covers (eligibleDiscountsByVariant comes from the same discount
+  // data, independent of whether a code currently blocks the promotion).
+  const hasJewelry = items.some((i) => totals?.eligibleDiscountsByVariant[i.variantId]?.includes("3 för 2"));
+
   const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
   const displayLines = buildDisplayLines(items, totals);
   const summary = buildCartSummary(items, totals);
@@ -207,7 +236,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       </div>
       <div className="mx-auto h-px w-full max-w-xl border-t border-line" />
 
-      {lastAdded && items.some((i) => i.variantId === lastAdded.item.variantId) && (
+      {lastAdded && confirmAt === lastAdded.at && items.some((i) => i.variantId === lastAdded.item.variantId) && (
         // Re-keyed per add so the short slide-in replays for every new product, including ones
         // added from the recommendations below while the cart stays open.
         <div key={lastAdded.at} role="status" aria-live="polite" className="cart-confirm mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3">
@@ -229,7 +258,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto flex max-w-xl flex-col gap-6 px-6 py-6">
           {items.length === 0 && <p className="text-sm text-muted">Din varukorg är tom.</p>}
           {displayLines.map((line) => {
@@ -324,7 +353,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
           {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
 
-          {giftBoxOffer && items.length > 0 && (
+          {giftBoxOffer && hasJewelry && (
             <label className="flex items-center gap-3 border border-line px-3 py-2.5 text-sm">
               <input
                 type="checkbox"
