@@ -17,14 +17,16 @@ function formatSek(amount: number) {
 const HEADINGS: Record<RecommendationMode, string> = {
   wallet: "Välj din gratis plånbok 🎁",
   "complete-3for2": "Komplettera ditt 3 för 2!",
+  "bags-wallets": "Utvalt för dig",
   "match-bag": "Matcha din väska med dessa favoriter",
   viewed: "Du kanske också gillar",
   curated: "Utvalt för dig",
 };
 
 /** Priority order from the cart's own authoritative promotion status (lib/discounts.ts
- * promoProgress): an unclaimed free wallet first, then completing 3 för 2, then jewelry to go with
- * a bag, then the visitor's own browsing, then the store's curated picks. */
+ * promoProgress): an unclaimed free wallet first; then, with 1-2 jewelry pieces, more jewelry to
+ * reach 3 för 2; once 3 för 2 is earned, bags and wallets instead of more jewelry; jewelry to go
+ * with a bag; then the visitor's own browsing; then the store's curated picks. */
 function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMode {
   const { jewelry, wallet } = findPromos(totals);
   const walletInfo = walletStatus(wallet);
@@ -32,6 +34,7 @@ function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMo
   if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < jewelry.buyQuantity + jewelry.getQuantity) {
     return "complete-3for2";
   }
+  if (jewelry && jewelry.freeUnits > 0) return "bags-wallets";
   if (walletInfo) return "match-bag";
   if (viewedCount >= 2) return "viewed";
   return "curated";

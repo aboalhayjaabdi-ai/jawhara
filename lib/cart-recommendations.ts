@@ -10,14 +10,15 @@ import { unstable_cache } from "next/cache";
 import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
 
-export type RecommendationMode = "wallet" | "complete-3for2" | "match-bag" | "viewed" | "curated";
+export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "curated";
 
-export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "match-bag", "viewed", "curated"];
+export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "bags-wallets", "match-bag", "viewed", "curated"];
 
 const MAX_PRODUCTS = 6;
 const JEWELRY_COLLECTION = "alla-smycken";
 const BESTSELLER_COLLECTION = "bastsaljare-1";
-const WALLET_COLLECTION = "tillbehor"; // "Plånböcker" -- used only for ordering the free wallets
+const WALLET_COLLECTION = "tillbehor"; // "Plånböcker"
+const BAG_COLLECTION = "vaskor-och-tillbehor"; // "Väskor"
 
 /** Real "get" products of the live automatic buy-a-bag-get-a-wallet promotion (disjoint buy/get
  * product lists), ordered like the Plånböcker collection. Never a hardcoded list. */
@@ -49,6 +50,8 @@ const CACHE = { revalidate: 60 };
 const cachedWalletCards = unstable_cache(async () => getProductCardsByIds(await getFreeWalletProductIds()), ["cart-recs-wallets"], CACHE);
 const cachedJewelryIds = unstable_cache(() => getCollectionProductIds(JEWELRY_COLLECTION), ["cart-recs-jewelry-ids"], CACHE);
 const cachedBestsellerIds = unstable_cache(() => getCollectionProductIds(BESTSELLER_COLLECTION), ["cart-recs-bestseller-ids"], CACHE);
+const cachedBagIds = unstable_cache(() => getCollectionProductIds(BAG_COLLECTION), ["cart-recs-bag-ids"], CACHE);
+const cachedWalletIds = unstable_cache(() => getCollectionProductIds(WALLET_COLLECTION), ["cart-recs-wallet-ids"], CACHE);
 const cachedCardsByIds = unstable_cache((ids: string[]) => getProductCardsByIds(ids), ["cart-recs-cards"], CACHE);
 const cachedRelated = unstable_cache(
   (productId: string, handle: string, limit: number) => getRelatedProductCards(productId, handle, limit),
@@ -88,6 +91,20 @@ export async function getCartRecommendations(input: {
   if (input.mode === "wallet") {
     // Wallets already in the cart stay out (picking the same wallet twice isn't a new choice).
     return finish((await cachedWalletCards()).filter((c) => !cartProducts.has(c.id)));
+  }
+
+  if (input.mode === "bags-wallets") {
+    // 3 för 2 is already earned -- suggest something other than more jewelry: bags and wallets
+    // from the store's own Väskor / Plånböcker order, mixed (two bags, then a wallet). Wallets are
+    // shown at their normal price here; a free wallet is only ever offered in "wallet" mode.
+    const [bagIds, walletIds] = await Promise.all([cachedBagIds(), cachedWalletIds()]);
+    const bags = bagIds.filter((id) => !cartProducts.has(id)).slice(0, 8);
+    const wallets = walletIds.filter((id) => !cartProducts.has(id)).slice(0, 4);
+    const mixed: string[] = [];
+    while (bags.length || wallets.length) {
+      mixed.push(...bags.splice(0, 2), ...wallets.splice(0, 1));
+    }
+    return finish(await cachedCardsByIds(mixed));
   }
 
   const [jewelryIds, bestsellerIds] = await Promise.all([cachedJewelryIds(), cachedBestsellerIds()]);

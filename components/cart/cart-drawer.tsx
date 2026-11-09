@@ -197,10 +197,17 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
       <div className="mx-auto h-px w-full max-w-xl border-t border-line" />
 
       {lastAdded && confirmAt === lastAdded.at && items.some((i) => i.variantId === lastAdded.item.variantId) && (
-        // Re-keyed per add so the short slide-in replays for every new product, including ones
-        // added from the recommendations below while the cart stays open.
-        <div key={lastAdded.at} role="status" aria-live="polite" className="cart-confirm mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3">
-          <div className="flex items-center gap-3 border border-line bg-[#f7f7f7] p-2.5 pr-3">
+        // Re-keyed per add so the animation replays for every new product, including ones added
+        // from the recommendations below while the cart stays open.
+        // A popup over the cart's content (doesn't push anything down): slides in from the right,
+        // stays briefly, slides back out.
+        <div
+          key={lastAdded.at}
+          role="status"
+          aria-live="polite"
+          className="cart-confirm pointer-events-none absolute right-4 top-[76px] z-20 w-[calc(100%-2rem)] max-w-[340px]"
+        >
+          <div className="flex items-center gap-3 border border-line bg-bg p-2.5 pr-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
             <div className="relative h-12 w-12 flex-shrink-0 bg-bg">
               {lastAdded.item.image && <Image src={lastAdded.item.image} alt="" fill sizes="48px" className="object-contain" />}
             </div>

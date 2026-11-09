@@ -79,17 +79,17 @@ body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [dat
   .pagination-pending { animation: none; }
 }
 
-/* Cart drawer: the "✓ Tillagd i varukorgen!" confirmation slides in on every add, stays briefly,
-   then fades and folds away (components/cart/cart-drawer.tsx unmounts it after 3.2s). */
+/* Cart drawer: the "✓ Tillagd i varukorgen!" popup slides in from the right over the cart's
+   content, stays briefly, then slides back out (components/cart/cart-drawer.tsx unmounts it
+   after 3.2s). */
 @keyframes cart-confirm {
-  0% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; }
-  8% { opacity: 1; max-height: 120px; padding-top: 0.75rem; padding-bottom: 0.75rem; border-bottom-width: 1px; }
-  86% { opacity: 1; max-height: 120px; padding-top: 0.75rem; padding-bottom: 0.75rem; border-bottom-width: 1px; }
-  100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; }
+  0% { opacity: 0; transform: translateX(calc(100% + 1rem)); }
+  9% { opacity: 1; transform: translateX(0); }
+  88% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(calc(100% + 1rem)); }
 }
 .cart-confirm {
-  overflow: hidden;
-  animation: cart-confirm 3.2s ease-in-out forwards;
+  animation: cart-confirm 3.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .cart-confirm { animation: none; }
