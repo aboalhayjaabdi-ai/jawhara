@@ -6,6 +6,7 @@
 //
 // Which *kind* of recommendation to show is decided client-side from the cart's authoritative
 // totals (promoProgress); this module only answers "which products for that kind".
+import { unstable_cache } from "next/cache";
 import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
 
@@ -40,6 +41,21 @@ async function getFreeWalletProductIds(): Promise<string[]> {
   return ids.sort((a, b) => (rank.get(a) ?? 1e6) - (rank.get(b) ?? 1e6));
 }
 
+// The candidate pools don't depend on the visitor's cart, so they're cached across requests for
+// 60s -- the same freshness the storefront pages themselves use (revalidate = 60) -- and only the
+// cheap per-cart filtering below runs per request. Availability is re-checked by /api/cart/totals
+// the moment anything is actually added.
+const CACHE = { revalidate: 60 };
+const cachedWalletCards = unstable_cache(async () => getProductCardsByIds(await getFreeWalletProductIds()), ["cart-recs-wallets"], CACHE);
+const cachedJewelryIds = unstable_cache(() => getCollectionProductIds(JEWELRY_COLLECTION), ["cart-recs-jewelry-ids"], CACHE);
+const cachedBestsellerIds = unstable_cache(() => getCollectionProductIds(BESTSELLER_COLLECTION), ["cart-recs-bestseller-ids"], CACHE);
+const cachedCardsByIds = unstable_cache((ids: string[]) => getProductCardsByIds(ids), ["cart-recs-cards"], CACHE);
+const cachedRelated = unstable_cache(
+  (productId: string, handle: string, limit: number) => getRelatedProductCards(productId, handle, limit),
+  ["cart-recs-related"],
+  CACHE
+);
+
 async function productIdsByHandles(handles: string[]): Promise<{ id: string; handle: string }[]> {
   if (handles.length === 0) return [];
   const { data } = await supabase.from("products").select("id, handle").in("handle", handles).eq("status", "active");
@@ -67,42 +83,40 @@ export async function getCartRecommendations(input: {
 }): Promise<ProductCard[]> {
   const cartProducts = new Set(input.cartProductIds);
   const cartVariants = new Set(input.cartVariantIds);
-  const notInCart = (ids: string[]) => ids.filter((id) => !cartProducts.has(id));
   const finish = (cards: ProductCard[]) => addable(dedupe(cards), cartVariants).slice(0, MAX_PRODUCTS);
 
   if (input.mode === "wallet") {
-    const walletIds = await getFreeWalletProductIds();
     // Wallets already in the cart stay out (picking the same wallet twice isn't a new choice).
-    return finish(await getProductCardsByIds(notInCart(walletIds)));
+    return finish((await cachedWalletCards()).filter((c) => !cartProducts.has(c.id)));
   }
 
-  const jewelryIds = await getCollectionProductIds(JEWELRY_COLLECTION);
+  const [jewelryIds, bestsellerIds] = await Promise.all([cachedJewelryIds(), cachedBestsellerIds()]);
   const jewelrySet = new Set(jewelryIds);
+  const topJewelry = jewelryIds.slice(0, 24);
 
   if (input.mode === "complete-3for2") {
     // Most relevant first: the same specific category as a piece already in the cart (e.g. more
     // gold bracelets next to a gold bracelet), then the store's own jewelry order. Only products
     // that actually count towards "3 för 2" are kept.
     const anchor = input.cartProductIds.find((id) => jewelrySet.has(id));
-    const related = anchor ? await getRelatedProductCards(anchor, "", 10) : [];
-    const fallback = await getProductCardsByIds(notInCart(jewelryIds).slice(0, 16));
+    const [related, fallback] = await Promise.all([anchor ? cachedRelated(anchor, "", 10) : Promise.resolve([]), cachedCardsByIds(topJewelry)]);
     return finish([...related, ...fallback].filter((c) => c.threeForTwo && !cartProducts.has(c.id)));
   }
 
   if (input.mode === "match-bag") {
-    const bestsellerIds = await getCollectionProductIds(BESTSELLER_COLLECTION);
-    const ids = notInCart([...bestsellerIds.filter((id) => jewelrySet.has(id)), ...jewelryIds.slice(0, 16)]);
-    return finish(await getProductCardsByIds([...new Set(ids)].slice(0, 16)));
+    const ids = [...new Set([...bestsellerIds.filter((id) => jewelrySet.has(id)), ...topJewelry])].slice(0, 24);
+    return finish((await cachedCardsByIds(ids)).filter((c) => !cartProducts.has(c.id)));
   }
 
   if (input.mode === "viewed") {
     // Related to what the visitor actually looked at (most recent first), then those viewed
     // products themselves.
     const viewed = (await productIdsByHandles(input.viewedHandles.slice(0, 4))).filter((p) => !cartProducts.has(p.id));
-    const related = (
-      await Promise.all(viewed.slice(0, 2).map((p) => getRelatedProductCards(p.id, p.handle, 6)))
-    ).flat();
-    const viewedCards = await getProductCardsByIds(viewed.map((p) => p.id));
+    const [relatedLists, viewedCards] = await Promise.all([
+      Promise.all(viewed.slice(0, 2).map((p) => cachedRelated(p.id, p.handle, 6))),
+      cachedCardsByIds(viewed.map((p) => p.id)),
+    ]);
+    const related = relatedLists.flat();
     const viewedIds = new Set(viewed.map((p) => p.id));
     const cards = [...related.filter((c) => !viewedIds.has(c.id)), ...viewedCards].filter((c) => !cartProducts.has(c.id));
     if (cards.length >= 2) return finish(cards);
@@ -110,7 +124,6 @@ export async function getCartRecommendations(input: {
   }
 
   // "curated": the store's own bestsellers, then its jewelry order.
-  const bestsellerIds = await getCollectionProductIds(BESTSELLER_COLLECTION);
-  const ids = notInCart([...bestsellerIds, ...jewelryIds.slice(0, 16)]);
-  return finish(await getProductCardsByIds([...new Set(ids)].slice(0, 16)));
+  const ids = [...new Set([...bestsellerIds, ...topJewelry])].slice(0, 24);
+  return finish((await cachedCardsByIds(ids)).filter((c) => !cartProducts.has(c.id)));
 }
