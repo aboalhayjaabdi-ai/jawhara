@@ -120,6 +120,7 @@ export default async function CollectionPage({
       page={page}
       tiles={tiles}
       promo={promoFor(meta.template_suffix, handle)}
+      currentHandle={handle}
     />
   );
 }
@@ -132,6 +133,7 @@ function CollectionGrid({
   page,
   tiles = [],
   promo,
+  currentHandle,
 }: {
   title: string;
   description: string | null;
@@ -140,6 +142,7 @@ function CollectionGrid({
   page: number;
   tiles?: CollectionTile[];
   promo?: { text: string; emphasis: string };
+  currentHandle?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
@@ -163,7 +166,7 @@ function CollectionGrid({
         )}
       </div>
 
-      <SubcategoryTiles tiles={tiles} />
+      <SubcategoryTiles tiles={tiles} currentHandle={currentHandle} />
 
       <div className="mb-8">
         <SortFilterBar />

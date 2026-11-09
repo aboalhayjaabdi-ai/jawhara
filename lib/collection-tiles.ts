@@ -49,9 +49,9 @@ const getCachedRootImage = unstable_cache(
   { revalidate: 300 }
 );
 
-/** `currentHandle` is the collection actually being viewed -- used to (1) drop the "back to main"
- * tile when that *is* the main collection, and (2) never show a tile linking to the page the
- * customer is already on, for any tile in the group. */
+/** `currentHandle` is the collection actually being viewed -- used to drop the "back to main"
+ * tile when that *is* the main collection. A group tile for the current collection itself stays in
+ * the row; the tile component marks it as the active one (underlined label). */
 export async function getCollectionTileGroup(templateSuffix: string | null, currentHandle: string): Promise<CollectionTile[]> {
   if (!templateSuffix) return [];
 
@@ -69,8 +69,7 @@ export async function getCollectionTileGroup(templateSuffix: string | null, curr
 
   const tiles = (data ?? [])
     .map((row) => row.collections as unknown as CollectionTile | null)
-    .filter((c): c is CollectionTile => c !== null)
-    .filter((c) => c.handle !== currentHandle);
+    .filter((c): c is CollectionTile => c !== null);
 
   if (showBack) tiles.unshift({ title: back.label, handle: back.handle, image_url: rootImage });
 
