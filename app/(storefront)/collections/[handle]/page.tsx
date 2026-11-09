@@ -23,11 +23,21 @@ export const revalidate = 60;
 const PAGE_SIZE = 24;
 const GRID_ANCHOR_ID = "produktrutnat";
 // Small campaign line shown directly under the collection title, keyed by the collection's
-// template group -- so the main "Väskor" collection and every bag sub-collection (LV, CC, H, ...)
-// all get it. Handles in `exclude` share the group's template but aren't part of the offer
-// (gift sets aren't in the "Valfri Plånbok" discount).
-const COLLECTION_PROMOS: Record<string, { text: string; emphasis: string; exclude?: string[] }> = {
-  vaskor: { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!", exclude: ["gift-sets"] },
+// template group -- so a main collection and every sub-collection in its group all get it.
+// Handles in `exclude` share a group's template but aren't part of that offer (gift sets aren't
+// in the "Valfri Plånbok" discount). `icon: false` renders the same box without the gift icon.
+type CollectionPromo = { text: string; emphasis: string; icon: boolean; exclude?: string[] };
+const WALLET_PROMO: CollectionPromo = { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!", icon: true, exclude: ["gift-sets"] };
+const JEWELRY_PROMO: CollectionPromo = { text: "3 för 2", emphasis: "på alla smycken!", icon: false };
+const COLLECTION_PROMOS: Record<string, CollectionPromo> = {
+  vaskor: WALLET_PROMO,
+  tillbehor: WALLET_PROMO, // Plånböcker
+  "alla-smycken": JEWELRY_PROMO,
+  armband: JEWELRY_PROMO,
+  "klover-armband": JEWELRY_PROMO,
+  halsband: JEWELRY_PROMO,
+  ringar: JEWELRY_PROMO,
+  orhangen: JEWELRY_PROMO,
 };
 
 function promoFor(templateSuffix: string | null, handle: string) {
@@ -141,7 +151,7 @@ function CollectionGrid({
   total: number;
   page: number;
   tiles?: CollectionTile[];
-  promo?: { text: string; emphasis: string };
+  promo?: CollectionPromo;
   currentHandle?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -152,13 +162,17 @@ function CollectionGrid({
         {description && <div className="mx-auto mt-3 max-w-xl text-sm text-muted" dangerouslySetInnerHTML={{ __html: description }} />}
         {promo && (
           <div className="mx-auto mt-5 flex max-w-xl items-center justify-center gap-3 border border-line bg-[#f7f7f7] px-4 py-3 text-left sm:px-6">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0" aria-hidden>
-              <rect x="3" y="8" width="18" height="4" rx="1" />
-              <path d="M12 8v13" />
-              <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
-              <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
-            </svg>
-            <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
+            {promo.icon && (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0" aria-hidden>
+                  <rect x="3" y="8" width="18" height="4" rx="1" />
+                  <path d="M12 8v13" />
+                  <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+                  <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+                </svg>
+                <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
+              </>
+            )}
             <p className="text-[13px] leading-snug sm:text-sm">
               {promo.text} <span className="font-semibold">{promo.emphasis}</span>
             </p>
