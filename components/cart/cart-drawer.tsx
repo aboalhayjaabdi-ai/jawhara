@@ -9,6 +9,7 @@ import { buildDisplayLines, buildCartSummary } from "@/lib/cart-display";
 import { trackInitiateCheckout } from "@/lib/marketing/events";
 import type { GiftBoxOffer } from "@/lib/gift-box";
 import { CartOffers } from "./cart-offers";
+import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
 
 function formatSek(amount: number) {
@@ -198,32 +199,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
       {lastAdded && confirmAt === lastAdded.at && items.some((i) => i.variantId === lastAdded.item.variantId) && (
         // Re-keyed per add so the animation replays for every new product, including ones added
-        // from the recommendations below while the cart stays open.
-        // A popup over the cart's content (doesn't push anything down): slides in from the right,
-        // stays briefly, slides back out.
-        <div
-          key={lastAdded.at}
-          role="status"
-          aria-live="polite"
-          className="cart-confirm pointer-events-none absolute right-4 top-[76px] z-20 w-max max-w-[calc(100%-2rem)]"
-        >
-          {/* Sized to its content (no empty space), capped to the cart's width. */}
-          <div className="flex items-center gap-2.5 border border-line bg-bg py-2 pl-2 pr-3.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-            <div className="relative h-12 w-12 flex-shrink-0 bg-bg">
-              {lastAdded.item.image && <Image src={lastAdded.item.image} alt="" fill sizes="48px" className="object-contain" />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]">✓ Tillagd i varukorgen!</div>
-              <div className="mt-0.5 truncate text-xs">
-                {lastAdded.item.title}
-                {normalizeVariantTitle(lastAdded.item.variantTitle) ? ` · ${normalizeVariantTitle(lastAdded.item.variantTitle)}` : ""}
-              </div>
-              <div className="text-xs text-muted">
-                {lastAdded.qty} st · {formatSek(lastAdded.item.price * lastAdded.qty)}
-              </div>
-            </div>
-          </div>
-        </div>
+        // from the recommendations below while the cart stays open. Can be swiped away.
+        <CartAddedPopup key={lastAdded.at} item={lastAdded.item} qty={lastAdded.qty} onDismiss={() => setConfirmAt(null)} />
       )}
 
       {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
