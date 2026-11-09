@@ -361,8 +361,8 @@ export function ProductDetail({
   variantGallery: VariantGallery | null;
   /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForWalletPromo --
    * whether this product's real shopify_id is in the live "Valfri Plånbok" discount's
-   * buy_item_ids. Gates the "Välj din plånbok här" link independently of content.offerMessage,
-   * since some products share the same display template without being discount-eligible. */
+   * buy_item_ids. Gates the whole offer box (content.offerMessage), since some products share the
+   * same display template without being discount-eligible. */
   walletPromoEligible: boolean;
   /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForThreeForTwo --
    * same real, live "3 för 2" collection scope the grid cards (ProductCard) use, so the badge
@@ -513,7 +513,9 @@ export function ProductDetail({
             </Link>
           )}
 
-          {content?.offerMessage && (
+          {/* The whole offer box (not just its link) is hidden on products that aren't in the live
+              "Valfri Plånbok" discount -- the box would otherwise promise a deal checkout won't give. */}
+          {content?.offerMessage && walletPromoEligible && (
             <div className="relative mt-6 border border-line p-1">
               <div className="border border-line/60 bg-[#f7f7f7] p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -538,7 +540,7 @@ export function ProductDetail({
                   )}
                 </div>
                 <p className="mt-4 text-sm leading-7 text-muted">{content.offerMessage.body}</p>
-                {walletPromoEligible && content.offerMessage.href && (
+                {content.offerMessage.href && (
                   <Link
                     href={content.offerMessage.href}
                     className="mt-5 flex h-12 w-full max-w-xs items-center justify-center gap-2 border border-fg text-xs font-semibold uppercase tracking-[0.18em]"
