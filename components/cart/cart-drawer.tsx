@@ -205,9 +205,10 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           key={lastAdded.at}
           role="status"
           aria-live="polite"
-          className="cart-confirm pointer-events-none absolute right-4 top-[76px] z-20 w-[calc(100%-2rem)] max-w-[340px]"
+          className="cart-confirm pointer-events-none absolute right-4 top-[76px] z-20 w-max max-w-[calc(100%-2rem)]"
         >
-          <div className="flex items-center gap-3 border border-line bg-bg p-2.5 pr-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          {/* Sized to its content (no empty space), capped to the cart's width. */}
+          <div className="flex items-center gap-2.5 border border-line bg-bg py-2 pl-2 pr-3.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
             <div className="relative h-12 w-12 flex-shrink-0 bg-bg">
               {lastAdded.item.image && <Image src={lastAdded.item.image} alt="" fill sizes="48px" className="object-contain" />}
             </div>
