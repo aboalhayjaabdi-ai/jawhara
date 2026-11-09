@@ -16,7 +16,7 @@ function formatSek(amount: number) {
 
 const HEADINGS: Record<RecommendationMode, string> = {
   wallet: "Välj din gratis plånbok 🎁",
-  "complete-3for2": "Komplettera ditt 3 för 2!",
+  "complete-3for2": "Välj ett smycke till och få ett gratis",
   "bags-wallets": "Utvalt för dig",
   "match-bag": "Matcha din väska med dessa favoriter",
   viewed: "Du kanske också gillar",
@@ -99,6 +99,13 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
 
   if (items.length === 0 || !shownMode || products.length === 0) return null;
   const isWallet = shownMode === "wallet";
+  // "3 för 2" heading follows how many pieces are still missing (1 or 2).
+  const jewelryPromo = findPromos(totals).jewelry;
+  const jewelryMissing = jewelryPromo ? jewelryPromo.buyQuantity + jewelryPromo.getQuantity - jewelryPromo.buyUnits : 1;
+  const heading =
+    shownMode === "complete-3for2" && jewelryMissing > 1
+      ? `Välj ${jewelryMissing} smycken till och få ett gratis`
+      : HEADINGS[shownMode];
 
   function add(product: ProductCard, variantId: string) {
     const v = product.variants.find((x) => x.id === variantId);
@@ -128,9 +135,9 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
   }
 
   return (
-    <section aria-label={HEADINGS[shownMode]} className="pt-1">
+    <section aria-label={heading} className="pt-1">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">{HEADINGS[shownMode]}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">{heading}</h3>
         <div className="hidden gap-1.5 [@media(hover:hover)]:flex">
           <button type="button" aria-label="Föregående" onClick={() => scrollBy(-1)} className="btn-fx flex h-7 w-7 items-center justify-center border border-line text-sm">
             ‹
