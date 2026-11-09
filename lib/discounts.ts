@@ -175,7 +175,13 @@ export async function computeCheckoutTotals(
   customerEmail?: string
 ): Promise<CheckoutTotals> {
   const errors: string[] = [];
-  const variantMap = await loadEligibleVariants(cart.map((c) => c.variantId));
+  // The three independent reads run in parallel (one database round trip instead of three in a
+  // row) -- same data, same calculation below.
+  const [variantMap, discounts, vatRatePercent] = await Promise.all([
+    loadEligibleVariants(cart.map((c) => c.variantId)),
+    loadActiveDiscounts(),
+    getVatRatePercent(),
+  ]);
 
   const lines = cart
     .filter((c) => variantMap.has(c.variantId))
@@ -201,7 +207,6 @@ export async function computeCheckoutTotals(
   const units: { variantId: string; price: number }[] = [];
   for (const line of lines) for (let i = 0; i < line.qty; i++) units.push({ variantId: line.variantId, price: line.unitPrice });
 
-  const discounts = await loadActiveDiscounts();
   const automatic = discounts.filter((d) => d.kind === "automatic");
 
   // Which cart variants are eligible for which active BXGY promotion -- display-only, for the
@@ -338,7 +343,6 @@ export async function computeCheckoutTotals(
 
   const discountTotal = Math.round(appliedDiscounts.reduce((sum, a) => sum + a.amountOff, 0) * 100) / 100;
   const taxableAmount = Math.max(0, subtotal - discountTotal);
-  const vatRatePercent = await getVatRatePercent();
   const vat = Math.round(taxableAmount * (vatRatePercent / 100) * 100) / 100;
   const total = Math.round((taxableAmount + vat) * 100) / 100;
 

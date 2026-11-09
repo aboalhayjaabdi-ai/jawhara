@@ -31,7 +31,7 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
 }
 
 // A compact strip pinned at the top of the cart (under the header), separated by a thin divider.
-const STRIP = "mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3";
+const STRIP = "cart-fade-in mx-auto w-full max-w-xl flex-shrink-0 border-b border-line px-6 py-3";
 const LINK_BUTTON = "btn-fx inline-flex h-8 flex-shrink-0 items-center border border-fg bg-bg px-3 text-[10px] font-semibold uppercase tracking-[0.14em]";
 
 export function CartOffers({ totals, onNavigate }: { totals: CheckoutTotals | null; onNavigate: () => void }) {

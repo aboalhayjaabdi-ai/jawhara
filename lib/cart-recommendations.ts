@@ -160,3 +160,13 @@ export async function getCartRecommendations(input: {
   const ids = [...new Set([...bestsellerIds, ...topJewelry])].slice(0, 24);
   return finish((await cachedCardsByIds(ids)).filter((c) => !cartProducts.has(c.id)));
 }
+
+/** Every mode's products for one cart, in a single request -- the cart can then fetch these in
+ * parallel with its totals (instead of waiting for totals to pick a mode first) and switch modes
+ * instantly as the cart changes. All pools are cached, so this costs little more than one mode. */
+export async function getCartRecommendationBundle(input: Omit<Parameters<typeof getCartRecommendations>[0], "mode">) {
+  const entries = await Promise.all(
+    RECOMMENDATION_MODES.map(async (mode) => [mode, await getCartRecommendations({ ...input, mode }).catch(() => [])] as const)
+  );
+  return Object.fromEntries(entries) as Record<RecommendationMode, ProductCard[]>;
+}

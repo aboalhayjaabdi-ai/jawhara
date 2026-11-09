@@ -94,3 +94,15 @@ body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [dat
 @media (prefers-reduced-motion: reduce) {
   .cart-confirm { animation: none; }
 }
+
+/* Cart drawer: the 3 för 2 strip and the recommendations fade in softly instead of popping in. */
+@keyframes cart-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cart-fade-in {
+  animation: cart-fade-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cart-fade-in { animation: none; }
+}

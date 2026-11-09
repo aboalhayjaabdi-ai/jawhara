@@ -337,10 +337,27 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                   <p className="mt-1.5 text-[11px] text-muted">Frakt och skatter ingår.</p>
                 </>
               ) : (
-                <div className="flex items-center justify-between text-base font-semibold">
-                  <span>Totalt</span>
-                  <span>{loading ? "Beräknar..." : fetchError ?? "—"}</span>
-                </div>
+                fetchError && !loading ? (
+                  <div className="flex items-center justify-between text-base font-semibold">
+                    <span>Total</span>
+                    <span className="text-sm font-normal text-red-700">{fetchError}</span>
+                  </div>
+                ) : (
+                  // Until the authoritative totals arrive (a fraction of a second), show the cart's
+                  // own subtotal right away instead of "Beräknar..." -- discounts, if any, are
+                  // applied as soon as the real totals land. Checkout stays disabled meanwhile.
+                  <>
+                    <div className="flex items-center justify-between text-sm text-muted">
+                      <span>Delsumma</span>
+                      <span>{formatSek(subtotal)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
+                      <span>Total</span>
+                      <span className="animate-pulse">{formatSek(subtotal)}</span>
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-muted">Frakt och skatter ingår.</p>
+                  </>
+                )
               )}
             </div>
           )}

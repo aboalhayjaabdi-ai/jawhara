@@ -430,6 +430,36 @@ export function useJustAdded(durationMs: number): boolean {
  * (debounced) whenever the cart contents or discount code change, so quantity edits, removals,
  * and code changes all stay correct without the caller needing to re-derive anything client-side.
  */
+// Totals already computed for an exact cart (lines + code), shared by every useCartTotals user and
+// persisted for the browser tab -- so reopening the cart, navigating to another page, or going
+// back to a cart state seen before shows real totals instantly instead of "Beräknar...". Each hit
+// is still re-validated in the background, so a changed price/stock/discount is picked up.
+const TOTALS_CACHE_KEY = "jawhara_cart_totals_v1";
+const totalsCache = new Map<string, CheckoutTotals>();
+function readCachedTotals(fingerprint: string): CheckoutTotals | null {
+  if (totalsCache.has(fingerprint)) return totalsCache.get(fingerprint)!;
+  try {
+    const raw = sessionStorage.getItem(TOTALS_CACHE_KEY);
+    const stored = raw ? (JSON.parse(raw) as { fingerprint: string; totals: CheckoutTotals }) : null;
+    if (stored?.fingerprint === fingerprint) {
+      totalsCache.set(fingerprint, stored.totals);
+      return stored.totals;
+    }
+  } catch {
+    // ignore unavailable storage
+  }
+  return null;
+}
+function writeCachedTotals(fingerprint: string, totals: CheckoutTotals) {
+  totalsCache.set(fingerprint, totals);
+  if (totalsCache.size > 30) totalsCache.delete(totalsCache.keys().next().value!);
+  try {
+    sessionStorage.setItem(TOTALS_CACHE_KEY, JSON.stringify({ fingerprint, totals }));
+  } catch {
+    // ignore
+  }
+}
+
 export function useCartTotals(): { totals: CheckoutTotals | null; loading: boolean; fetchError: string | null } {
   const { items, discountCode } = useCart();
   const [totals, setTotals] = useState<CheckoutTotals | null>(null);
@@ -457,7 +487,16 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
       return;
     }
     const id = ++requestId.current;
-    setLoading(true);
+    const fingerprint = cartFingerprint(items, discountCode);
+    const cached = readCachedTotals(fingerprint);
+    if (cached) {
+      // Instant: show the known totals and only re-validate quietly (no "loading" state).
+      setTotals(cached);
+      setFetchError(null);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     const timeout = setTimeout(async () => {
       try {
         // fetchWithTimeout is what actually guarantees this can't hang forever -- without it, a
@@ -480,17 +519,20 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
           setFetchError(data.error ?? "Kunde inte beräkna totalsumman.");
           setTotals(null);
         } else {
+          writeCachedTotals(fingerprint, data as CheckoutTotals);
           setTotals(data as CheckoutTotals);
           setFetchError(null);
         }
       } catch {
         if (id !== requestId.current) return;
-        setFetchError("Kunde inte beräkna totalsumman.");
-        setTotals(null);
+        if (!cached) {
+          setFetchError("Kunde inte beräkna totalsumman.");
+          setTotals(null);
+        }
       } finally {
         if (id === requestId.current) setLoading(false);
       }
-    }, 300); // debounce rapid qty +/- clicks
+    }, cached ? 400 : 60); // near-immediate for a new cart state; rapid qty clicks still coalesce
     return () => clearTimeout(timeout);
   }, [items, discountCode, refreshNonce]);
 

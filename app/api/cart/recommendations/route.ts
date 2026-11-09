@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCartRecommendations, RECOMMENDATION_MODES, type RecommendationMode } from "@/lib/cart-recommendations";
+import { getCartRecommendationBundle, getCartRecommendations, RECOMMENDATION_MODES, type RecommendationMode } from "@/lib/cart-recommendations";
 
 // Read-only product suggestions for the cart drawer's carousel. Never prices anything or touches
 // discounts -- whatever gets added from the carousel is priced by the same /api/cart/totals and
@@ -12,7 +12,19 @@ function stringList(value: unknown, max: number): string[] {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const mode = body?.mode as RecommendationMode;
+  const mode = body?.mode as RecommendationMode | "all";
+  if (mode === "all") {
+    try {
+      const byMode = await getCartRecommendationBundle({
+        cartProductIds: stringList(body?.cartProductIds, MAX_IDS),
+        cartVariantIds: stringList(body?.cartVariantIds, MAX_IDS),
+        viewedHandles: stringList(body?.viewedHandles, 10),
+      });
+      return NextResponse.json({ byMode });
+    } catch {
+      return NextResponse.json({ byMode: {} });
+    }
+  }
   if (!RECOMMENDATION_MODES.includes(mode)) {
     return NextResponse.json({ error: "Ogiltig typ." }, { status: 400 });
   }
