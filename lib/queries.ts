@@ -358,10 +358,13 @@ export const getCollectionMeta = cache(async (handle: string) => {
 export async function getCollectionProductCount(handle: string): Promise<number> {
   const { data: collection } = await supabase.from("collections").select("id").eq("handle", handle).single();
   if (!collection) return 0;
+  // Must apply the same active-only filter as getCollectionProductCards -- counting every linked
+  // product (drafts/archived included) inflated "N PRODUKTER" and produced trailing empty pages.
   const { count } = await supabase
     .from("collection_products")
-    .select("product_id", { count: "exact", head: true })
-    .eq("collection_id", collection.id);
+    .select("product_id, products!inner(status)", { count: "exact", head: true })
+    .eq("collection_id", collection.id)
+    .eq("products.status", "active");
   return count ?? 0;
 }
 
