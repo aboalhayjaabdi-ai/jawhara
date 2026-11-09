@@ -20,17 +20,22 @@ const HEADINGS: Record<RecommendationMode, string> = {
   "bags-wallets": "Utvalt för dig",
   "match-bag": "Matcha din väska med dessa favoriter",
   viewed: "Du kanske också gillar",
+  mixed: "Utvalt för dig",
   curated: "Utvalt för dig",
 };
 
 /** Priority order from the cart's own authoritative promotion status (lib/discounts.ts
- * promoProgress): an unclaimed free wallet first; then, with 1-2 jewelry pieces, more jewelry to
+ * promoProgress): an unclaimed free wallet first; with both bags and jewelry in the cart, the
+ * visitor's own browsing or mixed bestsellers; then, with 1-2 jewelry pieces, more jewelry to
  * reach 3 för 2; once 3 för 2 is earned, bags and wallets instead of more jewelry; jewelry to go
  * with a bag; then the visitor's own browsing; then the store's curated picks. */
 function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMode {
   const { jewelry, wallet } = findPromos(totals);
   const walletInfo = walletStatus(wallet);
   if (walletInfo?.needsChoice) return "wallet";
+  // Bag(s) AND jewelry in the cart (free wallet already chosen): what they've been looking at,
+  // or -- without any history -- bestsellers mixed from every category.
+  if (walletInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
   if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < jewelry.buyQuantity + jewelry.getQuantity) {
     return "complete-3for2";
   }

@@ -10,15 +10,18 @@ import { unstable_cache } from "next/cache";
 import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
 
-export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "curated";
+export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "mixed" | "curated";
 
-export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "bags-wallets", "match-bag", "viewed", "curated"];
+export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "bags-wallets", "match-bag", "viewed", "mixed", "curated"];
 
 const MAX_PRODUCTS = 6;
 const JEWELRY_COLLECTION = "alla-smycken";
 const BESTSELLER_COLLECTION = "bastsaljare-1";
 const WALLET_COLLECTION = "tillbehor"; // "Plånböcker"
 const BAG_COLLECTION = "vaskor-och-tillbehor"; // "Väskor"
+// Top sellers across every category for "mixed": each category's own admin order (the
+// "Rekommenderat" sort), picked round-robin so no single category dominates.
+const MIXED_CATEGORY_COLLECTIONS = ["armband", "halsband", "vaskor-och-tillbehor", "ringar", "orhangen", "tillbehor"];
 
 /** Real "get" products of the live automatic buy-a-bag-get-a-wallet promotion (disjoint buy/get
  * product lists), ordered like the Plånböcker collection. Never a hardcoded list. */
@@ -52,6 +55,7 @@ const cachedJewelryIds = unstable_cache(() => getCollectionProductIds(JEWELRY_CO
 const cachedBestsellerIds = unstable_cache(() => getCollectionProductIds(BESTSELLER_COLLECTION), ["cart-recs-bestseller-ids"], CACHE);
 const cachedBagIds = unstable_cache(() => getCollectionProductIds(BAG_COLLECTION), ["cart-recs-bag-ids"], CACHE);
 const cachedWalletIds = unstable_cache(() => getCollectionProductIds(WALLET_COLLECTION), ["cart-recs-wallet-ids"], CACHE);
+const cachedCategoryIds = unstable_cache((handle: string) => getCollectionProductIds(handle), ["cart-recs-category-ids"], CACHE);
 const cachedCardsByIds = unstable_cache((ids: string[]) => getProductCardsByIds(ids), ["cart-recs-cards"], CACHE);
 const cachedRelated = unstable_cache(
   (productId: string, handle: string, limit: number) => getRelatedProductCards(productId, handle, limit),
@@ -107,6 +111,18 @@ export async function getCartRecommendations(input: {
     return finish(await cachedCardsByIds(mixed));
   }
 
+  // Bestsellers from every category, mixed -- used directly ("mixed") and as the fallback when a
+  // visitor's viewing history is too thin for "viewed".
+  async function mixedBestsellers(): Promise<ProductCard[]> {
+    const categories = await Promise.all(MIXED_CATEGORY_COLLECTIONS.map((h) => cachedCategoryIds(h)));
+    const queues = categories.map((ids) => ids.filter((id) => !cartProducts.has(id)).slice(0, 4));
+    const mixed: string[] = [];
+    for (let round = 0; round < 4; round++) for (const q of queues) if (q[round]) mixed.push(q[round]);
+    return cachedCardsByIds([...new Set(mixed)].slice(0, 24));
+  }
+
+  if (input.mode === "mixed") return finish(await mixedBestsellers());
+
   const [jewelryIds, bestsellerIds] = await Promise.all([cachedJewelryIds(), cachedBestsellerIds()]);
   const jewelrySet = new Set(jewelryIds);
   const topJewelry = jewelryIds.slice(0, 24);
@@ -126,8 +142,7 @@ export async function getCartRecommendations(input: {
   }
 
   if (input.mode === "viewed") {
-    // Related to what the visitor actually looked at (most recent first), then those viewed
-    // products themselves.
+    // What the visitor actually looked at (most recent first), then products related to those.
     const viewed = (await productIdsByHandles(input.viewedHandles.slice(0, 4))).filter((p) => !cartProducts.has(p.id));
     const [relatedLists, viewedCards] = await Promise.all([
       Promise.all(viewed.slice(0, 2).map((p) => cachedRelated(p.id, p.handle, 6))),
@@ -135,9 +150,10 @@ export async function getCartRecommendations(input: {
     ]);
     const related = relatedLists.flat();
     const viewedIds = new Set(viewed.map((p) => p.id));
-    const cards = [...related.filter((c) => !viewedIds.has(c.id)), ...viewedCards].filter((c) => !cartProducts.has(c.id));
+    const cards = [...viewedCards, ...related.filter((c) => !viewedIds.has(c.id))].filter((c) => !cartProducts.has(c.id));
     if (cards.length >= 2) return finish(cards);
-    // Too little history -> fall through to curated picks below.
+    // Too little history -> bestsellers from every category instead.
+    return finish(await mixedBestsellers());
   }
 
   // "curated": the store's own bestsellers, then its jewelry order.
