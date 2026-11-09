@@ -363,7 +363,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                     <span>Total</span>
                     <span>{formatSek(summary.total)}</span>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-muted">Tullavgifter samt frakt och skatter ingår.</p>
+                  <p className="mt-1.5 text-[11px] text-muted">Frakt och skatter ingår.</p>
                 </>
               ) : (
                 <div className="flex items-center justify-between text-base font-semibold">
