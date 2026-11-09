@@ -12,7 +12,7 @@ export default async function NotFound() {
     <div className="mx-auto max-w-[1328px] px-6 py-20 text-center lg:px-14">
       <h1 className="text-4xl">Page not found</h1>
       <p className="mt-4 text-sm text-muted">The link may be incorrect, or the page has been removed.</p>
-      <Link href="/collections/all" className="mt-8 inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
+      <Link href="/collections/all" className="btn-fx mt-8 inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
         Continue shopping
       </Link>
 

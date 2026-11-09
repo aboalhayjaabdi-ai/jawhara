@@ -395,7 +395,7 @@ export function TrackingLookupForm({ token }: { token?: string }) {
             <button
               type="submit"
               disabled={status === "loading"}
-              className="mt-2 flex h-12 items-center justify-center bg-fg px-8 text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-50"
+              className="btn-fx mt-2 flex h-12 items-center justify-center bg-fg px-8 text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-50"
             >
               {status === "loading" ? "Söker..." : "Spåra beställning"}
             </button>

@@ -56,7 +56,7 @@ export function ComparisonSlider({
         </div>
         {buttonText && buttonHref && (
           <div className="mt-8 text-center">
-            <Link href={buttonHref} className="inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
+            <Link href={buttonHref} className="btn-fx inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
               {buttonText}
             </Link>
           </div>

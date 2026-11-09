@@ -71,7 +71,7 @@ export function ProductGallery({
             aria-label="Föregående bild"
             onClick={() => scrollToIndex(activeIndex - 1)}
             disabled={activeIndex === 0}
-            className="absolute left-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-bg/90 disabled:opacity-30"
+            className="btn-fx absolute left-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-bg/90 disabled:opacity-30"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M15 6l-6 6 6 6" /></svg>
           </button>
@@ -80,7 +80,7 @@ export function ProductGallery({
             aria-label="Nästa bild"
             onClick={() => scrollToIndex(activeIndex + 1)}
             disabled={activeIndex === images.length - 1}
-            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-bg/90 disabled:opacity-30"
+            className="btn-fx absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-bg/90 disabled:opacity-30"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
           </button>

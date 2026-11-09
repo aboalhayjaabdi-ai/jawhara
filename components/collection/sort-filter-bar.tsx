@@ -20,51 +20,12 @@ export function SortFilterBar() {
     const params = new URLSearchParams(searchParams.toString());
     if (value) params.set(name, value);
     else params.delete(name);
-    params.delete("page"); // any sort/filter change resets pagination
+    params.delete("page"); // any sort change resets pagination
     router.push(`${pathname}?${params.toString()}`);
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-6">
-      <form
-        className="flex flex-wrap items-center gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const form = e.currentTarget;
-          const params = new URLSearchParams(searchParams.toString());
-          const minPrice = (form.elements.namedItem("minPrice") as HTMLInputElement).value;
-          const maxPrice = (form.elements.namedItem("maxPrice") as HTMLInputElement).value;
-          const inStock = (form.elements.namedItem("inStock") as HTMLInputElement).checked;
-          minPrice ? params.set("minPrice", minPrice) : params.delete("minPrice");
-          maxPrice ? params.set("maxPrice", maxPrice) : params.delete("maxPrice");
-          inStock ? params.set("inStock", "1") : params.delete("inStock");
-          params.delete("page");
-          router.push(`${pathname}?${params.toString()}`);
-        }}
-      >
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" name="inStock" defaultChecked={searchParams.get("inStock") === "1"} />
-          Visa endast i lager
-        </label>
-        <input
-          type="number"
-          name="minPrice"
-          placeholder="Min kr"
-          defaultValue={searchParams.get("minPrice") ?? ""}
-          className="h-9 w-24 border border-line px-2 text-xs"
-        />
-        <input
-          type="number"
-          name="maxPrice"
-          placeholder="Max kr"
-          defaultValue={searchParams.get("maxPrice") ?? ""}
-          className="h-9 w-24 border border-line px-2 text-xs"
-        />
-        <button type="submit" className="h-9 border border-fg px-4 text-xs font-semibold uppercase tracking-wide">
-          Filtrera
-        </button>
-      </form>
-
+    <div className="flex flex-wrap items-center justify-start gap-4 border-b border-line pb-6 lg:justify-end">
       <select
         value={searchParams.get("sort") ?? "manual"}
         onChange={(e) => updateParam("sort", e.target.value === "manual" ? null : e.target.value)}

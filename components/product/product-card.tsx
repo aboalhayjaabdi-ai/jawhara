@@ -99,7 +99,7 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
                   setPickerOpen((v) => !v);
                 }
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-bg text-fg shadow-sm transition-opacity hover:opacity-80"
+              className="btn-fx flex h-9 w-9 items-center justify-center rounded-full bg-bg text-fg shadow-sm"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                 <line x1="12" y1="5" x2="12" y2="19" />

@@ -103,7 +103,7 @@ export default async function BlackMonthPage() {
           <div className="mt-10 flex justify-center">
             <Link
               href={`/collections/${page.jewelry.collectionHandle}`}
-              className="flex h-12 min-w-[240px] items-center justify-center bg-fg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-bg transition-opacity hover:opacity-85"
+              className="btn-fx flex h-12 min-w-[240px] items-center justify-center bg-fg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-bg"
             >
               {page.jewelry.buttonText}
             </Link>

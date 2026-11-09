@@ -31,3 +31,31 @@ body:has([data-hero-overlay]) header[data-site-header]:not([data-scrolled]) [dat
   background-color: #ffffff;
   color: #000000;
 }
+
+/* Shared, subtle button feedback (storefront buttons and button-styled links only -- never plain
+   text links). Hover lifts the button with a soft shadow on devices that really hover; press pushes
+   it down slightly and dims it a touch, which also gives tap feedback on mobile. */
+@layer components {
+  .btn-fx {
+    transition:
+      box-shadow 200ms ease,
+      scale 120ms ease,
+      opacity 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  @media (hover: hover) {
+    .btn-fx:hover:not(:disabled) {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    }
+  }
+  .btn-fx:active:not(:disabled) {
+    scale: 0.97; /* `scale`, not `transform`, so it composes with existing translate utilities */
+    opacity: 0.85;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-fx:active:not(:disabled) {
+      scale: none;
+    }
+  }
+}

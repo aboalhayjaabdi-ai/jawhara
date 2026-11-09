@@ -496,7 +496,7 @@ export function ProductDetail({
                   <button
                     key={opt}
                     onClick={() => setSelectedOption(opt)}
-                    className={`flex h-11 min-w-11 items-center justify-center border px-3.5 text-xs ${
+                    className={`btn-fx flex h-11 min-w-11 items-center justify-center border px-3.5 text-xs ${
                       opt === selectedOption ? "border-fg bg-fg text-bg" : "border-line"
                     }`}
                   >
@@ -543,7 +543,7 @@ export function ProductDetail({
                 {content.offerMessage.href && (
                   <Link
                     href={content.offerMessage.href}
-                    className="mt-5 flex h-12 w-full max-w-xs items-center justify-center gap-2 border border-fg text-xs font-semibold uppercase tracking-[0.18em]"
+                    className="btn-fx mt-5 flex h-12 w-full max-w-xs items-center justify-center gap-2 border border-fg text-xs font-semibold uppercase tracking-[0.18em]"
                   >
                     Välj din plånbok
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
@@ -581,7 +581,7 @@ export function ProductDetail({
               })
             }
             disabled={!variant || !isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1)}
-            className="mt-7 flex h-14 w-full items-center justify-center gap-2 bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
+            className="btn-fx mt-7 flex h-14 w-full items-center justify-center gap-2 bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
             {variant && isVariantAvailable({ productStatus: status, inventoryTracked: variant.inventory_tracked, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity }, 1) ? (
               <>

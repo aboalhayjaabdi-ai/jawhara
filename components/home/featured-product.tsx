@@ -36,7 +36,7 @@ export async function FeaturedProductSection({ handle }: { handle: string }) {
               )}
             </div>
           )}
-          <Link href={`/products/${product.handle}`} className="mt-6 inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
+          <Link href={`/products/${product.handle}`} className="btn-fx mt-6 inline-flex h-13 items-center bg-fg px-9 text-xs font-semibold uppercase tracking-widest text-bg">
             Visa produkt
           </Link>
         </div>

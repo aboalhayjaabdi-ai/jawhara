@@ -59,16 +59,11 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   return { title, description, alternates: { canonical: `/collections/${handle}` } };
 }
 
-function parseFilterOptions(searchParams: { sort?: string; inStock?: string; minPrice?: string; maxPrice?: string }): CollectionFilterOptions {
+function parseFilterOptions(searchParams: { sort?: string }): CollectionFilterOptions {
   const sort = VALID_SORTS.includes(searchParams.sort as CollectionSort) ? (searchParams.sort as CollectionSort) : "manual";
-  const minPrice = searchParams.minPrice ? Number(searchParams.minPrice) : undefined;
-  const maxPrice = searchParams.maxPrice ? Number(searchParams.maxPrice) : undefined;
-  return {
-    sort,
-    inStockOnly: searchParams.inStock === "1",
-    minPrice: minPrice != null && !Number.isNaN(minPrice) ? minPrice : undefined,
-    maxPrice: maxPrice != null && !Number.isNaN(maxPrice) ? maxPrice : undefined,
-  };
+  // Only sorting is offered on the storefront -- the stock/price filter UI was removed, so stale
+  // inStock/minPrice/maxPrice query params from old links are ignored rather than silently applied.
+  return { sort };
 }
 
 export default async function CollectionPage({

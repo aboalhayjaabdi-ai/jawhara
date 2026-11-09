@@ -66,7 +66,7 @@ export function Pagination({
         <Link
           href={hrefFor(currentPage - 1)}
           aria-label="Föregående sida"
-          className="flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
+          className="btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
           ‹
         </Link>
@@ -88,8 +88,8 @@ export function Pagination({
             aria-current={p === currentPage ? "page" : undefined}
             className={
               p === currentPage
-                ? "flex h-9 min-w-9 items-center justify-center border border-fg bg-fg px-2 text-xs font-semibold text-bg"
-                : "flex h-9 min-w-9 items-center justify-center border border-line px-2 text-xs font-semibold"
+                ? "btn-fx flex h-9 min-w-9 items-center justify-center border border-fg bg-fg px-2 text-xs font-semibold text-bg"
+                : "btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-xs font-semibold"
             }
           >
             {p}
@@ -101,7 +101,7 @@ export function Pagination({
         <Link
           href={hrefFor(currentPage + 1)}
           aria-label="Nästa sida"
-          className="flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
+          className="btn-fx flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
           ›
         </Link>

@@ -111,7 +111,7 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
               <button type="button" onClick={handleReject} className="h-9 px-4 text-xs font-semibold uppercase tracking-wide text-muted hover:text-fg">
                 Avvisa
               </button>
-              <button type="button" onClick={handleAccept} className="h-9 bg-fg px-4 text-xs font-semibold uppercase tracking-wide text-bg">
+              <button type="button" onClick={handleAccept} className="btn-fx h-9 bg-fg px-4 text-xs font-semibold uppercase tracking-wide text-bg">
                 Acceptera
               </button>
             </div>

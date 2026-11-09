@@ -333,7 +333,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                   <button
                     onClick={applyCode}
                     disabled={!codeInput.trim() || applyingCode}
-                    className="h-11 border border-fg px-4 text-xs font-semibold uppercase tracking-widest disabled:opacity-40"
+                    className="btn-fx h-11 border border-fg px-4 text-xs font-semibold uppercase tracking-widest disabled:opacity-40"
                   >
                     {applyingCode ? "..." : "Använd"}
                   </button>
@@ -379,7 +379,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           <button
             disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isCheckingOut}
             onClick={handleCheckout}
-            className="flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
+            className="btn-fx flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
             {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isCheckingOut ? "Öppnar kassan..." : "Till kassan"}
           </button>

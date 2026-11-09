@@ -59,7 +59,7 @@ export async function ProductListSection({
           <div className="mt-10 flex justify-center">
             <Link
               href={href}
-              className="flex h-12 min-w-[240px] items-center justify-center bg-fg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-bg transition-opacity hover:opacity-85"
+              className="btn-fx flex h-12 min-w-[240px] items-center justify-center bg-fg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-bg"
             >
               {buttonText}
             </Link>
@@ -73,7 +73,7 @@ export async function ProductListSection({
     <section id={id} className="mx-auto max-w-[1328px] px-6 py-12 lg:px-14">
       <div className="mb-9 flex items-end justify-between gap-4">
         <h2 className="text-[24px] sm:text-[28px]">{heading}</h2>
-        <Link href={href} className="flex h-10 shrink-0 items-center bg-fg px-5 text-[11px] font-semibold uppercase tracking-wide text-bg">
+        <Link href={href} className="btn-fx flex h-10 shrink-0 items-center bg-fg px-5 text-[11px] font-semibold uppercase tracking-wide text-bg">
           {buttonText}
         </Link>
       </div>
