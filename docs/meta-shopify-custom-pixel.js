@@ -1,8 +1,8 @@
-// Jawhara – Meta Purchase från Shopify-kassan (webbläsarsidan)
-// =============================================================
+// Jawhara – Meta-pixel för Shopify-kassan (AddPaymentInfo + Purchase)
+// ====================================================================
 // Klistras in i Shopify admin: Inställningar → Kundhändelser → Lägg till anpassad pixel
 // (namn t.ex. "Meta Purchase"). Behörighet: "Krävs inte" – koden kontrollerar själv samtycket
-// (se nedan). Dataförsäljning: "Data som samlas in räknas inte som dataförsäljning".
+// (se nedan). Dataförsäljning: "Data collected qualifies as data sale".
 // Spara och klicka på "Anslut".
 //
 // Varför: kassan ligger på jawharastore.se där jawhara.se:s pixel inte finns, så Meta fick bara
@@ -21,29 +21,30 @@ function attr(checkout, key) {
   return a ? a.value : null;
 }
 
+function hasConsent(checkout) {
+  const fromSite = attr(checkout, "_jw_consent") === "marketing";
+  const fromShopify = !!(init.customerPrivacy && init.customerPrivacy.marketingAllowed);
+  return fromSite || fromShopify;
+}
+
 function tail(id) {
   return id ? String(id).split("/").pop() : null;
 }
 
-analytics.subscribe("checkout_completed", (event) => {
-  const checkout = event.data.checkout;
-  if (!checkout) return;
+let pixelReady = false;
 
-  const consentFromSite = attr(checkout, "_jw_consent") === "marketing";
-  const consentFromShopify = !!(init.customerPrivacy && init.customerPrivacy.marketingAllowed);
-  if (!consentFromSite && !consentFromShopify) return;
+// Laddar Meta-pixeln en gång och skickar med kunddata (avancerad matchning – pixeln hashar
+// värdena själv). external_id = besökar-ID från jawhara.se, samma som sajtens händelser har.
+function initPixel(checkout) {
+  if (pixelReady) return;
+  pixelReady = true;
 
-  const orderId = tail(checkout.order && checkout.order.id);
-  if (!orderId) return;
-
-  // Meta-pixelns standardkod.
   !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
   n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
   n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
   t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
   document,'script','https://connect.facebook.net/en_US/fbevents.js');
 
-  // Avancerad matchning – pixeln hashar värdena själv innan de skickas.
   const addr = checkout.shippingAddress || checkout.billingAddress || {};
   const matching = {};
   if (checkout.email) matching.em = checkout.email.trim().toLowerCase();
@@ -60,17 +61,20 @@ analytics.subscribe("checkout_completed", (event) => {
   if (addr.city) matching.ct = addr.city.trim().toLowerCase().replace(/\s+/g, "");
   if (addr.zip) matching.zp = addr.zip.replace(/\s+/g, "").toLowerCase();
   if (addr.countryCode) matching.country = addr.countryCode.toLowerCase();
+  const visitorId = attr(checkout, "_jw_vid");
+  if (visitorId) matching.external_id = visitorId;
 
   fbq("init", PIXEL_ID, matching);
+}
 
-  // Samma content_ids som servern skickar (Jawharas produkt-ID = katalogens retailer_id),
-  // medskickade från jawhara.se som cart-attributet _jw_contents ("id:antal,id:antal").
+// Samma content_ids som servern skickar (Jawharas produkt-ID = katalogens retailer_id),
+// medskickade från jawhara.se som cart-attributet _jw_contents ("id:antal,id:antal").
+function cartParams(checkout) {
   const contents = (attr(checkout, "_jw_contents") || "")
     .split(",")
     .map((pair) => pair.split(":"))
     .filter((p) => p[0] && Number(p[1]) > 0)
     .map((p) => ({ id: p[0], quantity: Number(p[1]) }));
-
   const params = {
     value: Number(checkout.totalPrice && checkout.totalPrice.amount) || 0,
     currency: checkout.currencyCode || "SEK",
@@ -81,6 +85,23 @@ analytics.subscribe("checkout_completed", (event) => {
     params.content_ids = contents.map((c) => c.id);
     params.num_items = contents.reduce((s, c) => s + c.quantity, 0);
   }
+  return params;
+}
 
-  fbq("track", "Purchase", params, { eventID: "shopify_order_" + orderId });
+// Kunden har fyllt i betalningsuppgifter.
+analytics.subscribe("payment_info_submitted", (event) => {
+  const checkout = event.data.checkout;
+  if (!checkout || !hasConsent(checkout)) return;
+  initPixel(checkout);
+  fbq("track", "AddPaymentInfo", cartParams(checkout), { eventID: "payinfo_" + (checkout.token || Date.now()) });
+});
+
+// Köpet. Samma event-ID som servern skickar (shopify_order_<order-id>) så att Meta slår ihop dem.
+analytics.subscribe("checkout_completed", (event) => {
+  const checkout = event.data.checkout;
+  if (!checkout || !hasConsent(checkout)) return;
+  const orderId = tail(checkout.order && checkout.order.id);
+  if (!orderId) return;
+  initPixel(checkout);
+  fbq("track", "Purchase", cartParams(checkout), { eventID: "shopify_order_" + orderId });
 });

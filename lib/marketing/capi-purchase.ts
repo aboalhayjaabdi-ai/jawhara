@@ -2,13 +2,13 @@ import { createHash } from "crypto";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { getMarketingSettings } from "@/lib/admin/marketing-settings";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import { ATTR_CONSENT, ATTR_FBC, ATTR_FBP, ATTR_USER_AGENT, attributeMap } from "@/lib/marketing/cart-tracking-attributes";
+import { ATTR_CONSENT, ATTR_FBC, ATTR_FBP, ATTR_USER_AGENT, ATTR_VISITOR, attributeMap } from "@/lib/marketing/cart-tracking-attributes";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/marketing/capi-purchase.ts must never be imported into client code");
 }
 
-function sha256(value: string): string {
+export function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 }
 
@@ -91,9 +91,9 @@ export type CapiPurchaseResult = { ok: true; skipped?: string } | { ok: false; e
 export type PurchaseReportSource = "webhook" | "cron_sync" | "github_actions" | "pg_cron";
 export type RecoverySource = Exclude<PurchaseReportSource, "webhook">;
 
-type MetaCallOutcome = { ok: true } | { ok: false; error: string; retryable: boolean };
+export type MetaCallOutcome = { ok: true } | { ok: false; error: string; retryable: boolean };
 
-async function postToMetaWithRetry(url: string, payload: unknown, maxAttempts = 3): Promise<MetaCallOutcome> {
+export async function postToMetaWithRetry(url: string, payload: unknown, maxAttempts = 3): Promise<MetaCallOutcome> {
   let lastError: MetaCallOutcome = { ok: false, error: "Not attempted", retryable: true };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -227,9 +227,14 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
     const zp = normalizeZip(address?.zip);
     if (zp) userData.zp = [sha256(zp)];
     if (address?.countryCodeV2) userData.country = [sha256(address.countryCodeV2)];
-    if (match?.customerId) userData.external_id = [sha256(`shopify_customer_${match.customerId}`)];
-    if (match?.clientIp) userData.client_ip_address = match.clientIp;
     const attrs = match?.attributes;
+    const externalIds: string[] = [];
+    // The site visitor id first: it is what the visitor's earlier site events carried.
+    const visitorId = attrs?.get(ATTR_CONSENT) ? attrs.get(ATTR_VISITOR) : undefined;
+    if (visitorId) externalIds.push(sha256(visitorId));
+    if (match?.customerId) externalIds.push(sha256(`shopify_customer_${match.customerId}`));
+    if (externalIds.length) userData.external_id = externalIds;
+    if (match?.clientIp) userData.client_ip_address = match.clientIp;
     if (attrs?.get(ATTR_CONSENT)) {
       const ua = attrs.get(ATTR_USER_AGENT);
       const fbp = attrs.get(ATTR_FBP);

@@ -7,6 +7,7 @@
 // captureFbclidFromUrl() remembers it IN MEMORY ONLY on the landing page; it is written to storage
 // only once marketing consent exists (persistPendingFbc), so nothing is stored without consent.
 import { getConsent } from "./consent";
+import { getVisitorId } from "./first-party-analytics";
 
 const FBC_STORAGE_KEY = "jawhara_fbc";
 // Meta treats an fbc older than its 90-day attribution horizon as useless.
@@ -61,16 +62,17 @@ function storedFbc(): string | null {
   }
 }
 
-export type ClientTracking = { consent: boolean; fbp: string | null; fbc: string | null };
+export type ClientTracking = { consent: boolean; fbp: string | null; fbc: string | null; visitorId: string | null };
 
 /** What the cart sync sends to the server (lib/marketing/cart-tracking-attributes.ts validates
  * it there). Empty unless marketing consent was given. */
 export function getClientTracking(): ClientTracking {
-  if (typeof window === "undefined" || getConsent() !== "accepted") return { consent: false, fbp: null, fbc: null };
+  if (typeof window === "undefined" || getConsent() !== "accepted") return { consent: false, fbp: null, fbc: null, visitorId: null };
   return {
     consent: true,
     fbp: readCookie("_fbp"),
     // The most recent click wins: an fbclid from this page load beats an older stored one.
     fbc: pendingFbc ?? readCookie("_fbc") ?? storedFbc(),
+    visitorId: getVisitorId(),
   };
 }

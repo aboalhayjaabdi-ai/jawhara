@@ -7,6 +7,7 @@ import { getConsent, setConsent, type ConsentState } from "@/lib/marketing/conse
 import { trackPageView } from "@/lib/marketing/events";
 import { logAnalyticsEvent } from "@/lib/marketing/first-party-analytics";
 import { captureFbclidFromUrl, persistPendingFbc } from "@/lib/marketing/click-id";
+import { newEventId, pixelUserData, sendMetaServerEvent } from "@/lib/marketing/meta-server-events";
 
 /**
  * One combined client component (not split into separate banner/script components) so the
@@ -48,6 +49,18 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
   // ever fired once per full browser load: Next.js App Router navigation between pages (any
   // <Link> click) never reloads the page, so most real pageviews on this site were never being
   // reported at all.
+  // The pixel's own first PageView (inline script below) and its Conversions API copy share this
+  // one id so Meta deduplicates them.
+  const firstPageViewId = useRef<string | null>(null);
+  if (firstPageViewId.current === null) firstPageViewId.current = newEventId();
+  const sentFirstServerPageView = useRef(false);
+  useEffect(() => {
+    if (trackingActiveForFirstLog && metaPixelId && !sentFirstServerPageView.current) {
+      sentFirstServerPageView.current = true;
+      sendMetaServerEvent("PageView", firstPageViewId.current!);
+    }
+  }, [trackingActiveForFirstLog, metaPixelId]);
+
   const pathname = usePathname();
   const skippedFirstRef = useRef(false);
   useEffect(() => {
@@ -80,8 +93,9 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
             n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
             t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
             document,'script','https://connect.facebook.net/en_US/fbevents.js');
-            fbq('init', '${metaPixelId}');
-            fbq('track', 'PageView');
+            window.__jawharaMetaPixelId = ${JSON.stringify(metaPixelId)};
+            fbq('init', ${JSON.stringify(metaPixelId)}, ${JSON.stringify(pixelUserData())});
+            fbq('track', 'PageView', {}, { eventID: ${JSON.stringify(firstPageViewId.current)} });
           `}
         </Script>
       )}

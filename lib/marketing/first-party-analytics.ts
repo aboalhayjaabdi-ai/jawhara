@@ -25,6 +25,14 @@ function getOrCreateVisitorId(): string {
   }
 }
 
+/** The same long-lived first-party visitor id, reused as Meta's external_id (hashed by the pixel
+ * and by the server) so browser events, server events and the eventual Purchase all point at the
+ * same person. Only ever handed out with consent. */
+export function getVisitorId(): string | null {
+  if (typeof window === "undefined" || getConsent() !== "accepted") return null;
+  return getOrCreateVisitorId();
+}
+
 // Tab/window-scoped (sessionStorage): a fresh id per browsing session -- "visits" for the funnel.
 function getOrCreateSessionId(): string {
   try {

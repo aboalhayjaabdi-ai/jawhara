@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { supabaseBrowser as supabase } from "@/lib/supabase/browser-client";
+import { rememberEmailForMatching } from "@/lib/marketing/meta-server-events";
+import { trackLead } from "@/lib/marketing/events";
 
 // Real footer block (sections/footer-group.json): heading "Prenumerera på vårt nyhetsbrev",
 // native email-signup block. Its own configured button label is literally "Sign up" (English,
@@ -22,6 +24,9 @@ export function NewsletterSignup() {
     }
     setStatus("done");
     form.reset();
+    // Both no-ops without cookie consent. The email is only kept as a sha256 hash, for Meta matching.
+    await rememberEmailForMatching(email);
+    trackLead();
   }
 
   return (
