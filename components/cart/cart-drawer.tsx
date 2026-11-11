@@ -12,7 +12,7 @@ import { CartOffers } from "./cart-offers";
 import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
 import { CartSplitDeliveryNotice, CartLineDeliveryNote } from "./cart-split-delivery-notice";
-import { useLongDelivery } from "./use-long-delivery";
+import { useCartDeliveryGroups } from "./use-cart-delivery-groups";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -26,7 +26,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   const { totals, loading, fetchError } = useCartTotals();
   // Longer-delivery bags (lib/delivery-time.ts): note under their name + the split-parcel notice.
   const cartProductIds = items.map((i) => i.productId);
-  const isLongDelivery = useLongDelivery(cartProductIds);
+  const deliveryGroup = useCartDeliveryGroups(cartProductIds);
 
   // "✓ Tillagd i varukorgen!" is a short-lived confirmation: shown for each new add, then it
   // fades out (the item itself stays visible in the list below).
@@ -243,7 +243,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
-                    {isLongDelivery(items.find((i) => i.variantId === line.variantId)?.productId ?? "") && (
+                    {deliveryGroup(items.find((i) => i.variantId === line.variantId)?.productId ?? "") === "long" && (
                       <CartLineDeliveryNote />
                     )}
                     {line.isFree && (
@@ -324,7 +324,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </label>
           )}
 
-          {items.length > 0 && <CartSplitDeliveryNotice productIds={cartProductIds} isLongDelivery={isLongDelivery} />}
+          {items.length > 0 && <CartSplitDeliveryNotice productIds={cartProductIds} deliveryGroup={deliveryGroup} />}
 
           {items.length > 0 && (
             <div className="mb-3">

@@ -40,3 +40,23 @@ export function getDeliveryTimeNote(collectionHandles: readonly string[]): strin
   if (collectionHandles.some((h) => BAG_COLLECTION_HANDLES.has(h))) return DELIVERY_TIME_LONG;
   return null;
 }
+
+/** Cart delivery groups for the "2 separate parcels" notice:
+ *   "long"    -- bags with the longer delivery time (same rule as getDeliveryTimeNote above).
+ *   "wallet"  -- wallets ("Plånböcker", handle tillbehor): always shipped together with the bags,
+ *                so they never cause a separate parcel either way.
+ *   "regular" -- everything else (H väskor, jewelry, gift sets, ...). */
+export type CartDeliveryGroup = "long" | "wallet" | "regular";
+
+const WALLET_COLLECTION_HANDLES = new Set(["tillbehor"]);
+
+export function getCartDeliveryGroup(collectionHandles: readonly string[]): CartDeliveryGroup {
+  if (getDeliveryTimeNote(collectionHandles) === DELIVERY_TIME_LONG) return "long";
+  if (collectionHandles.some((h) => WALLET_COLLECTION_HANDLES.has(h))) return "wallet";
+  return "regular";
+}
+
+/** Separate parcels only when the cart mixes longer-delivery bags with other non-wallet products. */
+export function needsSeparateParcels(groups: readonly CartDeliveryGroup[]): boolean {
+  return groups.includes("long") && groups.includes("regular");
+}

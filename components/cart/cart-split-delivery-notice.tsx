@@ -1,27 +1,27 @@
 "use client";
 
+import { needsSeparateParcels, type CartDeliveryGroup } from "@/lib/delivery-time";
+
 /**
  * "Two separate parcels" notice in the cart drawer, just above the totals. Shown only when the
- * cart holds at least one longer-delivery bag AND at least one other product (see
- * ./use-long-delivery.ts for the grouping). Purely informational -- no effect on prices,
- * shipping or checkout.
+ * cart holds at least one longer-delivery bag AND at least one other product that isn't a wallet
+ * (wallets always ship with the bags) -- see lib/delivery-time.ts. Purely informational -- no
+ * effect on prices, shipping or checkout.
  */
 
 const TEXT = "Din beställning skickas i 2 separata paket eftersom vissa produkter har längre leveranstid.";
 
 export function CartSplitDeliveryNotice({
   productIds,
-  isLongDelivery,
+  deliveryGroup,
 }: {
   productIds: string[];
-  isLongDelivery: (productId: string) => boolean | undefined;
+  deliveryGroup: (productId: string) => CartDeliveryGroup | undefined;
 }) {
-  const ids = Array.from(new Set(productIds));
+  const groups = Array.from(new Set(productIds)).map(deliveryGroup);
   // Decide only once every product's group is known, so the notice never flashes on/off.
-  if (ids.length < 2 || ids.some((id) => isLongDelivery(id) === undefined)) return null;
-  const hasLong = ids.some((id) => isLongDelivery(id));
-  const hasRegular = ids.some((id) => !isLongDelivery(id));
-  if (!hasLong || !hasRegular) return null;
+  if (groups.some((g) => g === undefined)) return null;
+  if (!needsSeparateParcels(groups as CartDeliveryGroup[])) return null;
 
   return (
     <div className="mb-3 flex items-start gap-2.5 border border-line bg-[#f7f7f7] px-3 py-2.5">
