@@ -11,7 +11,8 @@ import type { GiftBoxOffer } from "@/lib/gift-box";
 import { CartOffers } from "./cart-offers";
 import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
-import { CartSplitDeliveryNotice } from "./cart-split-delivery-notice";
+import { CartSplitDeliveryNotice, CartLineDeliveryNote } from "./cart-split-delivery-notice";
+import { useLongDelivery } from "./use-long-delivery";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -23,6 +24,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, subtotal, lastAdded } =
     useCart();
   const { totals, loading, fetchError } = useCartTotals();
+  // Longer-delivery bags (lib/delivery-time.ts): note under their name + the split-parcel notice.
+  const cartProductIds = items.map((i) => i.productId);
+  const isLongDelivery = useLongDelivery(cartProductIds);
 
   // "✓ Tillagd i varukorgen!" is a short-lived confirmation: shown for each new add, then it
   // fades out (the item itself stays visible in the list below).
@@ -239,6 +243,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
+                    {isLongDelivery(items.find((i) => i.variantId === line.variantId)?.productId ?? "") && (
+                      <CartLineDeliveryNote />
+                    )}
                     {line.isFree && (
                       <div className="mt-1 block w-fit bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
@@ -317,7 +324,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </label>
           )}
 
-          {items.length > 0 && <CartSplitDeliveryNotice productIds={items.map((i) => i.productId)} />}
+          {items.length > 0 && <CartSplitDeliveryNotice productIds={cartProductIds} isLongDelivery={isLongDelivery} />}
 
           {items.length > 0 && (
             <div className="mb-3">
