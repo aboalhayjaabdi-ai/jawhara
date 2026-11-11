@@ -78,6 +78,10 @@ export type StorefrontCart = {
   // one actually applies to its current contents -- `applicable: false` is how a dead/invalid/
   // out-of-scope code shows up (Shopify never errors the mutation itself for that).
   discountCodes: { code: string; applicable: boolean }[];
+  // Cart-level custom attributes. They carry over to the Shopify order as customAttributes and are
+  // visible to the checkout's custom web pixel as checkout.attributes. Keys starting with "_" are
+  // hidden from the customer. Used for Meta tracking: see lib/marketing/cart-tracking-attributes.ts.
+  attributes: { key: string; value: string }[];
 };
 
 export type CartUserError = { field: string[] | null; message: string; code?: string | null };
@@ -91,6 +95,7 @@ const CART_FIELDS = `
     subtotalAmount { amount currencyCode }
   }
   discountCodes { code applicable }
+  attributes { key value }
   lines(first: 100) {
     edges {
       node {
@@ -114,6 +119,7 @@ function toCart(raw: any): StorefrontCart | null {
     totalQuantity: raw.totalQuantity,
     cost: raw.cost,
     discountCodes: (raw.discountCodes ?? []).map((d: any) => ({ code: d.code, applicable: d.applicable })),
+    attributes: (raw.attributes ?? []).map((a: any) => ({ key: a.key, value: a.value ?? "" })),
     lines: (raw.lines?.edges ?? []).map((e: any) => ({
       id: e.node.id,
       quantity: e.node.quantity,
@@ -216,4 +222,22 @@ export async function cartLinesRemove(
     { cartId, lineIds }
   );
   return { cart: toCart(data.cartLinesRemove.cart), userErrors: data.cartLinesRemove.userErrors ?? [] };
+}
+
+/** Replaces the cart's custom attributes with exactly this list (Shopify's own contract for this
+ * mutation -- any attribute not in the list is removed). */
+export async function cartAttributesUpdate(
+  cartId: string,
+  attributes: { key: string; value: string }[]
+): Promise<{ cart: StorefrontCart | null; userErrors: CartUserError[] }> {
+  const data = await storefrontGraphQL<any>(
+    `mutation CartAttributesUpdate($cartId: ID!, $attributes: [AttributeInput!]!) {
+      cartAttributesUpdate(cartId: $cartId, attributes: $attributes) {
+        cart { ${CART_FIELDS} }
+        userErrors { field message }
+      }
+    }`,
+    { cartId, attributes }
+  );
+  return { cart: toCart(data.cartAttributesUpdate.cart), userErrors: data.cartAttributesUpdate.userErrors ?? [] };
 }

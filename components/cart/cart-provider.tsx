@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { trackAddToCart } from "@/lib/marketing/events";
+import { getClientTracking } from "@/lib/marketing/click-id";
 // Type-only import: compiled away entirely, never pulls lib/discounts.ts's server-only Supabase
 // client into the browser bundle -- this is purely the response shape of /api/cart/totals, which
 // is a thin wrapper around the same computeCheckoutTotals this type comes from.
@@ -79,9 +80,13 @@ const CartStateContext = createContext<CartState | null>(null);
 // variant/qty lines (order-independent) and the discount code. Lets goToCheckout recognize when
 // the cart is unchanged since the last successful sync (background or foreground) and skip
 // re-hitting Shopify's API entirely (see lastShopifySyncRef below).
+//
+// Also includes the Meta tracking ids (consent/_fbp/_fbc) the sync writes onto the Shopify cart as
+// attributes: accepting the cookie banner after the cart was synced must force a fresh sync at
+// checkout, or the order would reach Shopify without them.
 function cartFingerprint(items: CartItem[], discountCode: string | null): string {
   const sortedLines = items.map((i) => [i.variantId, i.qty] as const).sort((a, b) => a[0].localeCompare(b[0]));
-  return JSON.stringify({ lines: sortedLines, discountCode });
+  return JSON.stringify({ lines: sortedLines, discountCode, tracking: getClientTracking() });
 }
 
 // Every cart/checkout network call goes through this -- a request that hangs (a cold serverless
@@ -174,6 +179,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           shopifyCartId: shopifyCartIdRef.current,
           lines: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })),
           discountCode: currentDiscountCode,
+          tracking: getClientTracking(),
         }),
       });
       const data = await res.json().catch(() => null);

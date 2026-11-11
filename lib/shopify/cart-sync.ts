@@ -1,5 +1,6 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { isVariantAvailable } from "@/lib/inventory";
+import { ATTR_CONTENTS, MANAGED_ATTRIBUTE_KEYS } from "@/lib/marketing/cart-tracking-attributes";
 import {
   StorefrontConfigError,
   cartCreate,
@@ -7,6 +8,7 @@ import {
   cartGet,
   cartLinesAdd,
   cartLinesRemove,
+  cartAttributesUpdate,
   type CartLineInput,
   type CartUserError,
   type StorefrontCart,
@@ -58,6 +60,7 @@ type VariantRow = {
   inventory_quantity: number;
   inventory_tracked: boolean;
   inventory_policy: string | null;
+  product_id: string;
   products: { status: string } | { status: string }[] | null;
 };
 
@@ -75,20 +78,22 @@ function productOf(row: VariantRow): { status: string } | null {
  */
 async function resolveDesiredLines(
   lines: ShopifyCartSyncLine[]
-): Promise<{ desired: Map<string, number>; warnings: string[] }> {
+): Promise<{ desired: Map<string, number>; contents: Map<string, number>; warnings: string[] }> {
   const warnings: string[] = [];
   const desired = new Map<string, number>();
-  if (lines.length === 0) return { desired, warnings };
+  // Jawhara products.id -> quantity, for the _jw_contents cart attribute (Meta content_ids).
+  const contents = new Map<string, number>();
+  if (lines.length === 0) return { desired, contents, warnings };
 
   const variantIds = [...new Set(lines.map((l) => l.variantId))];
   const { data, error } = await supabaseService
     .from("product_variants")
-    .select("id, shopify_variant_id, inventory_quantity, inventory_tracked, inventory_policy, products!inner(status)")
+    .select("id, shopify_variant_id, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(status)")
     .in("id", variantIds);
 
   if (error || !data) {
     warnings.push("Kunde inte kontrollera varukorgen mot Shopify just nu.");
-    return { desired, warnings };
+    return { desired, contents, warnings };
   }
 
   const rowById = new Map((data as unknown as VariantRow[]).map((r) => [r.id, r]));
@@ -129,12 +134,32 @@ async function resolveDesiredLines(
 
     const merchandiseId = row.shopify_variant_id;
     desired.set(merchandiseId, (desired.get(merchandiseId) ?? 0) + qty);
+    contents.set(row.product_id, (contents.get(row.product_id) ?? 0) + qty);
   }
 
   if (droppedUnmapped) warnings.push("En eller flera varor kunde inte synkroniseras med Shopify.");
   if (clamped) warnings.push("Mängden för en vara justerades till tillgängligt lager.");
 
-  return { desired, warnings };
+  return { desired, contents, warnings };
+}
+
+/** Meta tracking attributes (see lib/marketing/cart-tracking-attributes.ts) plus the cart's
+ * content ids, merged over any attribute this module doesn't manage so nothing else is lost
+ * (cartAttributesUpdate replaces the whole list). Returns null when nothing would change. */
+function desiredAttributes(
+  current: { key: string; value: string }[],
+  tracking: Record<string, string>,
+  contents: Map<string, number>
+): { key: string; value: string }[] | null {
+  const next = new Map<string, string>();
+  for (const a of current) if (!MANAGED_ATTRIBUTE_KEYS.includes(a.key)) next.set(a.key, a.value);
+  for (const [key, value] of Object.entries(tracking)) next.set(key, value);
+  if (contents.size > 0) next.set(ATTR_CONTENTS, [...contents.entries()].map(([id, qty]) => `${id}:${qty}`).join(","));
+  const nextList = [...next.entries()].map(([key, value]) => ({ key, value }));
+  const sameSize = nextList.length === current.length;
+  const currentMap = new Map(current.map((a) => [a.key, a.value]));
+  if (sameSize && nextList.every((a) => currentMap.get(a.key) === a.value)) return null;
+  return nextList;
 }
 
 /**
@@ -180,8 +205,11 @@ export async function syncShopifyCart(input: {
   shopifyCartId: string | null;
   lines: ShopifyCartSyncLine[];
   discountCode: string | null;
+  // Meta tracking cart attributes, already consent-gated and validated by the caller
+  // (buildTrackingAttributes) -- empty when the visitor hasn't accepted marketing cookies.
+  trackingAttributes?: Record<string, string>;
 }): Promise<ShopifyCartSyncResult> {
-  const { desired, warnings } = await resolveDesiredLines(input.lines);
+  const { desired, contents, warnings } = await resolveDesiredLines(input.lines);
 
   if (desired.size === 0) {
     // Either the Jawhara cart is empty, or nothing in it could map to Shopify -- nothing to
@@ -268,6 +296,17 @@ export async function syncShopifyCart(input: {
       const { cart: updated, userErrors } = await cartDiscountCodesUpdate(cart.id, desiredCodes);
       if (updated) cart = updated;
       extraWarnings.push(...describeDiscountCodeErrors(userErrors));
+    }
+
+    // Never allowed to fail the sync itself: worst case the order just lacks tracking data.
+    try {
+      const attrs = desiredAttributes(cart.attributes, input.trackingAttributes ?? {}, contents);
+      if (attrs) {
+        const { cart: updated } = await cartAttributesUpdate(cart.id, attrs);
+        if (updated) cart = updated;
+      }
+    } catch (err) {
+      console.error("Shopify cart attributes update failed:", err);
     }
 
     return finalize(cart, input.discountCode, [...warnings, ...extraWarnings]);

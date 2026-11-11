@@ -6,6 +6,7 @@ import Script from "next/script";
 import { getConsent, setConsent, type ConsentState } from "@/lib/marketing/consent";
 import { trackPageView } from "@/lib/marketing/events";
 import { logAnalyticsEvent } from "@/lib/marketing/first-party-analytics";
+import { captureFbclidFromUrl, persistPendingFbc } from "@/lib/marketing/click-id";
 
 /**
  * One combined client component (not split into separate banner/script components) so the
@@ -24,6 +25,8 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
   useEffect(() => {
     setConsentState(getConsent());
     setHydrated(true);
+    // Root layout component -> runs once per real page load, i.e. on the ad's landing URL.
+    captureFbclidFromUrl();
   }, []);
 
   // First-party mirror of the Pixel inline script's own PageView above: fires exactly once per
@@ -58,6 +61,7 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
   function handleAccept() {
     setConsent("accepted");
     setConsentState("accepted");
+    persistPendingFbc();
   }
   function handleReject() {
     setConsent("rejected");

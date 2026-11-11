@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { getMarketingSettings } from "@/lib/admin/marketing-settings";
+import { shopifyGraphQL } from "@/lib/shopify/client";
+import { ATTR_CONSENT, ATTR_FBC, ATTR_FBP, ATTR_USER_AGENT, attributeMap } from "@/lib/marketing/cart-tracking-attributes";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/marketing/capi-purchase.ts must never be imported into client code");
@@ -8,6 +10,77 @@ if (typeof window !== "undefined") {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
+}
+
+// Meta's normalization rules for hashed user_data: https://developers.facebook.com/docs/marketing-api/conversions-api/parameters/customer-information-parameters
+function normalizePhone(raw: string | null | undefined, countryCode: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/[^\d+]/g, "");
+  if (digits.startsWith("+")) digits = digits.slice(1);
+  else if (digits.startsWith("00")) digits = digits.slice(2);
+  else if (digits.startsWith("0") && (countryCode ?? "SE").toUpperCase() === "SE") digits = `46${digits.slice(1)}`;
+  digits = digits.replace(/\D/g, "");
+  return digits.length >= 8 ? digits : null;
+}
+
+function normalizeName(raw: string | null | undefined): string | null {
+  const v = raw?.trim().toLowerCase().replace(/[\s.,'"-]+/g, "");
+  return v ? v : null;
+}
+
+function normalizeCity(raw: string | null | undefined): string | null {
+  const v = raw?.trim().toLowerCase().replace(/[^\p{L}]/gu, "");
+  return v ? v : null;
+}
+
+function normalizeZip(raw: string | null | undefined): string | null {
+  const v = raw?.trim().toLowerCase().replace(/[\s-]/g, "");
+  return v ? v : null;
+}
+
+type ShopifyAddress = { firstName: string | null; lastName: string | null; city: string | null; zip: string | null; countryCodeV2: string | null; phone: string | null } | null;
+type ShopifyMatchData = {
+  clientIp: string | null;
+  customerId: string | null;
+  attributes: Map<string, string>;
+  address: ShopifyAddress;
+  billingPhone: string | null;
+};
+
+const ADDRESS_FIELDS = "firstName lastName city zip countryCodeV2 phone";
+
+/**
+ * Extra buyer data for Meta's event matching, fetched live from the Shopify order (none of it is
+ * stored in Supabase). Two attempts: name/address fields are Shopify "protected customer data" and
+ * can be refused for an app without that access level, so a refusal falls back to the
+ * unprotected fields instead of losing everything. Never throws -- the Purchase is still sent
+ * with whatever was available.
+ */
+async function fetchShopifyMatchData(shopifyOrderId: string | null): Promise<ShopifyMatchData | null> {
+  if (!shopifyOrderId) return null;
+  const id = `gid://shopify/Order/${shopifyOrderId}`;
+  const queries = [
+    `query($id: ID!) { order(id: $id) { clientIp customer { id } customAttributes { key value } shippingAddress { ${ADDRESS_FIELDS} } billingAddress { ${ADDRESS_FIELDS} } } }`,
+    `query($id: ID!) { order(id: $id) { clientIp customAttributes { key value } } }`,
+  ];
+  for (const query of queries) {
+    try {
+      const data = await shopifyGraphQL<{ order: any }>(query, { id });
+      const o = data.order;
+      if (!o) return null;
+      const address: ShopifyAddress = o.shippingAddress ?? o.billingAddress ?? null;
+      return {
+        clientIp: o.clientIp ?? null,
+        customerId: o.customer?.id ? String(o.customer.id).split("/").pop()! : null,
+        attributes: attributeMap(o.customAttributes),
+        address,
+        billingPhone: o.billingAddress?.phone ?? null,
+      };
+    } catch (err) {
+      console.error(`Shopify match-data query failed for order ${shopifyOrderId}:`, (err as Error).message);
+    }
+  }
+  return null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -132,9 +205,39 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
         item_price: Number(i.discounted_unit_price ?? i.unit_price),
       }));
 
-    const userData: Record<string, string[]> = {};
+    const match = await fetchShopifyMatchData(order.shopify_id);
+    const address = match?.address ?? null;
+    const country = address?.countryCodeV2 ?? "SE";
+
+    // Hashed identifiers (em/ph/fn/ln/ct/zp/country/external_id) come from the order itself and
+    // are sent as with every Purchase before; the browser-side ids (fbp/fbc/user agent) only exist
+    // on the order when the buyer accepted marketing cookies on jawhara.se (set as cart attributes
+    // by app/api/shopify-cart/sync, consent-gated there). clientIp is Shopify's own record of the
+    // checkout request.
+    const userData: Record<string, string | string[]> = {};
     if (order.email) userData.em = [sha256(order.email)];
-    if (order.phone) userData.ph = [sha256(order.phone.replace(/[^\d+]/g, ""))];
+    const phone = normalizePhone(order.phone ?? address?.phone ?? match?.billingPhone, country);
+    if (phone) userData.ph = [sha256(phone)];
+    const fn = normalizeName(address?.firstName);
+    if (fn) userData.fn = [sha256(fn)];
+    const ln = normalizeName(address?.lastName);
+    if (ln) userData.ln = [sha256(ln)];
+    const ct = normalizeCity(address?.city);
+    if (ct) userData.ct = [sha256(ct)];
+    const zp = normalizeZip(address?.zip);
+    if (zp) userData.zp = [sha256(zp)];
+    if (address?.countryCodeV2) userData.country = [sha256(address.countryCodeV2)];
+    if (match?.customerId) userData.external_id = [sha256(`shopify_customer_${match.customerId}`)];
+    if (match?.clientIp) userData.client_ip_address = match.clientIp;
+    const attrs = match?.attributes;
+    if (attrs?.get(ATTR_CONSENT)) {
+      const ua = attrs.get(ATTR_USER_AGENT);
+      const fbp = attrs.get(ATTR_FBP);
+      const fbc = attrs.get(ATTR_FBC);
+      if (ua) userData.client_user_agent = ua;
+      if (fbp) userData.fbp = fbp;
+      if (fbc) userData.fbc = fbc;
+    }
 
     const eventId = `shopify_order_${order.shopify_id ?? order.id}`;
     const payload = {
@@ -144,6 +247,7 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
           event_time: Math.floor(Date.now() / 1000),
           event_id: eventId,
           action_source: "website",
+          event_source_url: "https://www.jawhara.se/",
           user_data: userData,
           custom_data: {
             currency: order.currency_code,

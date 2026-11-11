@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncShopifyCart, type ShopifyCartSyncLine } from "@/lib/shopify/cart-sync";
+import { buildTrackingAttributes, parseClientTracking } from "@/lib/marketing/cart-tracking-attributes";
 
 // Keeps the real Shopify Storefront API cart (Phase 2) in step with the Jawhara cart stored in
 // the browser, including (Phase 4) its entered discount code, and hands back its checkoutUrl
@@ -25,7 +26,12 @@ export async function POST(req: NextRequest) {
   const shopifyCartId = typeof body?.shopifyCartId === "string" ? body.shopifyCartId : null;
   const discountCode = typeof body?.discountCode === "string" && body.discountCode.trim() ? body.discountCode.trim() : null;
 
-  const result = await syncShopifyCart({ shopifyCartId, lines, discountCode });
+  // Meta click/browser ids + this browser's user agent, carried onto the Shopify order so the
+  // server-side Conversions API Purchase can match the buyer -- only with marketing consent.
+  const tracking = parseClientTracking(body?.tracking);
+  const trackingAttributes = buildTrackingAttributes(tracking, req.headers.get("user-agent"));
+
+  const result = await syncShopifyCart({ shopifyCartId, lines, discountCode, trackingAttributes });
 
   // Server-side gate, independent of the UI hiding the "Till kassan" button (same philosophy as
   // the old Stripe-era app/api/checkout/route.ts) -- a checkoutUrl is never handed to the browser
