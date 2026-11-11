@@ -376,7 +376,7 @@ export function ProductDetail({
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
   /** Delivery-time box under the price on bag pages ("Längre leveranstid: 3–5 veckor" or
-   * "Ordinarie leveranstid"). Decided server-side from collections via lib/delivery-time.ts;
+   * none at all for H bags). Decided server-side from collections via lib/delivery-time.ts;
    * null (all non-bag products) renders nothing. */
   deliveryTimeNote?: string | null;
 }) {
