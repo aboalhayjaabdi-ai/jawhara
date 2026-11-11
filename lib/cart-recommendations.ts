@@ -9,6 +9,7 @@
 import { unstable_cache } from "next/cache";
 import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
+import { interleaveNoelle } from "./campaign-products";
 
 export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "mixed" | "curated";
 
@@ -19,6 +20,7 @@ const JEWELRY_COLLECTION = "alla-smycken";
 const BESTSELLER_COLLECTION = "bastsaljare-1";
 const WALLET_COLLECTION = "tillbehor"; // "Plånböcker"
 const BAG_COLLECTION = "vaskor-och-tillbehor"; // "Väskor"
+const H_BAG_COLLECTION = "h-vaskor"; // "H väskor" -- suggested first once 3 för 2 is earned
 // Top sellers across every category for "mixed": each category's own admin order (the
 // "Rekommenderat" sort), picked round-robin so no single category dominates.
 const MIXED_CATEGORY_COLLECTIONS = ["armband", "halsband", "vaskor-och-tillbehor", "ringar", "orhangen", "tillbehor"];
@@ -98,17 +100,21 @@ export async function getCartRecommendations(input: {
   }
 
   if (input.mode === "bags-wallets") {
-    // 3 för 2 is already earned -- suggest something other than more jewelry: bags and wallets
-    // from the store's own Väskor / Plånböcker order, mixed (two bags, then a wallet). Wallets are
-    // shown at their normal price here; a free wallet is only ever offered in "wallet" mode.
-    const [bagIds, walletIds] = await Promise.all([cachedBagIds(), cachedWalletIds()]);
-    const bags = bagIds.filter((id) => !cartProducts.has(id)).slice(0, 8);
+    // 3 för 2 is already earned -- suggest something other than more jewelry. H bags come first
+    // (Noélle Väska and Noélle Väska Mini alternating, then the other H bags); after them, other
+    // bags and wallets from the store's own Väskor / Plånböcker order, mixed (two bags, then a
+    // wallet). Wallets are shown at their normal price here; a free wallet is only ever offered in
+    // "wallet" mode.
+    const [hBagIds, bagIds, walletIds] = await Promise.all([cachedCategoryIds(H_BAG_COLLECTION), cachedBagIds(), cachedWalletIds()]);
+    const hBagSet = new Set(hBagIds);
+    const hBags = interleaveNoelle((await cachedCardsByIds(hBagIds)).filter((c) => !cartProducts.has(c.id)));
+    const bags = bagIds.filter((id) => !cartProducts.has(id) && !hBagSet.has(id)).slice(0, 8);
     const wallets = walletIds.filter((id) => !cartProducts.has(id)).slice(0, 4);
     const mixed: string[] = [];
     while (bags.length || wallets.length) {
       mixed.push(...bags.splice(0, 2), ...wallets.splice(0, 1));
     }
-    return finish(await cachedCardsByIds(mixed));
+    return finish([...hBags, ...(await cachedCardsByIds(mixed))]);
   }
 
   // Bestsellers from every category, mixed -- used directly ("mixed") and as the fallback when a
