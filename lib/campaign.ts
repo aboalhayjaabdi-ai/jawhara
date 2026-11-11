@@ -50,19 +50,27 @@ export const BLACK_MONTH = {
     /** Order on the page: jewelry first, bags second (see app/(storefront)/black-month/page.tsx). */
     jewelryOffers: {
       heading: "Smycken till kampanjpris",
-      intro: "Våra mest älskade smycken – nu till Black Month-pris. Köp 3 och få det billigaste på köpet.",
+      intro: "Armband, halsband, örhängen och ringar – nu till Black Month-pris. Köp 3 och få det billigaste på köpet.",
       collectionHandle: "alla-smycken",
-      limit: 8,
+      limit: 12,
       buttonText: "Se alla smycken",
     },
+    /** H bags, Noélle Väska and Noélle Väska Mini first. */
+    hBagOffers: {
+      heading: "Noélle-väskor till kampanjpris",
+      intro: "Noélle och Noélle Mini – tidlösa favoriter, nu till Black Month-pris.",
+      limit: 8,
+      buttonText: "Se alla H väskor",
+      buttonHref: "/collections/h-vaskor",
+    },
+    moreJewelry: { heading: "Fler smycken att älska", collectionHandle: "alla-smycken", limit: 12, buttonText: "Visa fler smycken" },
+    /** The Black Month collection's other bags, as a compact carousel further down. */
     bagOffers: {
-      heading: "Väskor till kampanjpris",
-      intro: "Tidlösa modeller i noggrant utvalda material – nu till kampanjpris.",
+      heading: "Fler väskor till kampanjpris",
       limit: 8,
       buttonText: "Shoppa alla väskor",
       buttonHref: "/collections/vaskor-och-tillbehor",
     },
-    moreJewelry: { heading: "Fler smycken att älska", collectionHandle: "alla-smycken", limit: 8, buttonText: "Visa fler smycken" },
     categories: {
       heading: "Shoppa efter kategori",
       handles: ["armband", "halsband", "orhangen", "ringar", "vaskor-och-tillbehor", "gift-sets"],

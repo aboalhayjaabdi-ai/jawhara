@@ -85,7 +85,11 @@ export async function resolveProductList(spec: ProductListSpec, exclude: Readonl
  * lists with `unique: true` skip anything shown above them. Lists without `unique` don't depend on
  * anything and start immediately in parallel; a unique list waits only for the lists above it.
  */
-export async function resolveProductListsInOrder<K extends string>(specs: { key: K; spec: ProductListSpec }[]): Promise<Map<K, ProductCard[]>> {
+export async function resolveProductListsInOrder<K extends string>(
+  specs: { key: K; spec: ProductListSpec }[],
+  /** Products already on the page from elsewhere (e.g. pre-resolved campaign sections); unique lists skip them too. */
+  initialShown: ReadonlySet<string> = new Set()
+): Promise<Map<K, ProductCard[]>> {
   const pending: Promise<ProductCard[]>[] = [];
   for (const { spec } of specs) {
     if (!spec.unique) {
@@ -95,7 +99,7 @@ export async function resolveProductListsInOrder<K extends string>(specs: { key:
     const above = [...pending];
     pending.push(
       Promise.all(above).then((lists) => {
-        const shown = new Set(lists.flat().map((c) => c.id));
+        const shown = new Set([...initialShown, ...lists.flat().map((c) => c.id)]);
         return resolveProductList(spec, shown);
       })
     );

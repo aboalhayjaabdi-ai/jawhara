@@ -13,15 +13,21 @@ import { resolveProductListsInOrder } from "@/lib/product-sections";
  * with `unique: true` can skip products already shown above it. Shared by the real homepage and
  * the admin preview so both render identically.
  */
-export async function resolveSectionProducts(sections: HomeSection[]): Promise<Map<string, ProductCard[]>> {
+export async function resolveSectionProducts(
+  sections: HomeSection[],
+  /** Sections whose products were already chosen (lib/campaign-homepage.ts); used as-is. */
+  presetProducts: Map<string, ProductCard[]> = new Map()
+): Promise<Map<string, ProductCard[]>> {
   const specs = sections
-    .filter((s) => s.visible && s.type === "product_list")
+    .filter((s) => s.visible && s.type === "product_list" && !presetProducts.has(s.id))
     .map((s) => {
       const c = s.config as any;
       return { key: s.id, spec: { collectionHandle: String(c.collectionHandle ?? ""), limit: Number(c.limit ?? 4), sort: c.sort, unique: c.unique === true } };
     })
     .filter((s) => s.spec.collectionHandle);
-  return resolveProductListsInOrder(specs);
+  const preset = new Set([...presetProducts.values()].flat().map((p) => p.id));
+  const resolved = await resolveProductListsInOrder(specs, preset);
+  return new Map([...resolved, ...presetProducts]);
 }
 
 /**
@@ -95,11 +101,19 @@ export function SectionRenderer({
 }
 
 /** Renders a full section list (live homepage or admin preview). */
-export async function SectionList({ sections, allowHeaderOverlay = false }: { sections: HomeSection[]; allowHeaderOverlay?: boolean }) {
+export async function SectionList({
+  sections,
+  allowHeaderOverlay = false,
+  presetProducts,
+}: {
+  sections: HomeSection[];
+  allowHeaderOverlay?: boolean;
+  presetProducts?: Map<string, ProductCard[]>;
+}) {
   // Only the live homepage gets the transparent-header banner -- the admin preview renders under
   // its own preview bar and a normal header, so it keeps the regular layout.
   const overlayId = allowHeaderOverlay && homeHeroOverlaysHeader(sections) ? sections.find((s) => s.visible)?.id : undefined;
-  const products = await resolveSectionProducts(sections);
+  const products = await resolveSectionProducts(sections, presetProducts);
   const firstProductListId = sections.find((s) => s.visible && s.type === "product_list")?.id;
   return (
     <>

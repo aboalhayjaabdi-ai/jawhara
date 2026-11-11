@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BLACK_MONTH } from "@/lib/campaign";
 import { resolveProductList } from "@/lib/product-sections";
-import { getCollectionProductIds, type ProductCard as ProductCardType } from "@/lib/queries";
+import { getCollectionProductIds } from "@/lib/queries";
+import { getPrioritizedHBags, interleaveNoelle, resolveMixedJewelry } from "@/lib/campaign-products";
 import { ProductListSection } from "@/components/home/product-list";
 import { CollectionLinks } from "@/components/home/collection-links";
 
@@ -28,50 +29,34 @@ const JEWELRY_CATEGORIES = [
   { title: "Ringar", href: "/collections/ringar" },
 ];
 
-const onSale = (p: ProductCardType) => p.compareAtPrice != null && p.compareAtPrice > p.price;
-
-/** Up to `limit` jewelry pieces at a Black Month price: real best-sellers first (sold in the last
- * 90 days), then the collection's own order. Falls back to plain best-sellers if too few are on
- * sale, so the section is never empty or thin. */
-async function resolveJewelryOffers(limit: number): Promise<ProductCardType[]> {
-  const handle = page.jewelryOffers.collectionHandle;
-  const [bestSelling, manual] = await Promise.all([
-    resolveProductList({ collectionHandle: handle, limit: limit * 3, sort: "best-selling" }),
-    resolveProductList({ collectionHandle: handle, limit: limit * 5 }),
-  ]);
-  const seen = new Set<string>();
-  const pool = [...bestSelling, ...manual].filter((p) => p.available && !seen.has(p.id) && seen.add(p.id));
-  const discounted = pool.filter(onSale);
-  return (discounted.length >= 4 ? discounted : pool).slice(0, limit);
-}
-
 /**
  * Black Month landing page -- jewelry first, bags second:
- *   intro -> 3 för 2 band -> jewelry at campaign price -> bags at campaign price (the Black Month
- *   collection, edited in Jawhara admin -> Kollektioner -> Black Month) -> more jewelry -> categories.
+ *   intro -> 3 för 2 band -> jewelry from every category -> Noélle/H bags -> more jewelry ->
+ *   other Black Month bags (the Black Month collection, Jawhara admin -> Kollektioner) -> categories.
  * No product is shown twice on the page. All copy lives in lib/campaign.ts; setting
  * BLACK_MONTH.active = false turns this route into a 404.
  */
 export default async function BlackMonthPage() {
   if (!BLACK_MONTH.active) notFound();
 
-  const [jewelryOffers, jewelryIds] = await Promise.all([
-    resolveJewelryOffers(page.jewelryOffers.limit),
+  const [jewelryOffers, jewelryIds, hBags] = await Promise.all([
+    resolveMixedJewelry(page.jewelryOffers.limit),
     getCollectionProductIds(page.jewelryOffers.collectionHandle),
+    getPrioritizedHBags(),
   ]);
   const shown = new Set(jewelryOffers.map((p) => p.id));
+  // Noélle Väska and Noélle Väska Mini side by side, then any other H bags.
+  const hBagOffers = interleaveNoelle(hBags).slice(0, page.hBagOffers.limit);
+  for (const p of hBagOffers) shown.add(p.id);
+  const moreJewelry = await resolveMixedJewelry(page.moreJewelry.limit, shown);
+  for (const p of moreJewelry) shown.add(p.id);
   // The Black Month collection is mostly bags; jewelry in it is shown in the jewelry sections.
   const jewelrySet = new Set(jewelryIds);
   const bagOffers = (
-    await resolveProductList({ collectionHandle: BLACK_MONTH.collectionHandle, limit: page.bagOffers.limit + jewelrySet.size, unique: true }, shown)
+    await resolveProductList({ collectionHandle: BLACK_MONTH.collectionHandle, limit: page.bagOffers.limit + shown.size + jewelrySet.size, unique: true }, shown)
   )
     .filter((p) => !jewelrySet.has(p.id))
     .slice(0, page.bagOffers.limit);
-  for (const p of bagOffers) shown.add(p.id);
-  const moreJewelry = await resolveProductList(
-    { collectionHandle: page.moreJewelry.collectionHandle, limit: page.moreJewelry.limit, unique: true },
-    shown
-  );
 
   return (
     <>
@@ -131,25 +116,25 @@ export default async function BlackMonthPage() {
         buttonText={page.jewelryOffers.buttonText}
       />
 
-      {/* 3. Väskor till kampanjpris -- the Black Month collection, on a full-width band */}
-      {bagOffers.length > 0 && (
+      {/* 3. Noélle-väskor till kampanjpris -- H bags, Noélle first, on a full-width band */}
+      {hBagOffers.length > 0 && (
         <div className="bg-[#f7f7f7]">
           <ProductListSection
             id="vaskor"
             variant="campaign"
             layout="grid"
-            heading={page.bagOffers.heading}
-            intro={page.bagOffers.intro}
-            collectionHandle={BLACK_MONTH.collectionHandle}
-            limit={page.bagOffers.limit}
-            products={bagOffers}
-            buttonText={page.bagOffers.buttonText}
-            buttonHref={page.bagOffers.buttonHref}
+            heading={page.hBagOffers.heading}
+            intro={page.hBagOffers.intro}
+            collectionHandle="h-vaskor"
+            limit={page.hBagOffers.limit}
+            products={hBagOffers}
+            buttonText={page.hBagOffers.buttonText}
+            buttonHref={page.hBagOffers.buttonHref}
           />
         </div>
       )}
 
-      {/* 4. Fler smycken att älska */}
+      {/* 4. Fler smycken att älska -- again from every jewelry category */}
       <ProductListSection
         id="fler-smycken"
         variant="campaign"
@@ -161,7 +146,22 @@ export default async function BlackMonthPage() {
         buttonText={page.moreJewelry.buttonText}
       />
 
-      {/* 5. Shoppa efter kategori -- jewelry categories first */}
+      {/* 5. Fler väskor till kampanjpris -- the Black Month collection's other bags, compact carousel */}
+      {bagOffers.length > 0 && (
+        <div className="border-t border-line">
+          <ProductListSection
+            id="fler-vaskor"
+            heading={page.bagOffers.heading}
+            collectionHandle={BLACK_MONTH.collectionHandle}
+            limit={page.bagOffers.limit}
+            products={bagOffers}
+            buttonText={page.bagOffers.buttonText}
+            buttonHref={page.bagOffers.buttonHref}
+          />
+        </div>
+      )}
+
+      {/* 6. Shoppa efter kategori -- jewelry categories first */}
       <div className="border-t border-line">
         <CollectionLinks heading={page.categories.heading} handles={[...page.categories.handles]} />
       </div>
