@@ -11,6 +11,7 @@ import type { GiftBoxOffer } from "@/lib/gift-box";
 import { CartOffers } from "./cart-offers";
 import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
+import { CartSplitDeliveryNotice } from "./cart-split-delivery-notice";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -315,6 +316,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               <span>Lägg till en presentask för {formatSek(giftBoxOffer.price)}</span>
             </label>
           )}
+
+          {items.length > 0 && <CartSplitDeliveryNotice productIds={items.map((i) => i.productId)} />}
 
           {items.length > 0 && (
             <div className="mb-3">
