@@ -11,7 +11,25 @@ export function RecentlyViewed() {
   const [products, setProducts] = useState<ProductCardType[]>([]);
 
   useEffect(() => {
-    setProducts(getRecentlyViewed());
+    const saved = getRecentlyViewed();
+    setProducts(saved);
+    if (saved.length === 0) return;
+    // The saved list is a snapshot from when each product was viewed -- swap in current prices and
+    // stock (products no longer for sale drop out). On any failure the snapshot stays as it was.
+    let cancelled = false;
+    fetch("/api/products/cards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handles: saved.map((p) => p.handle) }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.products)) setProducts(data.products as ProductCardType[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (products.length === 0) return null;

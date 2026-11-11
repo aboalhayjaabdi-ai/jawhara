@@ -38,6 +38,9 @@ type CartActions = {
   removeItem: (variantId: string) => void;
   setQty: (variantId: string, qty: number) => void;
   setDiscountCode: (code: string | null) => void;
+  /** Updates the saved price/compare-at price of items whose current server price differs (called
+   * by useCartTotals) -- a price changed after an item was added never stays stale in the cart. */
+  syncPrices: (lines: { variantId: string; unitPrice: number; compareAtPrice?: number | null }[]) => void;
   // Phase 3/4: forces an immediate (non-debounced) Shopify cart sync, verifies Shopify's own
   // computed total actually matches what Jawhara displays, and only then navigates the browser to
   // that exact cart's Shopify-hosted checkout page. Never navigates on failure OR on a price
@@ -364,6 +367,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [removeItem]
   );
 
+  const syncPrices = useCallback((lines: { variantId: string; unitPrice: number; compareAtPrice?: number | null }[]) => {
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((i) => {
+        const l = lines.find((x) => x.variantId === i.variantId);
+        if (!l) return i;
+        const compareAtPrice = l.compareAtPrice === undefined ? i.compareAtPrice : l.compareAtPrice;
+        if (l.unitPrice === i.price && compareAtPrice === i.compareAtPrice) return i;
+        changed = true;
+        return { ...i, price: l.unitPrice, compareAtPrice };
+      });
+      return changed ? next : prev; // same array when nothing changed -> no re-render/re-fetch loop
+    });
+  }, []);
+
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => {
     setIsOpen(false);
@@ -374,8 +392,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
   const actions = useMemo<CartActions>(
-    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode, goToCheckout }),
-    [open, close, addItem, removeItem, setQty, setDiscountCode, goToCheckout]
+    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout }),
+    [open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout]
   );
   const state = useMemo<CartState>(
     () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded }),
@@ -467,7 +485,7 @@ function writeCachedTotals(fingerprint: string, totals: CheckoutTotals) {
 }
 
 export function useCartTotals(): { totals: CheckoutTotals | null; loading: boolean; fetchError: string | null } {
-  const { items, discountCode } = useCart();
+  const { items, discountCode, syncPrices } = useCart();
   const [totals, setTotals] = useState<CheckoutTotals | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -528,6 +546,7 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
           writeCachedTotals(fingerprint, data as CheckoutTotals);
           setTotals(data as CheckoutTotals);
           setFetchError(null);
+          syncPrices((data as CheckoutTotals).lines);
         }
       } catch {
         if (id !== requestId.current) return;

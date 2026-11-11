@@ -47,13 +47,26 @@ function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMo
 
 type Bundle = Partial<Record<RecommendationMode, ProductCard[]>>;
 
-// Bundles already fetched for an exact cart (+ viewing history), kept for the tab's lifetime so
-// going back to a cart state seen before is instant. In-flight requests are shared too, so the
-// same cart is never fetched twice at once.
+// Bundles already fetched for an exact cart (+ viewing history), kept for up to BUNDLE_TTL_MS so
+// going back to a cart state seen moments ago is instant -- but never longer, so a changed price
+// is picked up (same 60 s freshness as the storefront pages). In-flight requests are shared too,
+// so the same cart is never fetched twice at once.
+const BUNDLE_TTL_MS = 60_000;
 const bundleCache = new Map<string, Bundle>();
+const bundleFetchedAt = new Map<string, number>();
+function freshBundle(key: string): Bundle | undefined {
+  const at = bundleFetchedAt.get(key);
+  if (at === undefined || Date.now() - at > BUNDLE_TTL_MS) {
+    bundleCache.delete(key);
+    bundleFetchedAt.delete(key);
+    return undefined;
+  }
+  return bundleCache.get(key);
+}
 const bundleInFlight = new Map<string, Promise<Bundle>>();
 function fetchBundle(key: string, body: object): Promise<Bundle> {
-  if (bundleCache.has(key)) return Promise.resolve(bundleCache.get(key)!);
+  const fresh = freshBundle(key);
+  if (fresh) return Promise.resolve(fresh);
   if (bundleInFlight.has(key)) return bundleInFlight.get(key)!;
   const request = fetch("/api/cart/recommendations", {
     method: "POST",
@@ -64,7 +77,12 @@ function fetchBundle(key: string, body: object): Promise<Bundle> {
     .then((data) => {
       const bundle = (data?.byMode ?? {}) as Bundle;
       bundleCache.set(key, bundle);
-      if (bundleCache.size > 30) bundleCache.delete(bundleCache.keys().next().value!);
+      bundleFetchedAt.set(key, Date.now());
+      if (bundleCache.size > 30) {
+        const oldest = bundleCache.keys().next().value!;
+        bundleCache.delete(oldest);
+        bundleFetchedAt.delete(oldest);
+      }
       return bundle;
     })
     .finally(() => bundleInFlight.delete(key));
@@ -98,7 +116,7 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
   useEffect(() => {
     if (items.length === 0) return;
     let cancelled = false;
-    const cached = bundleCache.get(bundleKey);
+    const cached = freshBundle(bundleKey);
     if (cached) {
       setBundle({ key: bundleKey, byMode: cached });
       return;
@@ -214,7 +232,10 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
                     </>
                   ) : (
                     <>
-                      <span className="font-semibold">{formatSek(p.price)}</span>
+                      <span className="font-semibold">
+                        {p.variants.some((v) => v.price !== p.price) && "Från "}
+                        {formatSek(p.price)}
+                      </span>
                       {p.compareAtPrice != null && p.compareAtPrice > p.price && (
                         <span className="text-muted line-through">{formatSek(p.compareAtPrice)}</span>
                       )}

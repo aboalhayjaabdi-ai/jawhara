@@ -9,6 +9,7 @@ type EligibleVariant = {
   productShopifyId: string;
   productStatus: string;
   price: number;
+  compareAtPrice: number | null;
   inventoryQuantity: number;
   inventoryTracked: boolean;
   inventoryPolicy: string | null;
@@ -69,7 +70,9 @@ export type PromoProgress = {
 };
 
 export type CheckoutTotals = {
-  lines: { variantId: string; productId: string; qty: number; unitPrice: number; lineTotal: number }[];
+  // compareAtPrice: the variant's CURRENT compare-at price from the database (the cart shows it
+  // crossed out), so a price changed after the item was added is never shown stale.
+  lines: { variantId: string; productId: string; qty: number; unitPrice: number; compareAtPrice?: number | null; lineTotal: number }[];
   subtotal: number;
   appliedDiscounts: AppliedDiscountLine[];
   discountTotal: number;
@@ -108,7 +111,7 @@ async function loadEligibleVariants(variantIds: string[]): Promise<Map<string, E
   const { data, error } = await supabaseService
     .from("product_variants")
     .select(
-      "id, price, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(id, shopify_id, status, collection_products(collections(shopify_id)))"
+      "id, price, compare_at_price, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(id, shopify_id, status, collection_products(collections(shopify_id)))"
     )
     .in("id", variantIds);
 
@@ -125,6 +128,7 @@ async function loadEligibleVariants(variantIds: string[]): Promise<Map<string, E
       productShopifyId: row.products.shopify_id,
       productStatus: row.products.status,
       price: Number(row.price),
+      compareAtPrice: row.compare_at_price == null ? null : Number(row.compare_at_price),
       inventoryQuantity: row.inventory_quantity,
       inventoryTracked: row.inventory_tracked,
       inventoryPolicy: row.inventory_policy,
@@ -197,7 +201,7 @@ export async function computeCheckoutTotals(
       ) {
         errors.push("Otillräckligt lager för en vara i varukorgen.");
       }
-      return { variantId: c.variantId, productId: v.productId, qty: c.qty, unitPrice: v.price, lineTotal: v.price * c.qty };
+      return { variantId: c.variantId, productId: v.productId, qty: c.qty, unitPrice: v.price, compareAtPrice: v.compareAtPrice, lineTotal: v.price * c.qty };
     });
   if (lines.length !== cart.length) errors.push("En eller flera varor i varukorgen kunde inte hittas.");
 

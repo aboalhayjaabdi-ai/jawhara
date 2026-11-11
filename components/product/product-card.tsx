@@ -18,6 +18,9 @@ function formatSek(amount: number) {
 export function ProductCard({ product, priority = false }: { product: ProductCardType; priority?: boolean }) {
   const { addItem } = useCartActions();
   const onSale = product.compareAtPrice != null && product.compareAtPrice > product.price;
+  // The card shows the cheapest variant's price; when sizes/colors cost different amounts that is
+  // marked "Från", so it never contradicts the (often pricier) default size on the product page.
+  const hasPriceRange = product.variants.some((v) => v.price !== product.price);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +141,10 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
       <div className="mt-3.5 text-[13px]">{product.title}</div>
       {product.sku && <div className="mt-0.5 text-[11px] text-muted">{product.sku}</div>}
       <div className="mt-1.5 flex items-baseline gap-2">
-        <span className="text-sm font-semibold">{formatSek(product.price)}</span>
+        <span className="text-sm font-semibold">
+          {hasPriceRange && "Från "}
+          {formatSek(product.price)}
+        </span>
         {onSale && <span className="text-xs text-muted line-through">{formatSek(product.compareAtPrice!)}</span>}
       </div>
     </Link>

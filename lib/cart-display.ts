@@ -87,7 +87,9 @@ export function buildDisplayLines(items: CartItem[], totals: CheckoutTotals | nu
         image: item.image,
         qty: paidQty,
         unitPrice,
-        compareAtPrice: item.compareAtPrice,
+        // The server's current compare-at price once totals are loaded (the item's own copy was
+        // saved when it was added and can be outdated).
+        compareAtPrice: serverLine && serverLine.compareAtPrice !== undefined ? serverLine.compareAtPrice : item.compareAtPrice,
         lineTotal: unitPrice * paidQty,
         isFree: false,
         freeLabel: null,
