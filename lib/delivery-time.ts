@@ -10,7 +10,8 @@
  *     never get the 3–5 week text.
  *   - Every other product in "Väskor" (handle vaskor-och-tillbehor) or one of its website
  *     sub-categories (LV, GG, DI, YSL, CC, MIU, JACQ) shows "Längre leveranstid: 3–5 veckor".
- *   - Everything else (jewelry, wallets/"Plånböcker", gift sets, ...) gets no box.
+ *   - Every gift set ("Gift sets", handle gift-sets) also shows "Längre leveranstid: 3–5 veckor".
+ *   - Everything else (jewelry, wallets/"Plånböcker", ...) gets no box.
  * Only ever one box per product -- getDeliveryTimeNote returns a single string or null.
  */
 
@@ -26,6 +27,8 @@ const BAG_COLLECTION_HANDLES = new Set([
   "cc-vaskor",
   "miu-vaskor",
   "jacq-vaskor",
+  // Gift sets aren't in "Väskor" on the website but have the same longer delivery time.
+  "gift-sets",
 ]);
 
 /** Collections whose products always have the regular delivery time (highest priority). */
@@ -45,7 +48,7 @@ export function getDeliveryTimeNote(collectionHandles: readonly string[]): strin
  *   "long"    -- bags with the longer delivery time (same rule as getDeliveryTimeNote above).
  *   "wallet"  -- wallets ("Plånböcker", handle tillbehor): always shipped together with the bags,
  *                so they never cause a separate parcel either way.
- *   "regular" -- everything else (H väskor, jewelry, gift sets, ...). */
+ *   "regular" -- everything else (H väskor, jewelry, ...). */
 export type CartDeliveryGroup = "long" | "wallet" | "regular";
 
 const WALLET_COLLECTION_HANDLES = new Set(["tillbehor"]);
