@@ -1,0 +1,42 @@
+/**
+ * Delivery-time info box on bag product pages (components/product/product-detail.tsx, just under
+ * the price and the Black Month line, before the product description).
+ *
+ * Decided purely from the product's collection membership on the website (Supabase
+ * collection_products -- NOT Shopify's, which differs), verified against jawhara.se 2026-11-11:
+ *   - "H väskor" (handle h-vaskor) always wins: its products show the regular delivery time even
+ *     though they are also in "Väskor" (or any other collection). Noélle Mini (collection
+ *     noelle-mini-vaskor) are all H bags on the website and are treated the same way, so they
+ *     never get the 3–5 week text.
+ *   - Every other product in "Väskor" (handle vaskor-och-tillbehor) or one of its website
+ *     sub-categories (LV, GG, DI, YSL, CC, MIU, JACQ) shows "Längre leveranstid: 3–5 veckor".
+ *   - Everything else (jewelry, wallets/"Plånböcker", gift sets, ...) gets no box.
+ * Only ever one box per product -- getDeliveryTimeNote returns a single string or null.
+ */
+
+/** "Väskor" plus its sub-categories on the website, so a bag only placed in a sub-category still
+ * counts as a bag. */
+const BAG_COLLECTION_HANDLES = new Set([
+  "vaskor-och-tillbehor",
+  "lv-vaskor",
+  "gg-vaskor",
+  "h-vaskor",
+  "di-vaskor",
+  "ysl-vaskor",
+  "cc-vaskor",
+  "miu-vaskor",
+  "jacq-vaskor",
+]);
+
+/** Collections whose products always have the regular delivery time (highest priority). */
+const REGULAR_DELIVERY_COLLECTION_HANDLES = new Set(["h-vaskor", "noelle-mini-vaskor"]);
+
+export const DELIVERY_TIME_LONG = "Längre leveranstid: 3–5 veckor";
+export const DELIVERY_TIME_REGULAR = "Ordinarie leveranstid";
+
+/** The delivery-time text for a product given its collection handles, or null for non-bags. */
+export function getDeliveryTimeNote(collectionHandles: readonly string[]): string | null {
+  if (collectionHandles.some((h) => REGULAR_DELIVERY_COLLECTION_HANDLES.has(h))) return DELIVERY_TIME_REGULAR;
+  if (collectionHandles.some((h) => BAG_COLLECTION_HANDLES.has(h))) return DELIVERY_TIME_LONG;
+  return null;
+}

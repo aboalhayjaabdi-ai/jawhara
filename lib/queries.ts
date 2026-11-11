@@ -584,6 +584,13 @@ export async function isEligibleForThreeForTwo(productId: string): Promise<boole
   return ((data ?? []) as any[]).some((row) => row.collections?.shopify_id && threeForTwoCollectionIds.has(row.collections.shopify_id));
 }
 
+/** Handles of every collection a product belongs to (by internal id) -- used by the PDP to pick
+ * the bag delivery-time box (lib/delivery-time.ts). */
+export async function getProductCollectionHandles(productId: string): Promise<string[]> {
+  const { data } = await supabase.from("collection_products").select("collections(handle)").eq("product_id", productId);
+  return ((data ?? []) as any[]).map((row) => row.collections?.handle).filter((h): h is string => typeof h === "string");
+}
+
 /** "Passar med" -- manually curated complementary products (product_complementary), entirely
  * separate from getRelatedProductCards' automatic recommendations above. Only the admin's own
  * manual selections are ever returned, in the admin's own chosen order; excludes unpublished
