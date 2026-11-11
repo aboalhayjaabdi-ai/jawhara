@@ -334,6 +334,7 @@ export function ProductDetail({
   threeForTwoEligible,
   promoBox = null,
   salePriceNote = null,
+  deliveryTimeNote = null,
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
   // content_ids actually match a real catalog item instead of a variant id the catalog has no
@@ -374,6 +375,10 @@ export function ProductDetail({
   /** Short line under the price, only rendered while the selected variant has a compare-at price
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
+  /** Delivery-time box under the price on bag pages ("Längre leveranstid: 3–5 veckor" or
+   * "Ordinarie leveranstid"). Decided server-side from collections via lib/delivery-time.ts;
+   * null (all non-bag products) renders nothing. */
+  deliveryTimeNote?: string | null;
 }) {
   // With a per-variant gallery, land on the color whose photo the collection cards show (position
   // 0) rather than simply the first variant in the list.
@@ -473,6 +478,18 @@ export function ProductDetail({
           )}
           {variant && onSale && salePriceNote && (
             <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
+          )}
+
+          {deliveryTimeNote && (
+            <div className="mt-4 flex items-center gap-3 border border-line bg-[#f7f7f7] px-4 py-3">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0" aria-hidden>
+                <path d="M3 7h11v9H3z" />
+                <path d="M14 10h4l3 3v3h-7z" />
+                <circle cx="7" cy="19" r="1.6" />
+                <circle cx="17.5" cy="19" r="1.6" />
+              </svg>
+              <span className="text-[13px] font-medium leading-5 tracking-[0.02em]">{deliveryTimeNote}</span>
+            </div>
           )}
 
           {promoBox && (
