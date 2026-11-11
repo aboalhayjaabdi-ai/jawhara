@@ -135,6 +135,31 @@ export async function bulkAdjustPrice(
   return { ok: true, count: (variants?.length ?? 0) - skipped.length, skipped };
 }
 
+/** Sets one fixed compare-at ("jämförpris") price on every variant of the selected products --
+ * the selling price is left untouched. */
+export async function bulkSetCompareAtPrice(productIds: string[], compareAtPrice: number): Promise<BulkResult> {
+  const admin = await requireAdmin();
+  const denied = requireFullAdmin(admin);
+  if (denied) return denied;
+  if (productIds.length === 0) return { ok: false, error: "Inga produkter valda." };
+  if (!Number.isFinite(compareAtPrice) || compareAtPrice <= 0) return { ok: false, error: "Ange ett jämförpris större än 0 kr." };
+
+  const amount = Math.round(compareAtPrice * 100) / 100;
+  const { data: variants } = await supabaseService.from("product_variants").select("id, price, product_id").in("product_id", productIds);
+  // A compare-at price at or below the selling price would show no (or a negative) discount.
+  const skipped = (variants ?? []).filter((v) => Number(v.price) >= amount).map((v) => v.id as string);
+  const ids = (variants ?? []).map((v) => v.id as string).filter((id) => !skipped.includes(id));
+  if (ids.length > 0) {
+    const { error } = await supabaseService.from("product_variants").update({ compare_at_price: amount }).in("id", ids);
+    if (error) return { ok: false, error: "Kunde inte spara jämförpriset." };
+  }
+
+  await logAdminAction(admin.adminId, "products.bulk_set_compare_at_price", undefined, undefined, { productIds, compareAtPrice: amount });
+  revalidatePath("/admin/products");
+  const updatedProducts = new Set((variants ?? []).filter((v) => ids.includes(v.id as string)).map((v) => v.product_id as string));
+  return { ok: true, count: updatedProducts.size, skipped };
+}
+
 export async function bulkDelete(productIds: string[], confirmed: boolean): Promise<BulkResult & { impactSummary?: { reviewCount: number; orderItemCount: number } }> {
   const admin = await requireAdmin();
   const denied = requireFullAdmin(admin);

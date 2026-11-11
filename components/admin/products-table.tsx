@@ -10,6 +10,7 @@ import {
   bulkAddToCollection,
   bulkRemoveFromCollection,
   bulkAdjustPrice,
+  bulkSetCompareAtPrice,
   bulkDelete,
 } from "@/app/admin/(authenticated)/products/actions/bulk";
 
@@ -35,7 +36,7 @@ function formatPriceRange(min: number | null, max: number | null) {
   return `${Math.round(min)}–${Math.round(max!)} kr`;
 }
 
-type BulkAction = "status" | "tags-add" | "tags-remove" | "collection-add" | "collection-remove" | "price" | "delete";
+type BulkAction = "status" | "tags-add" | "tags-remove" | "collection-add" | "collection-remove" | "price" | "compare-at" | "delete";
 
 export function ProductsTable({ products, collections }: { products: ProductRow[]; collections: { id: string; title: string }[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -45,6 +46,7 @@ export function ProductsTable({ products, collections }: { products: ProductRow[
   const [collectionId, setCollectionId] = useState(collections[0]?.id ?? "");
   const [priceMode, setPriceMode] = useState<"percent" | "amount">("percent");
   const [priceValue, setPriceValue] = useState(0);
+  const [compareAtValue, setCompareAtValue] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -82,6 +84,9 @@ export function ProductsTable({ products, collections }: { products: ProductRow[
         case "price":
           result = await bulkAdjustPrice(ids, { mode: priceMode, value: priceValue, applyToCompareAt: false });
           break;
+        case "compare-at":
+          result = await bulkSetCompareAtPrice(ids, compareAtValue);
+          break;
         case "delete":
           result = await bulkDelete(ids, confirmDelete);
           break;
@@ -113,6 +118,7 @@ export function ProductsTable({ products, collections }: { products: ProductRow[
               <option value="collection-add">Lägg till i kollektion</option>
               <option value="collection-remove">Ta bort från kollektion</option>
               <option value="price">Justera pris</option>
+              <option value="compare-at">Sätt jämförpris</option>
               <option value="delete">Radera</option>
             </select>
 
@@ -148,6 +154,19 @@ export function ProductsTable({ products, collections }: { products: ProductRow[
                   className="w-20 rounded-md border border-gray-200 px-2 py-1 text-xs"
                 />
               </>
+            )}
+            {action === "compare-at" && (
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="number"
+                  min={1}
+                  value={compareAtValue || ""}
+                  onChange={(e) => setCompareAtValue(Number(e.target.value))}
+                  placeholder="t.ex. 649"
+                  className="w-24 rounded-md border border-gray-200 px-2 py-1 text-xs"
+                />
+                kr på alla varianter (priset ändras inte)
+              </label>
             )}
             {action === "delete" && (
               <label className="flex items-center gap-1 text-xs text-rose-700">
