@@ -16,6 +16,10 @@ export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | 
 export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "bags-wallets", "match-bag", "viewed", "mixed", "curated"];
 
 const MAX_PRODUCTS = 6;
+// "Välj ett smycke till": 5 bracelets/necklaces (incl. at most one more of a design already in the
+// cart), then one earring and one ring.
+const COMPLETE_3FOR2_CATEGORIES = ["armband", "halsband", "orhangen", "ringar"] as const;
+const COMPLETE_3FOR2_MAX = 8;
 const JEWELRY_COLLECTION = "alla-smycken";
 const BESTSELLER_COLLECTION = "bastsaljare-1";
 const WALLET_COLLECTION = "tillbehor"; // "Plånböcker"
@@ -134,12 +138,46 @@ export async function getCartRecommendations(input: {
   const topJewelry = jewelryIds.slice(0, 24);
 
   if (input.mode === "complete-3for2") {
-    // Most relevant first: the same specific category as a piece already in the cart (e.g. more
-    // gold bracelets next to a gold bracelet), then the store's own jewelry order. Only products
-    // that actually count towards "3 för 2" are kept.
-    const anchor = input.cartProductIds.find((id) => jewelrySet.has(id));
-    const [related, fallback] = await Promise.all([anchor ? cachedRelated(anchor, "", 10) : Promise.resolve([]), cachedCardsByIds(topJewelry)]);
-    return finish([...related, ...fallback].filter((c) => c.threeForTwo && !cartProducts.has(c.id)));
+    // Variety over repetition: bracelets and necklaces alternating (each category's own admin
+    // order), every suggestion a different design (title), and designs already in the cart left
+    // out -- except at most ONE more of a design the customer already picked, a few places in.
+    // Earrings and rings come last (one each). Only products that count towards "3 för 2".
+    const [cartCards, ...categoryIds] = await Promise.all([
+      cachedCardsByIds(input.cartProductIds.slice(0, 20)),
+      ...COMPLETE_3FOR2_CATEGORIES.map((h) => cachedCategoryIds(h)),
+    ]);
+    const [armband, halsband, orhangen, ringar] = await Promise.all(
+      categoryIds.map(async (ids) =>
+        (await cachedCardsByIds(ids.filter((id) => !cartProducts.has(id)).slice(0, 30))).filter((c) => c.threeForTwo && addable([c], cartVariants).length > 0)
+      )
+    );
+    const titleKey = (t: string) => t.trim().toLowerCase();
+    const cartTitles = new Set(cartCards.map((c) => titleKey(c.title)));
+    const usedIds = new Set<string>();
+    const usedTitles = new Set<string>();
+    const nextNew = (list: ProductCard[]) => {
+      const c = list.find((p) => !usedIds.has(p.id) && !usedTitles.has(titleKey(p.title)) && !cartTitles.has(titleKey(p.title)));
+      if (c) {
+        usedIds.add(c.id);
+        usedTitles.add(titleKey(c.title));
+      }
+      return c;
+    };
+    const picks: ProductCard[] = [];
+    for (let round = 0; picks.length < 5 && round < 10; round++) {
+      for (const list of [armband, halsband]) {
+        const c = nextNew(list);
+        if (c && picks.length < 5) picks.push(c);
+      }
+    }
+    // One more of a design already in the cart (another color/size), as the 4th suggestion.
+    const sameDesign = [...armband, ...halsband, ...orhangen, ...ringar].find((p) => !usedIds.has(p.id) && cartTitles.has(titleKey(p.title)));
+    if (sameDesign) picks.splice(Math.min(3, picks.length), 0, sameDesign);
+    for (const list of [orhangen, ringar]) {
+      const c = nextNew(list);
+      if (c) picks.push(c);
+    }
+    return addable(dedupe(picks), cartVariants).slice(0, COMPLETE_3FOR2_MAX);
   }
 
   if (input.mode === "match-bag") {
