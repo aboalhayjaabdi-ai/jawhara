@@ -9,6 +9,8 @@
  *     and jewelry are not, so they get no box.
  *   - "H väskor" (handle h-vaskor) always wins: a product in it shows the regular delivery time
  *     even though it is also in "Väskor" (or any other collection).
+ *   - Noélle Mini bags get no box at all: anything in the "Noelle mini väskor" collection
+ *     (handle noelle-mini-vaskor) or with a noelle-vaska-mini* product handle. Checked first.
  * Only ever one box per product -- getDeliveryTimeNote returns a single string or null.
  */
 
@@ -25,8 +27,12 @@ const BAG_COLLECTION_HANDLES = new Set([
   "miu-vaskor",
   "jacq-vaskor",
   "meta-vaskor",
-  "noelle-mini-vaskor",
 ]);
+
+/** Noélle Mini: excluded entirely (no delivery-time box). Matched by collection and, since those
+ * products aren't reliably in that collection, by product handle too. */
+const EXCLUDED_COLLECTION_HANDLES = new Set(["noelle-mini-vaskor"]);
+const EXCLUDED_PRODUCT_HANDLE_PREFIX = "noelle-vaska-mini";
 
 /** Collection whose products always have the regular delivery time (highest priority). */
 const REGULAR_DELIVERY_COLLECTION_HANDLE = "h-vaskor";
@@ -34,8 +40,11 @@ const REGULAR_DELIVERY_COLLECTION_HANDLE = "h-vaskor";
 export const DELIVERY_TIME_LONG = "Längre leveranstid: 3–5 veckor";
 export const DELIVERY_TIME_REGULAR = "Ordinarie leveranstid";
 
-/** The delivery-time text for a product given its collection handles, or null for non-bags. */
-export function getDeliveryTimeNote(collectionHandles: readonly string[]): string | null {
+/** The delivery-time text for a product given its handle and collection handles, or null for
+ * non-bags and excluded products. */
+export function getDeliveryTimeNote(productHandle: string, collectionHandles: readonly string[]): string | null {
+  if (productHandle.startsWith(EXCLUDED_PRODUCT_HANDLE_PREFIX)) return null;
+  if (collectionHandles.some((h) => EXCLUDED_COLLECTION_HANDLES.has(h))) return null;
   if (collectionHandles.includes(REGULAR_DELIVERY_COLLECTION_HANDLE)) return DELIVERY_TIME_REGULAR;
   if (collectionHandles.some((h) => BAG_COLLECTION_HANDLES.has(h))) return DELIVERY_TIME_LONG;
   return null;
