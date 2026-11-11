@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BLACK_MONTH } from "@/lib/campaign";
-import { resolveProductListsInOrder } from "@/lib/product-sections";
+import { resolveProductList } from "@/lib/product-sections";
+import { getCollectionProductIds, type ProductCard as ProductCardType } from "@/lib/queries";
 import { ProductListSection } from "@/components/home/product-list";
 import { CollectionLinks } from "@/components/home/collection-links";
-import { ProductCard } from "@/components/product/product-card";
 
 export const revalidate = 60; // same cadence as the homepage/collection pages (prices, stock, membership)
 
@@ -19,23 +19,59 @@ export const metadata: Metadata = {
 };
 
 // Every line here is a verified, standing offer -- see lib/campaign.ts.
-const BENEFITS = ["Utvalda kampanjpriser", "3 för 2 på alla smycken", "Fri frakt inom Sverige"];
+const BENEFITS = ["3 för 2 på alla smycken", "Smycken & väskor till kampanjpris", "Fri frakt inom Sverige"];
+
+const JEWELRY_CATEGORIES = [
+  { title: "Armband", href: "/collections/armband" },
+  { title: "Halsband", href: "/collections/halsband" },
+  { title: "Örhängen", href: "/collections/orhangen" },
+  { title: "Ringar", href: "/collections/ringar" },
+];
+
+const onSale = (p: ProductCardType) => p.compareAtPrice != null && p.compareAtPrice > p.price;
+
+/** Up to `limit` jewelry pieces at a Black Month price: real best-sellers first (sold in the last
+ * 90 days), then the collection's own order. Falls back to plain best-sellers if too few are on
+ * sale, so the section is never empty or thin. */
+async function resolveJewelryOffers(limit: number): Promise<ProductCardType[]> {
+  const handle = page.jewelryOffers.collectionHandle;
+  const [bestSelling, manual] = await Promise.all([
+    resolveProductList({ collectionHandle: handle, limit: limit * 3, sort: "best-selling" }),
+    resolveProductList({ collectionHandle: handle, limit: limit * 5 }),
+  ]);
+  const seen = new Set<string>();
+  const pool = [...bestSelling, ...manual].filter((p) => p.available && !seen.has(p.id) && seen.add(p.id));
+  const discounted = pool.filter(onSale);
+  return (discounted.length >= 4 ? discounted : pool).slice(0, limit);
+}
 
 /**
- * Black Month landing page. Section 1 is the Shopify/Supabase "Black Month" collection (edit its
- * products in Jawhara admin -> Kollektioner -> Black Month); the bag and jewelry sections pull from
- * the existing collections and skip anything already shown above, so nothing repeats on the page.
- * All copy lives in lib/campaign.ts; setting BLACK_MONTH.active = false turns this route into a 404.
+ * Black Month landing page -- jewelry first, bags second:
+ *   intro -> 3 för 2 band -> jewelry at campaign price -> bags at campaign price (the Black Month
+ *   collection, edited in Jawhara admin -> Kollektioner -> Black Month) -> more jewelry -> categories.
+ * No product is shown twice on the page. All copy lives in lib/campaign.ts; setting
+ * BLACK_MONTH.active = false turns this route into a 404.
  */
 export default async function BlackMonthPage() {
   if (!BLACK_MONTH.active) notFound();
 
-  const lists = await resolveProductListsInOrder([
-    { key: "offers", spec: { collectionHandle: BLACK_MONTH.collectionHandle, limit: page.offers.limit } },
-    { key: "bags", spec: { collectionHandle: page.bags.collectionHandle, limit: page.bags.limit, unique: true } },
-    { key: "jewelry", spec: { collectionHandle: page.jewelry.collectionHandle, limit: page.jewelry.limit, sort: "best-selling", unique: true } },
+  const [jewelryOffers, jewelryIds] = await Promise.all([
+    resolveJewelryOffers(page.jewelryOffers.limit),
+    getCollectionProductIds(page.jewelryOffers.collectionHandle),
   ]);
-  const jewelry = lists.get("jewelry") ?? [];
+  const shown = new Set(jewelryOffers.map((p) => p.id));
+  // The Black Month collection is mostly bags; jewelry in it is shown in the jewelry sections.
+  const jewelrySet = new Set(jewelryIds);
+  const bagOffers = (
+    await resolveProductList({ collectionHandle: BLACK_MONTH.collectionHandle, limit: page.bagOffers.limit + jewelrySet.size, unique: true }, shown)
+  )
+    .filter((p) => !jewelrySet.has(p.id))
+    .slice(0, page.bagOffers.limit);
+  for (const p of bagOffers) shown.add(p.id);
+  const moreJewelry = await resolveProductList(
+    { collectionHandle: page.moreJewelry.collectionHandle, limit: page.moreJewelry.limit, unique: true },
+    shown
+  );
 
   return (
     <>
@@ -55,63 +91,77 @@ export default async function BlackMonthPage() {
         </div>
       </section>
 
-      {/* 1. Våra bästa erbjudanden -- the Black Month collection */}
+      {/* 1. 3 för 2 på alla smycken -- the headline offer */}
+      <section className="bg-fg text-bg">
+        <div className="mx-auto max-w-[880px] px-6 py-12 text-center sm:py-14">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-bg/70">Black Month</p>
+          <h2 className="mt-3 text-[24px] uppercase leading-tight tracking-[0.08em] sm:text-[34px]">{BLACK_MONTH.threeForTwo.heading}</h2>
+          <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-bg/80">{BLACK_MONTH.threeForTwo.pdpBody}</p>
+          <nav aria-label="Smyckeskategorier" className="mx-auto mt-7 flex max-w-lg flex-wrap justify-center gap-2.5">
+            {JEWELRY_CATEGORIES.map((c) => (
+              <Link
+                key={c.href}
+                href={c.href}
+                className="btn-fx flex h-11 min-w-[104px] items-center justify-center border border-bg/40 px-5 text-[11px] font-semibold uppercase tracking-[0.18em] hover:border-bg"
+              >
+                {c.title}
+              </Link>
+            ))}
+          </nav>
+          <Link
+            href={`/collections/${page.jewelryOffers.collectionHandle}`}
+            className="btn-fx mx-auto mt-4 flex h-12 w-full max-w-[240px] items-center justify-center bg-bg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-fg"
+          >
+            Shoppa alla smycken
+          </Link>
+        </div>
+      </section>
+
+      {/* 2. Smycken till kampanjpris */}
       <ProductListSection
-        id="erbjudanden"
+        id="smycken"
         variant="campaign"
         layout="grid"
-        heading={page.offers.heading}
-        collectionHandle={BLACK_MONTH.collectionHandle}
-        limit={page.offers.limit}
-        products={lists.get("offers")}
+        heading={page.jewelryOffers.heading}
+        intro={page.jewelryOffers.intro}
+        collectionHandle={page.jewelryOffers.collectionHandle}
+        limit={page.jewelryOffers.limit}
+        products={jewelryOffers}
         priorityImages={4}
-        buttonText=""
+        buttonText={page.jewelryOffers.buttonText}
       />
 
-      {/* 2. Upptäck våra väskor -- main campaign category, full-width band for extra emphasis */}
-      <div className="bg-[#f7f7f7]">
-        <ProductListSection
-          id="vaskor"
-          variant="campaign"
-          layout="grid"
-          heading={page.bags.heading}
-          intro="Tidlösa modeller i noggrant utvalda material – nu till kampanjpris."
-          collectionHandle={page.bags.collectionHandle}
-          limit={page.bags.limit}
-          products={lists.get("bags")}
-          buttonText={page.bags.buttonText}
-          buttonHref={`/collections/${page.bags.collectionHandle}`}
-        />
-      </div>
-
-      {/* 3. Smycken att älska -- with the 3 för 2 offer */}
-      {jewelry.length > 0 && (
-        <section id="smycken" className="mx-auto max-w-[1328px] scroll-mt-24 px-4 py-12 sm:px-6 lg:px-14 lg:py-16">
-          <div className="mb-8 text-center lg:mb-10">
-            <h2 className="text-[22px] uppercase leading-tight tracking-[0.06em] sm:text-[28px]">{page.jewelry.heading}</h2>
-            <div className="mx-auto mt-4 h-px w-10 bg-fg" aria-hidden />
-          </div>
-          <div className="mx-auto mb-10 max-w-xl border border-fg px-6 py-6 text-center sm:py-7">
-            <p className="text-[13px] font-semibold uppercase tracking-[0.22em] sm:text-sm">{BLACK_MONTH.threeForTwo.heading}</p>
-            <p className="mt-2.5 text-sm leading-6 text-muted">{BLACK_MONTH.threeForTwo.body}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-8 lg:grid-cols-4 lg:gap-x-7 lg:gap-y-10">
-            {jewelry.map((p) => (
-              <ProductCard key={p.handle} product={p} />
-            ))}
-          </div>
-          <div className="mt-10 flex justify-center">
-            <Link
-              href={`/collections/${page.jewelry.collectionHandle}`}
-              className="btn-fx flex h-12 min-w-[240px] items-center justify-center bg-fg px-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-bg"
-            >
-              {page.jewelry.buttonText}
-            </Link>
-          </div>
-        </section>
+      {/* 3. Väskor till kampanjpris -- the Black Month collection, on a full-width band */}
+      {bagOffers.length > 0 && (
+        <div className="bg-[#f7f7f7]">
+          <ProductListSection
+            id="vaskor"
+            variant="campaign"
+            layout="grid"
+            heading={page.bagOffers.heading}
+            intro={page.bagOffers.intro}
+            collectionHandle={BLACK_MONTH.collectionHandle}
+            limit={page.bagOffers.limit}
+            products={bagOffers}
+            buttonText={page.bagOffers.buttonText}
+            buttonHref={page.bagOffers.buttonHref}
+          />
+        </div>
       )}
 
-      {/* 4. Shoppa efter kategori */}
+      {/* 4. Fler smycken att älska */}
+      <ProductListSection
+        id="fler-smycken"
+        variant="campaign"
+        layout="grid"
+        heading={page.moreJewelry.heading}
+        collectionHandle={page.moreJewelry.collectionHandle}
+        limit={page.moreJewelry.limit}
+        products={moreJewelry}
+        buttonText={page.moreJewelry.buttonText}
+      />
+
+      {/* 5. Shoppa efter kategori -- jewelry categories first */}
       <div className="border-t border-line">
         <CollectionLinks heading={page.categories.heading} handles={[...page.categories.handles]} />
       </div>

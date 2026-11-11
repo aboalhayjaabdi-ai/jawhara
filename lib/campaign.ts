@@ -44,15 +44,28 @@ export const BLACK_MONTH = {
 
   page: {
     title: "BLACK MONTH",
-    subtitle: "Upptäck våra utvalda favoriter till kampanjpriser.",
-    seoTitle: "Black Month – utvalda väskor och smycken",
-    seoDescription: "Upptäck Jawharas Black Month: utvalda väskor och smycken till kampanjpriser, 3 för 2 på alla smycken och fri frakt inom Sverige.",
-    offers: { heading: "Våra bästa erbjudanden", limit: 12 },
-    bags: { heading: "Upptäck våra väskor", collectionHandle: "vaskor-och-tillbehor", limit: 8, buttonText: "Shoppa alla väskor" },
-    jewelry: { heading: "Smycken att älska", collectionHandle: "alla-smycken", limit: 8, buttonText: "Shoppa smycken" },
+    subtitle: "Smycken och väskor till kampanjpriser – och 3 för 2 på alla smycken.",
+    seoTitle: "Black Month – smycken och väskor till kampanjpris",
+    seoDescription: "Upptäck Jawharas Black Month: 3 för 2 på alla smycken, smycken och väskor till kampanjpriser och fri frakt inom Sverige.",
+    /** Order on the page: jewelry first, bags second (see app/(storefront)/black-month/page.tsx). */
+    jewelryOffers: {
+      heading: "Smycken till kampanjpris",
+      intro: "Våra mest älskade smycken – nu till Black Month-pris. Köp 3 och få det billigaste på köpet.",
+      collectionHandle: "alla-smycken",
+      limit: 8,
+      buttonText: "Se alla smycken",
+    },
+    bagOffers: {
+      heading: "Väskor till kampanjpris",
+      intro: "Tidlösa modeller i noggrant utvalda material – nu till kampanjpris.",
+      limit: 8,
+      buttonText: "Shoppa alla väskor",
+      buttonHref: "/collections/vaskor-och-tillbehor",
+    },
+    moreJewelry: { heading: "Fler smycken att älska", collectionHandle: "alla-smycken", limit: 8, buttonText: "Visa fler smycken" },
     categories: {
       heading: "Shoppa efter kategori",
-      handles: ["vaskor-och-tillbehor", "armband", "halsband", "orhangen", "ringar", "gift-sets"],
+      handles: ["armband", "halsband", "orhangen", "ringar", "vaskor-och-tillbehor", "gift-sets"],
     },
   },
 } as const;
