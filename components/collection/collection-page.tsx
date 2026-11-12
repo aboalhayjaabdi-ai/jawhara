@@ -24,6 +24,7 @@ import { Pagination } from "@/components/collection/pagination";
 
 const PAGE_SIZE = 24;
 const GRID_ANCHOR_ID = "produktrutnat";
+const SORT_ANCHOR_ID = "sortering";
 // Small campaign line shown directly under the collection title, keyed by the collection's
 // template group -- so a main collection and every sub-collection in its group all get it.
 // Handles in `exclude` share a group's template but aren't part of that offer (gift sets aren't
@@ -177,7 +178,8 @@ function CollectionGrid({
 
       <SubcategoryTiles tiles={tiles} currentHandle={currentHandle} />
 
-      <div className="mb-8">
+      {/* scroll-mt = the sticky header's height: a page change lands with the filter right below it */}
+      <div id={SORT_ANCHOR_ID} className="mb-8 scroll-mt-[68px]">
         <SortFilterBar basePath={basePath} currentSort={sort} />
       </div>
 
@@ -194,7 +196,7 @@ function CollectionGrid({
         <p className="pt-10 text-center text-sm text-muted">Inga produkter matchar valda filter.</p>
       )}
 
-      <Pagination currentPage={page} totalPages={totalPages} gridAnchorId={GRID_ANCHOR_ID} basePath={basePath} sort={sort} />
+      <Pagination currentPage={page} totalPages={totalPages} gridAnchorId={SORT_ANCHOR_ID} basePath={basePath} sort={sort} />
     </div>
   );
 }

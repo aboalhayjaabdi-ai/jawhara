@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { PaginationPending } from "./pagination-pending";
 
 // Standard "windowed" page-number algorithm: always shows the first and last page, plus one
@@ -23,6 +23,15 @@ function getPageNumbers(current: number, total: number): (number | "...")[] {
   return range;
 }
 
+const SCROLL_FLAG = "jawhara_pagination_scroll";
+function markPaginationClick() {
+  try {
+    sessionStorage.setItem(SCROLL_FLAG, "1");
+  } catch {
+    // storage unavailable -- the page still changes, it just won't scroll to the filter
+  }
+}
+
 export function Pagination({
   currentPage,
   totalPages,
@@ -39,14 +48,17 @@ export function Pagination({
   sort: string;
 }) {
 
-  // Scroll to the top of the product grid whenever the page actually changes -- but not on the
-  // component's own first mount (landing directly on a shared ?page=3 link shouldn't yank the
-  // viewport). Same skip-on-mount pattern already used elsewhere in this codebase (e.g. the
-  // add-to-cart pop animation's useJustAdded hook).
-  const prevPage = useRef(currentPage);
+  // After a click on one of these links, bring the sort filter to the top of the screen once the
+  // new page is shown. A flag set by the click (not "the page number changed") decides it: page 1
+  // and page 2+ are different routes, so this component remounts and can't compare with before --
+  // and landing directly on a shared ?page=3 link must not scroll the viewport.
   useEffect(() => {
-    if (prevPage.current === currentPage) return;
-    prevPage.current = currentPage;
+    try {
+      if (sessionStorage.getItem(SCROLL_FLAG) !== "1") return;
+      sessionStorage.removeItem(SCROLL_FLAG);
+    } catch {
+      return;
+    }
     document.getElementById(gridAnchorId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [currentPage, gridAnchorId]);
 
@@ -69,6 +81,8 @@ export function Pagination({
       {hasPrev ? (
         <Link
           href={hrefFor(currentPage - 1)}
+          scroll={false}
+          onClick={markPaginationClick}
           aria-label="Föregående sida"
           className="btn-fx relative flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
@@ -90,6 +104,8 @@ export function Pagination({
           <Link
             key={p}
             href={hrefFor(p)}
+            scroll={false}
+            onClick={markPaginationClick}
             aria-current={p === currentPage ? "page" : undefined}
             className={
               p === currentPage
@@ -106,6 +122,8 @@ export function Pagination({
       {hasNext ? (
         <Link
           href={hrefFor(currentPage + 1)}
+          scroll={false}
+          onClick={markPaginationClick}
           aria-label="Nästa sida"
           className="btn-fx relative flex h-9 min-w-9 items-center justify-center border border-line px-2 text-sm"
         >
