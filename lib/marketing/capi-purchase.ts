@@ -257,6 +257,8 @@ export async function reportPurchaseToMeta(orderId: string, source: PurchaseRepo
           custom_data: {
             currency: order.currency_code,
             value: Number(order.total_price),
+            // Same value the Shopify checkout pixel sends (docs/meta-shopify-custom-pixel.js).
+            order_id: String(order.shopify_id ?? order.id),
             content_name: order.order_number,
             content_type: "product",
             contents,

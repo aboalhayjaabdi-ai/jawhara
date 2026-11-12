@@ -103,5 +103,7 @@ analytics.subscribe("checkout_completed", (event) => {
   const orderId = tail(checkout.order && checkout.order.id);
   if (!orderId) return;
   initPixel(checkout);
-  fbq("track", "Purchase", cartParams(checkout), { eventID: "shopify_order_" + orderId });
+  const params = cartParams(checkout);
+  params.order_id = orderId;
+  fbq("track", "Purchase", params, { eventID: "shopify_order_" + orderId });
 });
