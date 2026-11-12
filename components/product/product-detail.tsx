@@ -375,7 +375,7 @@ export function ProductDetail({
   /** Short line under the price, only rendered while the selected variant has a compare-at price
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
-  /** Delivery-time box under the price on bag pages ("Längre leveranstid: 3–5 veckor" or
+  /** Delivery-time box under the price on bag pages ("Leveranstid: 3–5 veckor" or
    * none at all for H bags). Decided server-side from collections via lib/delivery-time.ts;
    * null (all non-bag products) renders nothing. */
   deliveryTimeNote?: string | null;

@@ -9,8 +9,8 @@
  *     Noélle Mini (collection noelle-mini-vaskor) are all H bags on the website and are treated the
  *     same way, so they never get the 3–5 week text either.
  *   - Every other product in "Väskor" (handle vaskor-och-tillbehor) or one of its website
- *     sub-categories (LV, GG, DI, YSL, CC, MIU, JACQ) shows "Längre leveranstid: 3–5 veckor".
- *   - Every gift set ("Gift sets", handle gift-sets) also shows "Längre leveranstid: 3–5 veckor".
+ *     sub-categories (LV, GG, DI, YSL, CC, MIU, JACQ) shows "Leveranstid: 3–5 veckor".
+ *   - Every gift set ("Gift sets", handle gift-sets) also shows "Leveranstid: 3–5 veckor".
  *   - Everything else (jewelry, wallets/"Plånböcker", ...) gets no box.
  * Only ever one box per product -- getDeliveryTimeNote returns a single string or null.
  */
@@ -34,7 +34,7 @@ const BAG_COLLECTION_HANDLES = new Set([
 /** Collections whose products always have the regular delivery time (highest priority). */
 const REGULAR_DELIVERY_COLLECTION_HANDLES = new Set(["h-vaskor", "noelle-mini-vaskor"]);
 
-export const DELIVERY_TIME_LONG = "Längre leveranstid: 3–5 veckor";
+export const DELIVERY_TIME_LONG = "Leveranstid: 3–5 veckor";
 /** The delivery-time text for a product given its collection handles, or null when no box is shown
  * (H bags -- regular delivery time -- and everything that isn't a bag or gift set). */
 export function getDeliveryTimeNote(collectionHandles: readonly string[]): string | null {
