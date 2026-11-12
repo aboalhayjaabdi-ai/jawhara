@@ -28,8 +28,10 @@ storefront. Lovable is not carried over.
 Discounts: the active ones only (3 för 2, Valfri Plånbok, RABATT20F), with identical rules, scoped
 to the new store's own collections and products. Expired/test discounts are skipped.
 
-Policies: refund, shipping, terms, contact and privacy copied verbatim (the new store's automatic
-privacy-policy management had to be turned off in its admin first).
+Policies: refund, shipping, terms, contact and privacy copied verbatim, except that every
+"jawharastore" (support@jawharastore.se and jawharastore.se policy links) becomes "jawharashop":
+the new store uses support@jawharashop.se, and "jawharastore" must not appear in it at all.
+`scan-jawharastore.ts` checks the whole new store for it.
 
 ## Run / re-run (all idempotent)
 
