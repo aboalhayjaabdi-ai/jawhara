@@ -77,7 +77,6 @@ for (const d of active) {
         combinesWith: d.combinesWith,
         appliesOncePerCustomer: d.appliesOncePerCustomer,
         usageLimit: d.usageLimit,
-        recurringCycleLimit: d.recurringCycleLimit,
         context: { all: "ALL" },
         minimumRequirement: d.minimumRequirement
           ? d.minimumRequirement.__typename === "DiscountMinimumQuantity"
@@ -87,8 +86,8 @@ for (const d of active) {
         customerGets: {
           value: value(d.customerGets.value),
           items: await items(d.customerGets.items),
-          appliesOnOneTimePurchase: d.customerGets.appliesOnOneTimePurchase,
-          appliesOnSubscription: d.customerGets.appliesOnSubscription,
+          // appliesOnOneTimePurchase/appliesOnSubscription/recurringCycleLimit are subscription-only
+          // settings Shopify rejects on a shop without subscriptions; the live values are the defaults.
         },
       };
       if (ex) {
