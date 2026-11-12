@@ -1,6 +1,6 @@
 import { getImageProps } from "next/image";
 import Link from "next/link";
-import { preload } from "react-dom";
+import { HeroPicture } from "./hero-picture";
 
 type HeroProps = {
   desktopImage: string;
@@ -45,27 +45,25 @@ export function Hero(props: HeroProps) {
   // One <picture> instead of two <Image>s hidden/shown by CSS: the browser then downloads only the
   // version for the current screen (two priority <Image>s preloaded BOTH on every device).
   const common = { alt: "", fill: true, sizes: "100vw", priority, fetchPriority: priority ? "high" : undefined } as const;
+  // No ReactDOM.preload() and no <img> rendered directly here: either one, from a server component,
+  // travels in the page's RSC payload as a preload hint -- and every other page prefetches the
+  // homepage (logo link), so the banner was downloaded there too. HeroPicture (a client component)
+  // renders it, with fetchPriority="high", as the first image in the homepage's own HTML.
   const desktop = getImageProps({ ...common, src: desktopImage }).props;
   const mobile = getImageProps({ ...common, src: mobileImage ?? desktopImage }).props;
-  if (priority) {
-    preload(mobile.src, { as: "image", imageSrcSet: mobile.srcSet, imageSizes: mobile.sizes, media: "(max-width: 767px)", fetchPriority: "high" });
-    preload(desktop.src, { as: "image", imageSrcSet: desktop.srcSet, imageSizes: desktop.sizes, media: "(min-width: 768px)", fetchPriority: "high" });
-  }
 
   return (
     <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""} ${overlayHeader ? "-mt-[68px]" : ""}`}
       style={style}
       data-hero-overlay={overlayHeader ? "" : undefined}
     >
-      <picture>
-        <source media="(min-width: 768px)" srcSet={desktop.srcSet} sizes={desktop.sizes} />
-        {/* eslint-disable-next-line @next/next/no-img-element -- art-directed <picture> built from getImageProps */}
-        <img
-          {...mobile}
-          className={`${fitClass} [object-position:var(--hero-pos)] md:[object-position:50%_50%]`}
-          style={{ ...mobile.style, "--hero-pos": mobileObjectPosition ?? "50% 50%" } as React.CSSProperties}
-        />
-      </picture>
+      <HeroPicture
+        mobile={mobile}
+        desktopSrcSet={desktop.srcSet}
+        desktopSizes={desktop.sizes}
+        className={`${fitClass} [object-position:var(--hero-pos)] md:[object-position:50%_50%]`}
+        style={{ ...mobile.style, "--hero-pos": mobileObjectPosition ?? "50% 50%" } as React.CSSProperties}
+      />
       {/* No darkening overlay in "contain" mode -- the image is shown exactly as supplied. */}
       {fit !== "contain" && <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />}
 
