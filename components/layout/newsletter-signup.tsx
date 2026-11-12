@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseBrowser as supabase } from "@/lib/supabase/browser-client";
 import { rememberEmailForMatching } from "@/lib/marketing/meta-server-events";
 import { trackLead } from "@/lib/marketing/events";
 
@@ -17,6 +16,15 @@ export function NewsletterSignup() {
     const email = new FormData(form).get("email") as string;
     setStatus("submitting");
 
+    // Loaded on submit only: this footer is on every page, and the ~50 KB client library is only
+    // needed by the few visitors who actually sign up.
+    let supabase: (typeof import("@/lib/supabase/browser-client"))["supabaseBrowser"];
+    try {
+      supabase = (await import("@/lib/supabase/browser-client")).supabaseBrowser;
+    } catch {
+      setStatus("error");
+      return;
+    }
     const { error } = await supabase.from("newsletter_subscribers").insert({ email });
     if (error && !error.message.includes("duplicate")) {
       setStatus("error");

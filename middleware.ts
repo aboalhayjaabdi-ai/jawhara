@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
 import { isAdminPathAllowedForFulfillmentStaff } from "@/lib/admin/permissions";
 
@@ -115,7 +115,7 @@ async function handleAdminApiAuth(request: NextRequest): Promise<NextResponse> {
   return NextResponse.next();
 }
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin")) {
@@ -136,9 +136,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const destination = (await getRedirectsMap()).get(pathname);
+  const destination = (await getRedirectsMap(event)).get(pathname);
   if (destination) {
     return NextResponse.redirect(new URL(destination, request.url), 308);
+  }
+
+  // A collection's default view is a statically generated page; another page number or sort order
+  // is rendered per request by the internal collections-view route (same URL in the browser).
+  const collection = /^\/collections\/([^/]+)$/.exec(pathname);
+  if (collection) {
+    const params = request.nextUrl.searchParams;
+    const page = params.get("page");
+    const sort = params.get("sort");
+    if ((page && page !== "1") || (sort && sort !== "manual")) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/collections-view/${collection[1]}`;
+      return NextResponse.rewrite(url);
+    }
   }
 
   return NextResponse.next();
@@ -155,22 +169,34 @@ const REDIRECTS_TTL_MS = 60_000;
 let redirectsCache: { map: Map<string, string>; expiresAt: number } | null = null;
 let redirectsFetchInFlight: Promise<Map<string, string>> | null = null;
 
-async function getRedirectsMap(): Promise<Map<string, string>> {
+async function getRedirectsMap(event: NextFetchEvent): Promise<Map<string, string>> {
   const now = Date.now();
   if (redirectsCache && redirectsCache.expiresAt > now) return redirectsCache.map;
-  if (redirectsFetchInFlight) return redirectsFetchInFlight;
+  // Expired but present: answer from the previous copy right away and refresh in the background,
+  // so no visitor ever waits on this lookup once an instance has loaded it once.
+  if (redirectsCache) {
+    if (!redirectsFetchInFlight) event.waitUntil(refreshRedirectsMap().catch(() => {}));
+    return redirectsCache.map;
+  }
+  return redirectsFetchInFlight ?? refreshRedirectsMap();
+}
 
+function refreshRedirectsMap(): Promise<Map<string, string>> {
   redirectsFetchInFlight = (async () => {
     const anon = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       cookies: { getAll: () => [], setAll: () => {} },
     });
-    const { data } = await anon.from("url_redirects").select("source_path, destination_path");
-    const map = new Map((data ?? []).map((r) => [r.source_path as string, r.destination_path as string]));
-    redirectsCache = { map, expiresAt: Date.now() + REDIRECTS_TTL_MS };
-    redirectsFetchInFlight = null;
-    return map;
+    try {
+      const { data, error } = await anon.from("url_redirects").select("source_path, destination_path");
+      // A failed refresh keeps serving the last good copy rather than wiping every redirect.
+      if (error && redirectsCache) return redirectsCache.map;
+      const map = new Map((data ?? []).map((r) => [r.source_path as string, r.destination_path as string]));
+      redirectsCache = { map, expiresAt: Date.now() + REDIRECTS_TTL_MS };
+      return map;
+    } finally {
+      redirectsFetchInFlight = null;
+    }
   })();
-
   return redirectsFetchInFlight;
 }
 

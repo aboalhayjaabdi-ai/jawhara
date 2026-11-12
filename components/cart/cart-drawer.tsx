@@ -21,8 +21,12 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, subtotal, lastAdded } =
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, warmCheckout, subtotal, lastAdded } =
     useCart();
+
+  useEffect(() => {
+    if (isOpen) warmCheckout();
+  }, [isOpen, warmCheckout]);
   const { totals, loading, fetchError } = useCartTotals();
   // Longer-delivery bags (lib/delivery-time.ts): note under their name + the split-parcel notice.
   const cartProductIds = items.map((i) => i.productId);
@@ -377,6 +381,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           <button
             disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isCheckingOut}
             onClick={handleCheckout}
+            onPointerEnter={warmCheckout}
+            onPointerDown={warmCheckout}
+            onFocus={warmCheckout}
             className="btn-fx flex h-14 w-full items-center justify-center bg-fg text-xs font-semibold uppercase tracking-widest text-bg disabled:opacity-40"
           >
             {!CHECKOUT_ENABLED ? "Kassan öppnar snart" : isCheckingOut ? "Öppnar kassan..." : "Till kassan"}

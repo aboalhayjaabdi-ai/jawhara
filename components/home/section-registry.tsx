@@ -44,10 +44,13 @@ export function SectionRenderer({
   products,
   isFirstProductList = false,
   overlayHeader = false,
+  isFirstSection = false,
 }: {
   section: HomeSection;
   products?: ProductCard[];
   isFirstProductList?: boolean;
+  /** The top-most visible section: the only one whose images are fetched with priority. */
+  isFirstSection?: boolean;
   /** Set by SectionList only for the live homepage's first section (see homeHeroOverlaysHeader). */
   overlayHeader?: boolean;
 }) {
@@ -58,9 +61,9 @@ export function SectionRenderer({
     case "hero":
       if (!c.desktopImage || !c.buttonText || !c.buttonHref) return null;
       return c.variant === "split-bottom" ? (
-        <Hero key={section.id} variant="split-bottom" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} heading={c.heading ?? ""} />
+        <Hero key={section.id} variant="split-bottom" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} heading={c.heading ?? ""} priority={isFirstSection} />
       ) : (
-        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} topText={c.topText || undefined} overlayHeader={overlayHeader} />
+        <Hero key={section.id} variant="centered-cta" desktopImage={c.desktopImage} mobileImage={c.mobileImage} buttonText={c.buttonText} buttonHref={c.buttonHref} height={c.height} mobileHeight={c.mobileHeight || undefined} mobileObjectPosition={c.mobileObjectPosition || undefined} fit={c.fit === "contain" ? "contain" : undefined} topText={c.topText || undefined} overlayHeader={overlayHeader} priority={isFirstSection} />
       );
     case "marquee":
       if (!Array.isArray(c.items) || c.items.length === 0) return null;
@@ -115,10 +118,14 @@ export async function SectionList({
   const overlayId = allowHeaderOverlay && homeHeroOverlaysHeader(sections) ? sections.find((s) => s.visible)?.id : undefined;
   const products = await resolveSectionProducts(sections, presetProducts);
   const firstProductListId = sections.find((s) => s.visible && s.type === "product_list")?.id;
+  // A banner at the top already fills the first screen -- product images further down then load
+  // normally instead of competing with it for bandwidth.
+  const firstVisible = sections.find((s) => s.visible);
+  const priorityProductListId = firstVisible?.type === "hero" ? undefined : firstProductListId;
   return (
     <>
       {sections.map((s) => (
-        <SectionRenderer key={s.id} section={s} products={products.get(s.id)} isFirstProductList={s.id === firstProductListId} overlayHeader={s.id === overlayId} />
+        <SectionRenderer key={s.id} section={s} products={products.get(s.id)} isFirstProductList={s.id === priorityProductListId} overlayHeader={s.id === overlayId} isFirstSection={s.id === firstVisible?.id} />
       ))}
     </>
   );

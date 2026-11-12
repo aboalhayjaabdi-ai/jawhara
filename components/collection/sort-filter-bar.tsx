@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "manual", label: "Rekommenderat" },
@@ -11,24 +11,19 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "created-desc", label: "Nyast" },
 ];
 
-export function SortFilterBar() {
+export function SortFilterBar({ basePath, currentSort }: { basePath: string; currentSort: string }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  function updateParam(name: string, value: string | null) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(name, value);
-    else params.delete(name);
-    params.delete("page"); // any sort change resets pagination
-    router.push(`${pathname}?${params.toString()}`);
+  // Any sort change resets pagination; the recommended sort is the plain (static) collection URL.
+  function updateSort(value: string) {
+    router.push(value === "manual" ? basePath : `${basePath}?sort=${encodeURIComponent(value)}`);
   }
 
   return (
     <div className="flex flex-wrap items-center justify-start gap-4 border-b border-line pb-6 lg:justify-end">
       <select
-        value={searchParams.get("sort") ?? "manual"}
-        onChange={(e) => updateParam("sort", e.target.value === "manual" ? null : e.target.value)}
+        value={currentSort}
+        onChange={(e) => updateSort(e.target.value)}
         className="h-9 border border-line px-2 text-xs"
         aria-label="Sortera"
       >

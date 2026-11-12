@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser as supabase } from "@/lib/supabase/browser-client";
 import { getCartDeliveryGroup, type CartDeliveryGroup } from "@/lib/delivery-time";
 
 /**
@@ -25,6 +24,10 @@ export function useCartDeliveryGroups(productIds: string[]): (productId: string)
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
+      // Loaded on demand: the cart is in the layout of every page, and this ~50 KB client library
+      // is only needed once there's actually something in the cart to look up.
+      const { supabaseBrowser: supabase } = await import("@/lib/supabase/browser-client");
+      if (cancelled) return;
       const { data, error } = await supabase
         .from("collection_products")
         .select("product_id, collections(handle)")

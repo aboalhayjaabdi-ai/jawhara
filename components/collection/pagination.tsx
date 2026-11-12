@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 import { PaginationPending } from "./pagination-pending";
 
 // Standard "windowed" page-number algorithm: always shows the first and last page, plus one
@@ -28,13 +27,17 @@ export function Pagination({
   currentPage,
   totalPages,
   gridAnchorId,
+  basePath,
+  sort,
 }: {
   currentPage: number;
   totalPages: number;
   gridAnchorId: string;
+  /** e.g. /collections/armband -- links are built from props (not the URL) so they're present in
+   * the server-rendered HTML of the statically generated default view too. */
+  basePath: string;
+  sort: string;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Scroll to the top of the product grid whenever the page actually changes -- but not on the
   // component's own first mount (landing directly on a shared ?page=3 link shouldn't yank the
@@ -50,11 +53,11 @@ export function Pagination({
   if (totalPages <= 1) return null;
 
   function hrefFor(page: number): string {
-    const params = new URLSearchParams(searchParams.toString());
-    if (page <= 1) params.delete("page");
-    else params.set("page", String(page));
+    const params = new URLSearchParams();
+    if (sort && sort !== "manual") params.set("sort", sort);
+    if (page > 1) params.set("page", String(page));
     const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
+    return qs ? `${basePath}?${qs}` : basePath;
   }
 
   const pages = getPageNumbers(currentPage, totalPages);

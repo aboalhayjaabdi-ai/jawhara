@@ -46,6 +46,9 @@ type CartActions = {
   // that exact cart's Shopify-hosted checkout page. Never navigates on failure OR on a price
   // mismatch -- see its own comment below for exactly what counts as either.
   goToCheckout: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Opens the network connection to the hosted checkout's domain ahead of the click (no request
+   * is made to the checkout itself). Cheap and safe to call often -- it throttles itself. */
+  warmCheckout: () => void;
 };
 
 type CartState = {
@@ -170,6 +173,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // as the customer shops) can reuse it instead of paying for another round trip to Shopify's API.
   const lastShopifySyncRef = useRef<{ fingerprint: string; data: ShopifySyncResponse } | null>(null);
 
+  // Browsers drop an unused preconnected socket after ~10s, so this re-warms at most every 8s
+  // instead of once: the TLS handshake to the checkout domain then happens while the customer is
+  // still looking at the cart, not after they click "Till kassan".
+  const lastCheckoutWarmRef = useRef(0);
+  const warmCheckout = useCallback(() => {
+    const checkoutUrl = lastShopifySyncRef.current?.data.checkoutUrl;
+    if (!checkoutUrl || Date.now() - lastCheckoutWarmRef.current < 8000) return;
+    lastCheckoutWarmRef.current = Date.now();
+    try {
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = new URL(checkoutUrl).origin;
+      document.head.appendChild(link);
+      setTimeout(() => link.remove(), 15000);
+    } catch {
+      // ignore -- purely a speed hint
+    }
+  }, []);
+
   // The actual network call -- never invoked directly (always through syncWithShopify's queue
   // below), and bounded by fetchWithTimeout so a hung request can't leave anything waiting on it
   // stuck forever.
@@ -196,11 +218,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
       }
       lastShopifySyncRef.current = { fingerprint: cartFingerprint(currentItems, currentDiscountCode), data: data as ShopifySyncResponse };
+      warmCheckout();
       return data as ShopifySyncResponse;
     } catch {
       return null;
     }
-  }, []);
+  }, [warmCheckout]);
 
   // Shared by the background sync effect below AND goToCheckout's immediate, un-debounced call --
   // one single place that talks to /api/shopify-cart/sync and folds its response into provider
@@ -291,16 +314,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
       cached && cached.fingerprint === fingerprint && cached.data.checkoutUrl
         ? Promise.resolve(cached.data as ShopifySyncResponse | null)
         : syncWithShopify();
-    const [shopifyData, jawharaRes] = await Promise.all([
-      shopifyDataPromise,
-      fetchWithTimeout("/api/cart/totals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cart: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: currentDiscountCode }),
-      })
-        .then((r) => r.json())
-        .catch(() => null),
-    ]);
+    // The open cart drawer has normally fetched these exact totals seconds ago (useCartTotals) --
+    // reusing a result under a minute old saves a full server round trip on the click itself.
+    // Older than that, or never fetched in this page load: ask the server, exactly as before.
+    const freshTotals = readFreshTotals(fingerprint);
+    const jawharaPromise: Promise<(CheckoutTotals & { errors?: unknown[] }) | null> = freshTotals
+      ? Promise.resolve(freshTotals)
+      : fetchWithTimeout("/api/cart/totals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cart: currentItems.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode: currentDiscountCode }),
+        })
+          .then(async (r) => {
+            const data = await r.json();
+            if (r.ok) writeCachedTotals(fingerprint, data as CheckoutTotals);
+            return data;
+          })
+          .catch(() => null);
+    const [shopifyData, jawharaRes] = await Promise.all([shopifyDataPromise, jawharaPromise]);
 
     if (!shopifyData) {
       return { ok: false, error: "Kunde inte synkronisera varukorgen med Shopify just nu. Försök igen." };
@@ -392,8 +423,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
   const actions = useMemo<CartActions>(
-    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout }),
-    [open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout]
+    () => ({ open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout, warmCheckout }),
+    [open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout, warmCheckout]
   );
   const state = useMemo<CartState>(
     () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded }),
@@ -460,6 +491,14 @@ export function useJustAdded(durationMs: number): boolean {
 // is still re-validated in the background, so a changed price/stock/discount is picked up.
 const TOTALS_CACHE_KEY = "jawhara_cart_totals_v1";
 const totalsCache = new Map<string, CheckoutTotals>();
+// When each fingerprint's totals were last fetched from the server in THIS page load (never from
+// sessionStorage) -- lets goToCheckout reuse a just-fetched result instead of re-asking the server.
+const totalsFetchedAt = new Map<string, number>();
+const CHECKOUT_TOTALS_MAX_AGE_MS = 60_000;
+function readFreshTotals(fingerprint: string): CheckoutTotals | null {
+  const at = totalsFetchedAt.get(fingerprint);
+  return at !== undefined && Date.now() - at <= CHECKOUT_TOTALS_MAX_AGE_MS ? (totalsCache.get(fingerprint) ?? null) : null;
+}
 function readCachedTotals(fingerprint: string): CheckoutTotals | null {
   if (totalsCache.has(fingerprint)) return totalsCache.get(fingerprint)!;
   try {
@@ -476,7 +515,12 @@ function readCachedTotals(fingerprint: string): CheckoutTotals | null {
 }
 function writeCachedTotals(fingerprint: string, totals: CheckoutTotals) {
   totalsCache.set(fingerprint, totals);
-  if (totalsCache.size > 30) totalsCache.delete(totalsCache.keys().next().value!);
+  totalsFetchedAt.set(fingerprint, Date.now());
+  if (totalsCache.size > 30) {
+    const oldest = totalsCache.keys().next().value!;
+    totalsCache.delete(oldest);
+    totalsFetchedAt.delete(oldest);
+  }
   try {
     sessionStorage.setItem(TOTALS_CACHE_KEY, JSON.stringify({ fingerprint, totals }));
   } catch {

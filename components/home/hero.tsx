@@ -1,5 +1,6 @@
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
+import { preload } from "react-dom";
 
 type HeroProps = {
   desktopImage: string;
@@ -23,10 +24,12 @@ type HeroProps = {
    * transparent at the top of the page (see components/layout/header.tsx). Everything shown on the
    * banner keeps its on-screen position -- only the image now also fills the area behind the header. */
   overlayHeader?: boolean;
+  /** Only the banner at the very top of the page: fetch its image first, ahead of everything else. */
+  priority?: boolean;
 } & ({ variant: "centered-cta" } | { variant: "split-bottom"; heading: string });
 
 export function Hero(props: HeroProps) {
-  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition, fit = "cover", topText, overlayHeader = false } = props;
+  const { desktopImage, mobileImage, buttonText, buttonHref, height = "720px", mobileHeight, mobileObjectPosition, fit = "cover", topText, overlayHeader = false, priority = false } = props;
   const fitClass = fit === "contain" ? "object-contain" : "object-cover";
   // Caps the default mobile height to whatever the mobile image's own aspect ratio (585:1040, its
   // real uploaded size) can cover at the current viewport width without cropping its sides -- a
@@ -39,21 +42,30 @@ export function Hero(props: HeroProps) {
     "--hero-h-mobile": mobileHeight ?? defaultHeight,
   } as React.CSSProperties;
 
+  // One <picture> instead of two <Image>s hidden/shown by CSS: the browser then downloads only the
+  // version for the current screen (two priority <Image>s preloaded BOTH on every device).
+  const common = { alt: "", fill: true, sizes: "100vw", priority, fetchPriority: priority ? "high" : undefined } as const;
+  const desktop = getImageProps({ ...common, src: desktopImage }).props;
+  const mobile = getImageProps({ ...common, src: mobileImage ?? desktopImage }).props;
+  if (priority) {
+    preload(mobile.src, { as: "image", imageSrcSet: mobile.srcSet, imageSizes: mobile.sizes, media: "(max-width: 767px)", fetchPriority: "high" });
+    preload(desktop.src, { as: "image", imageSrcSet: desktop.srcSet, imageSizes: desktop.sizes, media: "(min-width: 768px)", fetchPriority: "high" });
+  }
+
   return (
     <div className={`relative h-[var(--hero-h-mobile)] overflow-hidden md:h-[var(--hero-h)] ${fit === "contain" ? "bg-black" : ""} ${overlayHeader ? "-mt-[68px]" : ""}`}
       style={style}
       data-hero-overlay={overlayHeader ? "" : undefined}
     >
-      <Image
-        src={mobileImage ?? desktopImage}
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className={`${fitClass} md:hidden`}
-        style={mobileObjectPosition ? { objectPosition: mobileObjectPosition } : undefined}
-      />
-      <Image src={desktopImage} alt="" fill priority sizes="100vw" className={`hidden ${fitClass} md:block`} />
+      <picture>
+        <source media="(min-width: 768px)" srcSet={desktop.srcSet} sizes={desktop.sizes} />
+        {/* eslint-disable-next-line @next/next/no-img-element -- art-directed <picture> built from getImageProps */}
+        <img
+          {...mobile}
+          className={`${fitClass} [object-position:var(--hero-pos)] md:[object-position:50%_50%]`}
+          style={{ ...mobile.style, "--hero-pos": mobileObjectPosition ?? "50% 50%" } as React.CSSProperties}
+        />
+      </picture>
       {/* No darkening overlay in "contain" mode -- the image is shown exactly as supplied. */}
       {fit !== "contain" && <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />}
 

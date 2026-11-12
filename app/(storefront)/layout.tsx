@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import { Newsreader, Red_Hat_Text } from "next/font/google";
+import { preconnect } from "react-dom";
 import "../globals.css";
 import { AnnouncementBar } from "@/components/layout/announcement-bar";
 import { Header } from "@/components/layout/header";
@@ -50,6 +51,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     getCachedPublicMarketingIds(),
     getCachedGiftBoxOffer(),
   ]);
+  // Every product photo is served from Supabase Storage: open that connection at the very top of
+  // the page instead of when the first image tag happens to be parsed.
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL) preconnect(new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin);
   return (
     <html lang="sv">
       <body className={`${newsreader.variable} ${redHatText.variable} font-sans`}>
