@@ -28,9 +28,8 @@ storefront. Lovable is not carried over.
 Discounts: the active ones only (3 för 2, Valfri Plånbok, RABATT20F), with identical rules, scoped
 to the new store's own collections and products. Expired/test discounts are skipped.
 
-Policies: refund, shipping, terms and contact copied verbatim. Privacy policy needs "automatic
-management" turned off in the new store's admin (Settings → Policies) first, then re-run
-`import-policies.ts`.
+Policies: refund, shipping, terms, contact and privacy copied verbatim (the new store's automatic
+privacy-policy management had to be turned off in its admin first).
 
 ## Run / re-run (all idempotent)
 
@@ -64,4 +63,5 @@ options and can be regenerated at any time.
 - 445 products, 771 variants, 42 collections imported; `verify-catalog.ts`: no differences, 445/771
   unique new IDs. Live store re-read after the import: unchanged.
 - Discounts 3 för 2, Valfri Plånbok, RABATT20F: identical rules (compared field by field).
+- All 5 policies identical to the live store.
 - Headless storefront token: sees all 385 active products; `cartCreate` works (no checkout made).
