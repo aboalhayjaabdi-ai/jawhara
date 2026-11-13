@@ -1,6 +1,6 @@
 # Jawhara — independent e-commerce platform
 
-Migration of the Jawhara Shopify store (jawhara.se) to a fully independent platform: Next.js +
+Migration of the Jawhara Shopify store (jawhara.se) to a fully independent platform (checkout runs on Shopify): Next.js +
 TypeScript, Supabase (Postgres/Auth/Storage), Stripe + Klarna, Resend, deployed on Vercel.
 
 See `/root/.claude/plans/you-are-a-senior-imperative-umbrella.md` for the full phase-by-phase
