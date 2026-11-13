@@ -11,7 +11,7 @@ import type { GiftBoxOffer } from "@/lib/gift-box";
 import { CartOffers } from "./cart-offers";
 import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
-import { CartSplitDeliveryNotice, CartLineDeliveryNote } from "./cart-split-delivery-notice";
+import { CartLineDeliveryNote } from "./cart-delivery-note";
 import { useCartDeliveryGroups } from "./use-cart-delivery-groups";
 
 function formatSek(amount: number) {
@@ -28,7 +28,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     if (isOpen) warmCheckout();
   }, [isOpen, warmCheckout]);
   const { totals, loading, fetchError } = useCartTotals();
-  // Longer-delivery bags (lib/delivery-time.ts): note under their name + the split-parcel notice.
+  // Longer-delivery bags (lib/delivery-time.ts) get a delivery-time note under their name.
   const cartProductIds = items.map((i) => i.productId);
   const deliveryGroup = useCartDeliveryGroups(cartProductIds);
 
@@ -327,8 +327,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               <span>Lägg till en presentask för {formatSek(giftBoxOffer.price)}</span>
             </label>
           )}
-
-          {items.length > 0 && <CartSplitDeliveryNotice productIds={cartProductIds} deliveryGroup={deliveryGroup} />}
 
           {items.length > 0 && (
             <div className="mb-3">
