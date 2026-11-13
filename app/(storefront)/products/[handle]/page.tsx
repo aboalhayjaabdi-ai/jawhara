@@ -56,7 +56,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const isBag = (BLACK_MONTH.bagTemplateKeys as readonly string[]).includes(product.template_suffix ?? "");
   const promoBox = BLACK_MONTH.active && threeForTwoEligible ? { heading: BLACK_MONTH.threeForTwo.pdpHeading, body: BLACK_MONTH.threeForTwo.pdpBody } : null;
   const salePriceNote = BLACK_MONTH.active && isBag ? BLACK_MONTH.bagPriceNote : null;
-  // Bag delivery-time box (lib/delivery-time.ts): "H väskor" (incl. Noélle Mini) -> regular, other bags -> 3–5 weeks.
+  // Bag delivery-time box (lib/delivery-time.ts): "H väskor" (incl. Noélle Mini) -> regular, other bags -> 3–4 weeks.
   const deliveryTimeNote = getDeliveryTimeNote(collectionHandles);
 
   return (

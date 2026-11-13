@@ -33,7 +33,7 @@ export function CartSplitDeliveryNotice({
 
 /** Small delivery-time box under a cart line's product name (longer-delivery bags only). Shorter
  * wording than the product page so it stays on one line in the narrow cart column. */
-export const CART_LINE_DELIVERY_TEXT = "Leveranstid: 3–5 veckor";
+export const CART_LINE_DELIVERY_TEXT = "Leveranstid: 3–4 veckor";
 
 export function CartLineDeliveryNote() {
   return (
