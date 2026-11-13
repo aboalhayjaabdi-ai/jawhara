@@ -9,6 +9,8 @@ import {
   cartLinesAdd,
   cartLinesRemove,
   cartAttributesUpdate,
+  cartBatch,
+  type CartBatchOp,
   type CartLineInput,
   type CartUserError,
   type StorefrontCart,
@@ -212,6 +214,108 @@ function finalize(cart: StorefrontCart, discountCode: string | null, warnings: s
 }
 
 /**
+ * Which existing cart lines to remove and which lines to add so the Shopify cart holds exactly
+ * `desired` (merchandiseId -> total quantity).
+ *
+ * Shopify splits a single variant's quantity across MULTIPLE cart lines whenever an automatic
+ * quantity-based discount (e.g. "3 för 2") applies to it, to represent which units are discounted
+ * -- e.g. qty 3 of one variant can come back as one line of qty 2 and a second line of qty 1, both
+ * sharing the same merchandiseId. Grouping (not collapsing to the last line, which silently dropped
+ * the other line's quantity and caused the real production bug: the dropped line stayed in the cart
+ * untouched on every subsequent sync, so the total quantity -- and price -- crept upward every time
+ * the cart resynced).
+ */
+function planLineChanges(cart: StorefrontCart, desired: Map<string, number>): { toRemove: string[]; toAdd: CartLineInput[] } {
+  const currentByMerchandise = new Map<string, { ids: string[]; quantity: number }>();
+  for (const l of cart.lines) {
+    const group = currentByMerchandise.get(l.merchandiseId);
+    if (group) {
+      group.ids.push(l.id);
+      group.quantity += l.quantity;
+    } else {
+      currentByMerchandise.set(l.merchandiseId, { ids: [l.id], quantity: l.quantity });
+    }
+  }
+
+  const toRemove: string[] = [];
+  for (const [merchandiseId, group] of currentByMerchandise) {
+    if (!desired.has(merchandiseId)) toRemove.push(...group.ids);
+  }
+
+  const toAdd: CartLineInput[] = [];
+  for (const [merchandiseId, quantity] of desired.entries()) {
+    const group = currentByMerchandise.get(merchandiseId);
+    if (!group) {
+      toAdd.push({ merchandiseId, quantity });
+      continue;
+    }
+    // Already correct in total -- leave Shopify's own line split alone. Patching just one of
+    // several lines it's using to track a quantity discount (what this used to do) destabilized
+    // the discount itself, sometimes dropping it entirely on the very next sync.
+    if (group.quantity === quantity) continue;
+    // Actually changing: remove every line this variant currently has and add ONE fresh line
+    // with the full desired quantity, so Shopify's discount engine recomputes its allocation
+    // from a clean slate instead of being handed a half-updated split.
+    toRemove.push(...group.ids);
+    toAdd.push({ merchandiseId, quantity });
+  }
+  return { toRemove, toAdd };
+}
+
+function codesDiffer(desiredCodes: string[], cart: StorefrontCart): boolean {
+  const currentCodes = cart.discountCodes.map((d) => d.code);
+  return desiredCodes.length !== currentCodes.length || desiredCodes.some((c) => !currentCodes.includes(c));
+}
+
+/**
+ * The fast path: the same reconciliation as the step-by-step path in syncShopifyCart, in ONE
+ * Storefront API request after reading the cart (none at all when nothing changed). A new cart is
+ * created with its lines, discount code and tracking attributes together; an existing cart gets its
+ * line removals, line additions, code change and attribute update as one batched request, applied
+ * by Shopify in that same order (lib/shopify/storefront.ts cartBatch). Each extra Storefront round
+ * trip cost ~200-300 ms on the click-to-checkout path, and the step-by-step path needed up to five.
+ *
+ * Returns null only when Shopify created no cart (same outcome as the step-by-step path). Throws on
+ * any transport/GraphQL error; the caller then redoes the sync step by step from a fresh read.
+ */
+async function syncInOneCall(
+  existing: StorefrontCart | null,
+  desired: Map<string, number>,
+  desiredCodes: string[],
+  tracking: Record<string, string>,
+  contents: Map<string, number>
+): Promise<{ cart: StorefrontCart | null; warnings: string[] }> {
+  if (!existing) {
+    const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
+    const attributes = desiredAttributes([], tracking, contents) ?? [];
+    const { cart, userErrors } = await cartCreate(lines, { discountCodes: desiredCodes, attributes });
+    return { cart, warnings: describeUserErrors(userErrors) };
+  }
+
+  const { toRemove, toAdd } = planLineChanges(existing, desired);
+  const ops: CartBatchOp[] = [];
+  if (toRemove.length > 0) ops.push({ kind: "linesRemove", lineIds: toRemove });
+  if (toAdd.length > 0) ops.push({ kind: "linesAdd", lines: toAdd });
+  if (codesDiffer(desiredCodes, existing)) ops.push({ kind: "discountCodesUpdate", discountCodes: desiredCodes });
+  // Line/code mutations never change cart attributes, so the current ones are the right base.
+  const attrs = desiredAttributes(existing.attributes, tracking, contents);
+  if (attrs) ops.push({ kind: "attributesUpdate", attributes: attrs });
+  if (ops.length === 0) return { cart: existing, warnings: [] };
+
+  const results = await cartBatch(existing.id, ops);
+  let cart = existing;
+  const warnings: string[] = [];
+  results.forEach((r, i) => {
+    if (r.cart) cart = r.cart;
+    const kind = ops[i].kind;
+    if (kind === "linesRemove" || kind === "linesAdd") warnings.push(...describeUserErrors(r.userErrors));
+    if (kind === "discountCodesUpdate") warnings.push(...describeDiscountCodeErrors(r.userErrors));
+    // attributesUpdate userErrors are ignored, exactly as in the step-by-step path.
+  });
+  return { cart, warnings };
+}
+
+/**
  * Reconciles the real Shopify Storefront cart to match the Jawhara cart's current contents and
  * entered discount code. Called after every add/remove/qty/code change (see components/cart/
  * cart-provider.tsx) with the FULL current line list, not a delta -- same "always recompute from
@@ -245,6 +349,20 @@ export async function syncShopifyCart(input: {
     // actually convert a cart yet (Phase 3 only redirects to it; nothing completes a purchase),
     // so this can't yet go stale in practice -- revisit if that changes.
     const existingCartId = decodeCartId(input.shopifyCartId);
+    const desiredCodes = input.discountCode ? [input.discountCode] : [];
+
+    // Fast path (see syncInOneCall). On any error it falls through to the original step-by-step
+    // path below, which re-reads the cart first, so a half-applied batch is simply reconciled.
+    try {
+      const read = existingCartId ? await cartGet(existingCartId) : null;
+      const fast = await syncInOneCall(read, desired, desiredCodes, input.trackingAttributes ?? {}, contents);
+      if (!fast.cart) return emptyResult(null, [...warnings, ...fast.warnings]);
+      return finalize(fast.cart, input.discountCode, [...warnings, ...fast.warnings]);
+    } catch (err) {
+      if (err instanceof StorefrontConfigError) throw err;
+      console.error("Shopify one-call cart sync failed, retrying step by step:", err);
+    }
+
     let cart = existingCartId ? await cartGet(existingCartId) : null;
     const extraWarnings: string[] = [];
 
@@ -255,46 +373,7 @@ export async function syncShopifyCart(input: {
       if (!created) return emptyResult(null, [...warnings, ...extraWarnings]);
       cart = created;
     } else {
-      // Shopify splits a single variant's quantity across MULTIPLE cart lines whenever an
-      // automatic quantity-based discount (e.g. "3 för 2") applies to it, to represent which
-      // units are discounted -- e.g. qty 3 of one variant can come back as one line of qty 2 and
-      // a second line of qty 1, both sharing the same merchandiseId. Grouping (not collapsing to
-      // the last line, which silently dropped the other line's quantity and caused the real
-      // production bug: the dropped line stayed in the cart untouched on every subsequent sync,
-      // so the total quantity -- and price -- crept upward every time the cart resynced).
-      const currentByMerchandise = new Map<string, { ids: string[]; quantity: number }>();
-      for (const l of cart.lines) {
-        const group = currentByMerchandise.get(l.merchandiseId);
-        if (group) {
-          group.ids.push(l.id);
-          group.quantity += l.quantity;
-        } else {
-          currentByMerchandise.set(l.merchandiseId, { ids: [l.id], quantity: l.quantity });
-        }
-      }
-
-      const toRemove: string[] = [];
-      for (const [merchandiseId, group] of currentByMerchandise) {
-        if (!desired.has(merchandiseId)) toRemove.push(...group.ids);
-      }
-
-      const toAdd: CartLineInput[] = [];
-      for (const [merchandiseId, quantity] of desired.entries()) {
-        const group = currentByMerchandise.get(merchandiseId);
-        if (!group) {
-          toAdd.push({ merchandiseId, quantity });
-          continue;
-        }
-        // Already correct in total -- leave Shopify's own line split alone. Patching just one of
-        // several lines it's using to track a quantity discount (what this used to do) destabilized
-        // the discount itself, sometimes dropping it entirely on the very next sync.
-        if (group.quantity === quantity) continue;
-        // Actually changing: remove every line this variant currently has and add ONE fresh line
-        // with the full desired quantity, so Shopify's discount engine recomputes its allocation
-        // from a clean slate instead of being handed a half-updated split.
-        toRemove.push(...group.ids);
-        toAdd.push({ merchandiseId, quantity });
-      }
+      const { toRemove, toAdd } = planLineChanges(cart, desired);
 
       if (toRemove.length > 0) {
         const { cart: updated, userErrors } = await cartLinesRemove(cart.id, toRemove);
@@ -311,10 +390,7 @@ export async function syncShopifyCart(input: {
     // Only re-applied when it actually changed -- a discount code almost never changes between
     // syncs (items do, every time), so this avoids a redundant Storefront API call on every
     // qty +/- click.
-    const desiredCodes = input.discountCode ? [input.discountCode] : [];
-    const currentCodes = cart.discountCodes.map((d) => d.code);
-    const codesChanged = desiredCodes.length !== currentCodes.length || desiredCodes.some((c) => !currentCodes.includes(c));
-    if (codesChanged) {
+    if (codesDiffer(desiredCodes, cart)) {
       const { cart: updated, userErrors } = await cartDiscountCodesUpdate(cart.id, desiredCodes);
       if (updated) cart = updated;
       extraWarnings.push(...describeDiscountCodeErrors(userErrors));

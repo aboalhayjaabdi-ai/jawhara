@@ -135,9 +135,15 @@ function toCart(raw: any): StorefrontCart | null {
 
 export type CartLineInput = { merchandiseId: string; quantity: number };
 
+/** `extras` lets the cart be created with its discount code and attributes in the SAME call
+ * (lib/shopify/cart-sync.ts's one-call path) instead of separate follow-up mutations. */
 export async function cartCreate(
-  lines: CartLineInput[]
+  lines: CartLineInput[],
+  extras: { discountCodes?: string[]; attributes?: { key: string; value: string }[] } = {}
 ): Promise<{ cart: StorefrontCart | null; userErrors: CartUserError[] }> {
+  const input: Record<string, unknown> = { lines };
+  if (extras.discountCodes?.length) input.discountCodes = extras.discountCodes;
+  if (extras.attributes?.length) input.attributes = extras.attributes;
   const data = await storefrontGraphQL<any>(
     `mutation CartCreate($input: CartInput!) {
       cartCreate(input: $input) {
@@ -145,7 +151,7 @@ export async function cartCreate(
         userErrors { field message }
       }
     }`,
-    { input: { lines } }
+    { input }
   );
   return { cart: toCart(data.cartCreate.cart), userErrors: data.cartCreate.userErrors ?? [] };
 }
@@ -245,4 +251,48 @@ export async function cartAttributesUpdate(
     { cartId, attributes }
   );
   return { cart: toCart(data.cartAttributesUpdate.cart), userErrors: data.cartAttributesUpdate.userErrors ?? [] };
+}
+
+export type CartBatchOp =
+  | { kind: "linesRemove"; lineIds: string[] }
+  | { kind: "linesAdd"; lines: CartLineInput[] }
+  | { kind: "discountCodesUpdate"; discountCodes: string[] }
+  | { kind: "attributesUpdate"; attributes: { key: string; value: string }[] };
+
+/**
+ * Runs several cart mutations in ONE Storefront API request: one GraphQL document with one aliased
+ * mutation field per op. GraphQL executes top-level mutation fields one after another, in document
+ * order, so this applies exactly the same mutations in the same order as calling cartLinesRemove,
+ * cartLinesAdd, cartDiscountCodesUpdate and cartAttributesUpdate one by one -- in a single round
+ * trip instead of up to four. Results come back per op, in op order.
+ */
+export async function cartBatch(
+  cartId: string,
+  ops: CartBatchOp[]
+): Promise<{ cart: StorefrontCart | null; userErrors: CartUserError[] }[]> {
+  const varDefs = ["$cartId: ID!"];
+  const fields: string[] = [];
+  const variables: Record<string, unknown> = { cartId };
+  ops.forEach((op, i) => {
+    const out = `{ cart { ${CART_FIELDS} } userErrors { field message } }`;
+    if (op.kind === "linesRemove") {
+      varDefs.push(`$v${i}: [ID!]!`);
+      fields.push(`op${i}: cartLinesRemove(cartId: $cartId, lineIds: $v${i}) ${out}`);
+      variables[`v${i}`] = op.lineIds;
+    } else if (op.kind === "linesAdd") {
+      varDefs.push(`$v${i}: [CartLineInput!]!`);
+      fields.push(`op${i}: cartLinesAdd(cartId: $cartId, lines: $v${i}) ${out}`);
+      variables[`v${i}`] = op.lines;
+    } else if (op.kind === "discountCodesUpdate") {
+      varDefs.push(`$v${i}: [String!]!`);
+      fields.push(`op${i}: cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $v${i}) ${out}`);
+      variables[`v${i}`] = op.discountCodes;
+    } else {
+      varDefs.push(`$v${i}: [AttributeInput!]!`);
+      fields.push(`op${i}: cartAttributesUpdate(cartId: $cartId, attributes: $v${i}) ${out}`);
+      variables[`v${i}`] = op.attributes;
+    }
+  });
+  const data = await storefrontGraphQL<any>(`mutation CartBatch(${varDefs.join(", ")}) { ${fields.join("\n")} }`, variables);
+  return ops.map((_, i) => ({ cart: toCart(data[`op${i}`]?.cart), userErrors: data[`op${i}`]?.userErrors ?? [] }));
 }
