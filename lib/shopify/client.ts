@@ -1,4 +1,5 @@
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { activeStore, orderStores, storeConfig, type StoreKey } from "./stores";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/client.ts must never be imported into client code");
@@ -13,21 +14,27 @@ if (typeof window !== "undefined") {
 // Same restricted read_orders scope as the CLI version -- see docs/order-reconciliation-report.md.
 // This button catches new orders going forward; it does not see anything older than ~60 days
 // until read_all_orders is granted to this app (per that report's §4).
+//
+// Every call goes to the ACTIVE store (lib/shopify/stores.ts) unless a store is passed explicitly.
+// With SHOPIFY_ACTIVE_STORE unset that is the legacy store, i.e. exactly the old behaviour.
 const proxyUrl = process.env.HTTPS_PROXY ?? process.env.https_proxy;
 if (proxyUrl) setGlobalDispatcher(new ProxyAgent(proxyUrl));
 
 const API_VERSION = "2026-10";
 
-let cachedToken: { value: string; expiresAt: number } | null = null;
+const cachedTokens = new Map<StoreKey, { value: string; expiresAt: number }>();
 
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
+async function getAccessToken(store: StoreKey): Promise<string> {
+  const cached = cachedTokens.get(store);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.value;
 
-  const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  const { domain, clientId, clientSecret } = storeConfig(store);
   if (!domain || !clientId || !clientSecret) {
-    throw new Error("Missing SHOPIFY_STORE_DOMAIN/SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET.");
+    throw new Error(
+      store === "new"
+        ? "Missing NEW_SHOPIFY_STORE_DOMAIN/NEW_SHOPIFY_CLIENT_ID/NEW_SHOPIFY_CLIENT_SECRET."
+        : "Missing SHOPIFY_STORE_DOMAIN/SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET."
+    );
   }
 
   const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
@@ -38,8 +45,8 @@ async function getAccessToken(): Promise<string> {
   if (!res.ok) throw new Error(`Failed to mint Shopify access token: ${res.status} ${await res.text()}`);
 
   const json = (await res.json()) as { access_token: string; expires_in: number };
-  cachedToken = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
-  return cachedToken.value;
+  cachedTokens.set(store, { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 });
+  return json.access_token;
 }
 
 interface GraphQLResponse<T> {
@@ -47,9 +54,9 @@ interface GraphQLResponse<T> {
   errors?: Array<{ message: string }>;
 }
 
-export async function shopifyGraphQL<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const domain = process.env.SHOPIFY_STORE_DOMAIN!;
-  const token = await getAccessToken();
+export async function shopifyGraphQL<T>(query: string, variables?: Record<string, unknown>, store: StoreKey = activeStore()): Promise<T> {
+  const domain = storeConfig(store).domain!;
+  const token = await getAccessToken(store);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
@@ -80,12 +87,13 @@ export async function paginateAll<T>(
   query: string,
   getConnection: (data: unknown) => Connection<T>,
   onPage: (nodes: T[]) => void | Promise<void>,
-  pageSize = 50
+  pageSize = 50,
+  store: StoreKey = activeStore()
 ): Promise<number> {
   let after: string | null = null;
   let total = 0;
   for (;;) {
-    const data = await shopifyGraphQL<unknown>(query, { first: pageSize, after });
+    const data = await shopifyGraphQL<unknown>(query, { first: pageSize, after }, store);
     const conn = getConnection(data);
     total += conn.edges.length;
     await onPage(conn.edges.map((e) => e.node));
@@ -93,4 +101,24 @@ export async function paginateAll<T>(
     after = conn.edges[conn.edges.length - 1].cursor;
   }
   return total;
+}
+
+/**
+ * Which order store owns this Shopify object (an Order or Fulfillment GID). Shopify ids are
+ * global, so an id resolves only in the store it belongs to. With a single order store (always the
+ * case while legacy is active) this returns it straight away without any API call, so callers
+ * behave exactly as before the two-store change. Returns null if no configured store knows the id.
+ */
+export async function storeForNode(gid: string): Promise<StoreKey | null> {
+  const candidates = orderStores();
+  if (candidates.length === 1) return candidates[0];
+  for (const store of candidates) {
+    try {
+      const data = await shopifyGraphQL<{ node: { id: string } | null }>(`query($id: ID!) { node(id: $id) { id } }`, { id: gid }, store);
+      if (data.node) return store;
+    } catch (err) {
+      console.error(`storeForNode: lookup in ${store} store failed for ${gid}:`, (err as Error).message);
+    }
+  }
+  return null;
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { syncDiscountToShopify, deactivateShopifyDiscount } from "@/lib/shopify/discount-sync";
+import { activeStore, ID_COLUMNS } from "@/lib/shopify/stores";
 
 export type BulkResult = { ok: true; count: number; shopifyWarning?: string } | { ok: false; error: string };
 
@@ -35,7 +36,7 @@ export async function bulkDeleteDiscounts(discountIds: string[], confirmed: bool
   if (discountIds.length === 0) return { ok: false, error: "Inga rabatter valda." };
   if (!confirmed) return { ok: false, error: "Bekräfta för att radera permanent." };
 
-  const { data: discounts } = await supabaseService.from("discounts").select("id, kind, shopify_discount_id").in("id", discountIds);
+  const { data: discounts } = await supabaseService.from("discounts").select(`id, kind, shopify_discount_id:${ID_COLUMNS[activeStore()].discount}`).in("id", discountIds);
   const { error } = await supabaseService.from("discounts").delete().in("id", discountIds);
   if (error) return { ok: false, error: error.message };
 

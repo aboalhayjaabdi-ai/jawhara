@@ -1,4 +1,5 @@
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { activeStore, storeConfig } from "./stores";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/storefront.ts must never be imported into client code");
@@ -19,15 +20,19 @@ const API_VERSION = "2026-10";
 
 export class StorefrontConfigError extends Error {}
 
+// Always the ACTIVE store (lib/shopify/stores.ts): the cart and checkout live in one store at a
+// time. With SHOPIFY_ACTIVE_STORE unset these read exactly the env vars they always did.
 function getDomain(): string {
-  const domain = process.env.SHOPIFY_STOREFRONT_DOMAIN ?? process.env.SHOPIFY_STORE_DOMAIN;
-  if (!domain) throw new StorefrontConfigError("Missing SHOPIFY_STORE_DOMAIN.");
+  const store = activeStore();
+  const domain = storeConfig(store).storefrontDomain;
+  if (!domain) throw new StorefrontConfigError(store === "new" ? "Missing NEW_SHOPIFY_STORE_DOMAIN." : "Missing SHOPIFY_STORE_DOMAIN.");
   return domain;
 }
 
 function getToken(): string {
-  const token = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
-  if (!token) throw new StorefrontConfigError("Missing SHOPIFY_STOREFRONT_ACCESS_TOKEN.");
+  const store = activeStore();
+  const token = storeConfig(store).storefrontToken;
+  if (!token) throw new StorefrontConfigError(store === "new" ? "Missing NEW_SHOPIFY_STOREFRONT_ACCESS_TOKEN." : "Missing SHOPIFY_STOREFRONT_ACCESS_TOKEN.");
   return token;
 }
 

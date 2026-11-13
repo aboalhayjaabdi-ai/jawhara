@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { syncDiscountToShopify, describeDiscountSyncResult, deactivateShopifyDiscount } from "@/lib/shopify/discount-sync";
+import { activeStore, ID_COLUMNS } from "@/lib/shopify/stores";
 
 export type ActionResult = { ok: true; shopifyWarning?: string } | { ok: false; error: string };
 
@@ -101,7 +102,7 @@ export async function deleteDiscount(discountId: string, confirmed: boolean): Pr
   const admin = await requireAdmin();
   if (!confirmed) return { ok: false, error: "Bekräfta för att radera permanent." };
 
-  const { data: discount } = await supabaseService.from("discounts").select("title, kind, shopify_discount_id").eq("id", discountId).maybeSingle();
+  const { data: discount } = await supabaseService.from("discounts").select(`title, kind, shopify_discount_id:${ID_COLUMNS[activeStore()].discount}`).eq("id", discountId).maybeSingle();
   const { error } = await supabaseService.from("discounts").delete().eq("id", discountId);
   if (error) return { ok: false, error: error.message };
 

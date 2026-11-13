@@ -4,6 +4,7 @@ import { verifyShopifyWebhookSignature } from "@/lib/shopify/webhook-verify";
 import { syncSingleShopifyOrder } from "@/lib/shopify/order-sync-shared";
 import { reportNewlyPaidPurchase, maybeSendCancellationEmail } from "@/lib/shopify/sync-side-effects";
 import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
+import { storeForShopDomain } from "@/lib/shopify/stores";
 
 /**
  * Single endpoint for every Shopify order/fulfillment webhook topic this app subscribes to (see
@@ -19,7 +20,11 @@ import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
 export async function POST(req: NextRequest) {
   const rawBody = await req.text(); // signature verification needs the exact raw bytes
   const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
-  if (!verifyShopifyWebhookSignature(rawBody, hmacHeader)) {
+  // Which store sent this (two-store switch-over, lib/shopify/stores.ts). An unknown or missing
+  // shop domain is treated as the legacy store, exactly as before; its signature check then
+  // decides as it always did.
+  const store = storeForShopDomain(req.headers.get("x-shopify-shop-domain")) ?? "legacy";
+  if (!verifyShopifyWebhookSignature(rawBody, hmacHeader, store)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
   const orderGid = `gid://shopify/Order/${restOrderId}`;
 
   try {
-    const result = await syncSingleShopifyOrder(orderGid);
+    const result = await syncSingleShopifyOrder(orderGid, store);
     if (!result) return NextResponse.json({ received: true, note: "order not found" });
 
     // Order confirmation and refund notifications are intentionally NOT sent from here: Shopify's
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest) {
     // instead of being silently deduped into a permanently stuck half-synced order.
     await supabaseService.from("shopify_webhook_events").delete().eq("shopify_webhook_id", webhookId);
     console.error(`Shopify webhook processing failed for ${webhookId} (${topic}):`, err);
-    await logIntegrationError("webhook", (err as Error).message, { webhookId, topic, restOrderId });
+    await logIntegrationError("webhook", (err as Error).message, { webhookId, topic, restOrderId, store });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 }

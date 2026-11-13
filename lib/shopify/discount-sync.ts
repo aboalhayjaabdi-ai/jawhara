@@ -1,4 +1,10 @@
 import { shopifyGraphQL } from "./client";
+import { activeStore, ID_COLUMNS } from "./stores";
+
+// Discounts are pushed to the ACTIVE store (lib/shopify/stores.ts). Each store's discount id lives
+// in its own column (legacy: shopify_discount_id, new: new_shopify_discount_id); DiscountRow's
+// shopify_discount_id field always holds the active store's one, so the logic below is unchanged.
+const discountIdColumn = () => ID_COLUMNS[activeStore()].discount;
 import { supabaseService } from "@/lib/supabase/service-client";
 
 if (typeof window !== "undefined") {
@@ -56,7 +62,7 @@ async function markSynced(
   await supabaseService
     .from("discounts")
     .update({
-      shopify_discount_id: shopifyDiscountId,
+      [discountIdColumn()]: shopifyDiscountId,
       shopify_sync_status: status,
       shopify_sync_error: error,
       shopify_synced_at: new Date().toISOString(),
@@ -71,13 +77,14 @@ async function markSynced(
 const collectionGidByHandle = new Map<string, string | null>();
 
 async function resolveCollectionGid(handle: string): Promise<string | null> {
-  if (collectionGidByHandle.has(handle)) return collectionGidByHandle.get(handle)!;
+  const cacheKey = `${activeStore()}:${handle}`;
+  if (collectionGidByHandle.has(cacheKey)) return collectionGidByHandle.get(cacheKey)!;
   const data = await shopifyGraphQL<{ collectionByHandle: { id: string } | null }>(
     `query($h: String!) { collectionByHandle(handle: $h) { id } }`,
     { h: handle }
   );
   const gid = data.collectionByHandle?.id ?? null;
-  collectionGidByHandle.set(handle, gid);
+  collectionGidByHandle.set(cacheKey, gid);
   return gid;
 }
 
@@ -95,7 +102,10 @@ async function resolveItems(itemType: "all" | "product" | "collection" | null, l
   if (ids.length === 0) return { items: { all: true }, warnings: ["Inga varor/kollektioner angivna -- behandlas som hela ordern."] };
 
   if (itemType === "product") {
-    const { data } = await supabaseService.from("products").select("shopify_id, shopify_product_id, title").in("shopify_id", ids);
+    const { data } = await supabaseService
+      .from("products")
+      .select(`shopify_id, shopify_product_id:${ID_COLUMNS[activeStore()].product}, title`)
+      .in("shopify_id", ids);
     const byLegacyId = new Map((data ?? []).map((r) => [r.shopify_id as string, r]));
     const productIds: string[] = [];
     const warnings: string[] = [];
@@ -401,7 +411,7 @@ async function deactivate(d: DiscountRow): Promise<DiscountSyncResult> {
 export async function syncDiscountToShopify(discountId: string): Promise<DiscountSyncResult> {
   const { data: d, error } = await supabaseService.from("discounts").select("*").eq("id", discountId).single();
   if (error || !d) return { ok: false, error: "Rabatten kunde inte hittas." };
-  const row = d as DiscountRow;
+  const row = { ...d, shopify_discount_id: (d as Record<string, unknown>)[discountIdColumn()] ?? null } as DiscountRow;
 
   const isLive = row.status === "active" || row.status === "scheduled";
   if (!isLive) {

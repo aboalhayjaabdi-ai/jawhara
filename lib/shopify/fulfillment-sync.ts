@@ -1,4 +1,10 @@
-import { shopifyGraphQL } from "./client";
+import { shopifyGraphQL, storeForNode } from "./client";
+import type { StoreKey } from "./stores";
+
+// Every function here acts in the store that owns the order/fulfillment (storeForNode), so orders
+// placed before the store switch-over keep being fulfilled in the legacy store and new ones in the
+// new store. With a single order store that is resolved without any API call (see storeForNode).
+const NOT_IN_ANY_STORE = "Ordern hittades inte i någon Shopify-butik.";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/fulfillment-sync.ts must never be imported into client code");
@@ -59,11 +65,13 @@ function idTail(gid: string): string {
  */
 async function resolveFulfillmentOrderLineItems(
   shopifyOrderId: string,
-  desired: { shopifyLineItemId: string; quantity: number }[]
+  desired: { shopifyLineItemId: string; quantity: number }[],
+  store: StoreKey
 ): Promise<Map<string, { fulfillmentOrderId: string; lineItemId: string; quantity: number }[]>> {
   const data = await shopifyGraphQL<{ order: { fulfillmentOrders: { edges: { node: FulfillmentOrderNode }[] } } | null }>(
     FULFILLMENT_ORDERS_QUERY,
-    { orderId: toGid("Order", shopifyOrderId) }
+    { orderId: toGid("Order", shopifyOrderId) },
+    store
   );
   const fulfillmentOrders = data.order?.fulfillmentOrders.edges.map((e) => e.node) ?? [];
 
@@ -122,7 +130,9 @@ export async function createShopifyFulfillment(input: {
   trackingUrl?: string | null;
 }): Promise<ShopifyFulfillmentResult> {
   try {
-    const grouped = await resolveFulfillmentOrderLineItems(input.shopifyOrderId, input.lineItems);
+    const store = await storeForNode(toGid("Order", input.shopifyOrderId));
+    if (!store) return { ok: false, error: NOT_IN_ANY_STORE };
+    const grouped = await resolveFulfillmentOrderLineItems(input.shopifyOrderId, input.lineItems, store);
     if (grouped.size === 0) {
       return { ok: false, error: "Inga artiklar kvar att leverera i Shopify (redan levererade eller borttagna)." };
     }
@@ -145,7 +155,7 @@ export async function createShopifyFulfillment(input: {
       fulfillmentCreate: { fulfillment: { id: string; status: string } | null; userErrors: { field: string[]; message: string }[] };
     }>(FULFILLMENT_CREATE_MUTATION, {
       fulfillment: { lineItemsByFulfillmentOrder, notifyCustomer: false, trackingInfo },
-    });
+    }, store);
 
     const { fulfillment, userErrors } = data.fulfillmentCreate;
     if (userErrors.length > 0) {
@@ -179,6 +189,8 @@ export async function updateShopifyFulfillmentTracking(input: {
   trackingUrl?: string | null;
 }): Promise<ShopifyFulfillmentResult> {
   try {
+    const store = await storeForNode(toGid("Fulfillment", input.shopifyFulfillmentId));
+    if (!store) return { ok: false, error: NOT_IN_ANY_STORE };
     const data = await shopifyGraphQL<{
       fulfillmentTrackingInfoUpdate: { fulfillment: { id: string; status: string } | null; userErrors: { field: string[]; message: string }[] };
     }>(FULFILLMENT_TRACKING_UPDATE_MUTATION, {
@@ -188,7 +200,7 @@ export async function updateShopifyFulfillmentTracking(input: {
         company: input.trackingCompany || undefined,
         url: input.trackingUrl || undefined,
       },
-    });
+    }, store);
     const { fulfillment, userErrors } = data.fulfillmentTrackingInfoUpdate;
     if (userErrors.length > 0) return { ok: false, error: userErrors.map((e) => e.message).join(" ") };
     if (!fulfillment) return { ok: false, error: "Shopify returnerade ingen leverans." };
@@ -212,9 +224,11 @@ const FULFILLMENT_CANCEL_MUTATION = `
  * admin. */
 export async function cancelShopifyFulfillment(shopifyFulfillmentId: string): Promise<ShopifyFulfillmentResult> {
   try {
+    const store = await storeForNode(toGid("Fulfillment", shopifyFulfillmentId));
+    if (!store) return { ok: false, error: NOT_IN_ANY_STORE };
     const data = await shopifyGraphQL<{
       fulfillmentCancel: { fulfillment: { id: string; status: string } | null; userErrors: { field: string[]; message: string }[] };
-    }>(FULFILLMENT_CANCEL_MUTATION, { id: toGid("Fulfillment", shopifyFulfillmentId) });
+    }>(FULFILLMENT_CANCEL_MUTATION, { id: toGid("Fulfillment", shopifyFulfillmentId) }, store);
     const { fulfillment, userErrors } = data.fulfillmentCancel;
     if (userErrors.length > 0) return { ok: false, error: userErrors.map((e) => e.message).join(" ") };
     if (!fulfillment) return { ok: false, error: "Shopify returnerade ingen leverans." };

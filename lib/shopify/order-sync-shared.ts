@@ -2,6 +2,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { getOrderItemImages } from "@/lib/order-images";
 import { shopifyGraphQL } from "./client";
+import { activeStore, ID_COLUMNS, type StoreKey } from "./stores";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/order-sync-shared.ts must never be imported into client code");
@@ -110,8 +111,12 @@ export type UpsertOrderResult = {
  * moment the order is first seen -- so a later product edit, image reassignment, or deletion can
  * never change what a historical order's emails or admin page show for it.
  */
-export async function upsertShopifyOrder(o: ShopifyOrderNode): Promise<UpsertOrderResult> {
+export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = activeStore()): Promise<UpsertOrderResult> {
   const sid = idTail(o.id)!;
+  // Line items carry the variant/product GIDs of the store the order was placed in, so they are
+  // matched against that store's own id columns (lib/shopify/stores.ts). For the legacy store these
+  // are the original shopify_variant_id/shopify_product_id columns.
+  const cols = ID_COLUMNS[store];
 
   const { data: existing } = await supabaseService
     .from("orders")
@@ -126,10 +131,10 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode): Promise<UpsertOrd
   const [{ data: customers }, { data: variants }, { data: products }] = await Promise.all([
     customerGid ? supabaseService.from("customers").select("id, shopify_id").eq("shopify_id", customerGid) : Promise.resolve({ data: [] as any[] }),
     variantGids.length
-      ? supabaseService.from("product_variants").select("id, shopify_variant_id").in("shopify_variant_id", variantGids)
+      ? supabaseService.from("product_variants").select(`id, shopify_variant_id:${cols.variant}`).in(cols.variant, variantGids)
       : Promise.resolve({ data: [] as any[] }),
     productGids.length
-      ? supabaseService.from("products").select("id, shopify_product_id").in("shopify_product_id", productGids)
+      ? supabaseService.from("products").select(`id, shopify_product_id:${cols.product}`).in(cols.product, productGids)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const customerIdByShopify = new Map((customers ?? []).map((c) => [c.shopify_id, c.id]));
@@ -331,8 +336,8 @@ const SINGLE_ORDER_QUERY = `
  * that particular delivery happened to carry (relevant since Shopify webhooks can arrive out of
  * order, or be retried well after the state has moved on again).
  */
-export async function syncSingleShopifyOrder(shopifyOrderGid: string): Promise<UpsertOrderResult | null> {
-  const data = await shopifyGraphQL<{ order: ShopifyOrderNode | null }>(SINGLE_ORDER_QUERY, { id: shopifyOrderGid });
+export async function syncSingleShopifyOrder(shopifyOrderGid: string, store: StoreKey = activeStore()): Promise<UpsertOrderResult | null> {
+  const data = await shopifyGraphQL<{ order: ShopifyOrderNode | null }>(SINGLE_ORDER_QUERY, { id: shopifyOrderGid }, store);
   if (!data.order) return null;
-  return upsertShopifyOrder(data.order);
+  return upsertShopifyOrder(data.order, store);
 }

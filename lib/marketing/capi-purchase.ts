@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { getMarketingSettings } from "@/lib/admin/marketing-settings";
-import { shopifyGraphQL } from "@/lib/shopify/client";
+import { shopifyGraphQL, storeForNode } from "@/lib/shopify/client";
 import { ATTR_CONSENT, ATTR_FBC, ATTR_FBP, ATTR_USER_AGENT, ATTR_VISITOR, attributeMap } from "@/lib/marketing/cart-tracking-attributes";
 
 if (typeof window !== "undefined") {
@@ -59,13 +59,16 @@ const ADDRESS_FIELDS = "firstName lastName city zip countryCodeV2 phone";
 async function fetchShopifyMatchData(shopifyOrderId: string | null): Promise<ShopifyMatchData | null> {
   if (!shopifyOrderId) return null;
   const id = `gid://shopify/Order/${shopifyOrderId}`;
+  // The store that owns the order (legacy or new during the switch-over; no API call with one store).
+  const store = await storeForNode(id);
+  if (!store) return null;
   const queries = [
     `query($id: ID!) { order(id: $id) { clientIp customer { id } customAttributes { key value } shippingAddress { ${ADDRESS_FIELDS} } billingAddress { ${ADDRESS_FIELDS} } } }`,
     `query($id: ID!) { order(id: $id) { clientIp customAttributes { key value } } }`,
   ];
   for (const query of queries) {
     try {
-      const data = await shopifyGraphQL<{ order: any }>(query, { id });
+      const data = await shopifyGraphQL<{ order: any }>(query, { id }, store);
       const o = data.order;
       if (!o) return null;
       const address: ShopifyAddress = o.shippingAddress ?? o.billingAddress ?? null;

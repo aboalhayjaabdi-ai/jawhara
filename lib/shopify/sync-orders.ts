@@ -1,4 +1,5 @@
 import { paginateAll } from "./client";
+import { orderStores } from "./stores";
 import { upsertShopifyOrder, ORDER_FIELDS_FRAGMENT, type ShopifyOrderNode } from "./order-sync-shared";
 import { reportNewlyPaidPurchase, maybeSendCancellationEmail } from "./sync-side-effects";
 import type { RecoverySource } from "@/lib/marketing/capi-purchase";
@@ -51,15 +52,26 @@ const QUERY = `
  * "Sync from Shopify" button keeps its original data-only behavior (omitted/undefined), unchanged.
  */
 export async function syncOrdersFromShopify(recoverySource?: RecoverySource): Promise<SyncOrdersResult> {
-  const orders: ShopifyOrderNode[] = [];
-  await paginateAll(QUERY, (d: any) => d.orders, async (nodes) => void orders.push(...(nodes as ShopifyOrderNode[])), 50);
-
+  // Every store that holds orders (lib/shopify/stores.ts: just legacy until the switch; after it,
+  // the new store plus legacy for orders placed before the switch).
+  const orders: { o: ShopifyOrderNode; store: (ReturnType<typeof orderStores>)[number] }[] = [];
   const errors: string[] = [];
+  for (const store of orderStores()) {
+    try {
+      await paginateAll(QUERY, (d: any) => d.orders, async (nodes) => void orders.push(...(nodes as ShopifyOrderNode[]).map((o) => ({ o, store }))), 50, store);
+    } catch (err) {
+      // Only reachable with two stores: one store's outage must not stop the other's sync. With a
+      // single store this rethrows, exactly as before.
+      if (orderStores().length === 1) throw err;
+      errors.push(`${store} store: ${(err as Error).message}`);
+    }
+  }
+
   let importedCount = 0;
 
-  for (const o of orders) {
+  for (const { o, store } of orders) {
     try {
-      const result = await upsertShopifyOrder(o);
+      const result = await upsertShopifyOrder(o, store);
       importedCount += 1;
 
       if (recoverySource) {

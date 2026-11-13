@@ -67,3 +67,41 @@ options and can be regenerated at any time.
 - Discounts 3 för 2, Valfri Plånbok, RABATT20F: identical rules (compared field by field).
 - All 5 policies identical to the live store.
 - Headless storefront token: sees all 385 active products; `cartCreate` works (no checkout made).
+
+## Site support for two stores (built, not deployed)
+
+`lib/shopify/stores.ts` adds `SHOPIFY_ACTIVE_STORE` (`legacy` unless set to exactly `new`).
+
+- **Legacy (default, unset):** identical behaviour to before. Same env vars, same `shopify_*`
+  columns, same single-store order sync, no extra API calls. The new columns are never read.
+- **New:** cart/checkout (Storefront API), discount sync and manual invoices use the new store
+  (`NEW_SHOPIFY_*` env vars, `new_shopify_*` columns). Cart ids from the new store reach the
+  browser as `new:<gid>`, so a visitor's old legacy cart id is ignored and a fresh cart is made
+  (and the reverse after a rollback).
+- **Orders, both modes:** an order stays with the store it was placed in. In new mode the sweep
+  (`/api/cron/sync-orders`, admin "Synka från Shopify") pulls both stores; webhooks are told apart
+  by `X-Shopify-Shop-Domain` and verified with that store's secret; fulfilment, tracking edits,
+  cancellations and Meta match data find the owning store via `storeForNode` (Shopify ids are global).
+
+Tested locally: build + type-check clean; legacy mode against the live store (cart create/reuse,
+"3 för 2" applied, foreign `new:` cart id ignored, bad webhook signature 401); new mode read-only
+(store routing, both webhook secrets, storefront/admin calls hit the new store, a legacy order
+resolves to legacy). Not yet testable: the new-mode cart, which needs migration 0049 applied.
+
+## Switch-over runbook
+
+Prep (no effect on the live site):
+1. Apply `supabase/migrations/0049_new_shopify_store_ids.sql` (adds 3 empty nullable columns).
+2. Deploy this code with `SHOPIFY_ACTIVE_STORE` unset. The site keeps running on legacy.
+3. Add on Vercel: `NEW_SHOPIFY_STORE_DOMAIN`, `NEW_SHOPIFY_CLIENT_ID`, `NEW_SHOPIFY_CLIENT_SECRET`,
+   `NEW_SHOPIFY_STOREFRONT_ACCESS_TOKEN`. Keep every `SHOPIFY_*` var (legacy orders need them).
+4. Re-run dump + import + discounts + verify, then `fill-new-store-ids.ts <mapping> --write`.
+5. Test the new-mode cart on a preview deployment with `SHOPIFY_ACTIVE_STORE=new`.
+
+Switch:
+6. Re-run step 4 (prices may have changed), set `SHOPIFY_ACTIVE_STORE=new` on production, redeploy.
+   Vercel swaps deployments atomically, so checkout is never down.
+7. `register-webhooks.ts`, then a test order: order lands in Supabase, Meta Purchase arrives.
+
+Rollback: unset `SHOPIFY_ACTIVE_STORE`, redeploy. Orders already placed in the new store keep
+syncing only if `SHOPIFY_ACTIVE_STORE=new`; after a rollback they are still in the new store's admin.

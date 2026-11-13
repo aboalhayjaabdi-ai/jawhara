@@ -3,6 +3,7 @@
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { shopifyGraphQL } from "@/lib/shopify/client";
+import { activeStore, ID_COLUMNS } from "@/lib/shopify/stores";
 import { consumeInventoryForOrderItems } from "@/lib/inventory/consume";
 
 export type ManualOrderLineInput = { productId: string; variantId: string; quantity: number; unitPrice: number };
@@ -112,7 +113,7 @@ async function createShopifyInvoiceOrder(
 ): Promise<CreateManualOrderResult> {
   const { data: variants } = await supabaseService
     .from("product_variants")
-    .select("id, price, shopify_variant_id")
+    .select(`id, price, shopify_variant_id:${ID_COLUMNS[activeStore()].variant}`)
     .in("id", input.items.map((i) => i.variantId));
   const variantById = new Map((variants ?? []).map((v) => [v.id, v]));
 

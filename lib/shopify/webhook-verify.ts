@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { storeConfig, type StoreKey } from "./stores";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/webhook-verify.ts must never be imported into client code");
@@ -11,9 +12,10 @@ if (typeof window !== "undefined") {
  * against the raw, unparsed request body: any re-serialization (even formatting-only) produces
  * a different signature.
  */
-export function verifyShopifyWebhookSignature(rawBody: string, hmacHeader: string | null): boolean {
+export function verifyShopifyWebhookSignature(rawBody: string, hmacHeader: string | null, store: StoreKey = "legacy"): boolean {
   if (!hmacHeader) return false;
-  const secret = process.env.SHOPIFY_CLIENT_SECRET;
+  // Each store's app signs with its own client secret (legacy: SHOPIFY_CLIENT_SECRET).
+  const secret = storeConfig(store).clientSecret;
   if (!secret) return false;
 
   const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");

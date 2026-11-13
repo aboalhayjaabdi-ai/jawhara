@@ -13,6 +13,25 @@ import {
   type CartUserError,
   type StorefrontCart,
 } from "@/lib/shopify/storefront";
+import { activeStore, ID_COLUMNS } from "@/lib/shopify/stores";
+
+// The browser keeps the Shopify cart id between visits (localStorage). Carts are per store, so a
+// cart from the NEW store is handed to the browser as "new:<cart gid>"; legacy carts keep their bare
+// gid exactly as before. A cart id from the other store is simply ignored (a fresh cart is made in
+// the active store on the next sync), so a store switch or rollback never sends one store's cart
+// id to the other store's API.
+const NEW_STORE_CART_PREFIX = "new:";
+
+function decodeCartId(clientCartId: string | null): string | null {
+  if (!clientCartId) return null;
+  const isNew = clientCartId.startsWith(NEW_STORE_CART_PREFIX);
+  if (activeStore() === "new") return isNew ? clientCartId.slice(NEW_STORE_CART_PREFIX.length) : null;
+  return isNew ? null : clientCartId;
+}
+
+function encodeCartId(cartId: string): string {
+  return activeStore() === "new" ? NEW_STORE_CART_PREFIX + cartId : cartId;
+}
 
 export type ShopifyCartSyncLine = { variantId: string; qty: number };
 
@@ -52,6 +71,8 @@ function describeDiscountCodeErrors(errors: CartUserError[]): string[] {
 
 type VariantRow = {
   id: string;
+  // The active store's variant GID, read from whichever column belongs to it (see ID_COLUMNS;
+  // aliased to this name in the select so the rest of this file is store-agnostic).
   // Full "gid://shopify/ProductVariant/<id>" -- NOT the legacy `shopify_id` column (just the bare
   // numeric tail, and stale after the store's product/variant ids were regenerated). This is the
   // column the Phase 2 spec actually named, already backfilled and verified 100% current against
@@ -88,7 +109,7 @@ async function resolveDesiredLines(
   const variantIds = [...new Set(lines.map((l) => l.variantId))];
   const { data, error } = await supabaseService
     .from("product_variants")
-    .select("id, shopify_variant_id, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(status)")
+    .select(`id, shopify_variant_id:${ID_COLUMNS[activeStore()].variant}, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(status)`)
     .in("id", variantIds);
 
   if (error || !data) {
@@ -182,7 +203,7 @@ function finalize(cart: StorefrontCart, discountCode: string | null, warnings: s
   const applicable = discountCode ? applied?.applicable ?? false : null;
   const allWarnings = applicable === false ? [...warnings, "Rabattkoden gäller inte för den här varukorgen i Shopify."] : warnings;
   return {
-    shopifyCartId: cart.id,
+    shopifyCartId: encodeCartId(cart.id),
     checkoutUrl: cart.checkoutUrl,
     shopifyTotal: Number(cart.cost.totalAmount.amount),
     discountCodeApplicable: applicable,
@@ -223,7 +244,8 @@ export async function syncShopifyCart(input: {
     // version -- any cart id that still resolves is treated as usable. Checkout isn't wired to
     // actually convert a cart yet (Phase 3 only redirects to it; nothing completes a purchase),
     // so this can't yet go stale in practice -- revisit if that changes.
-    let cart = input.shopifyCartId ? await cartGet(input.shopifyCartId) : null;
+    const existingCartId = decodeCartId(input.shopifyCartId);
+    let cart = existingCartId ? await cartGet(existingCartId) : null;
     const extraWarnings: string[] = [];
 
     if (!cart) {
