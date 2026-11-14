@@ -17,7 +17,7 @@ export type ProductTemplateInput = {
   descriptionHeading: string;
   accordionRows: { heading: string; body: string }[];
   sizeGuideHref: string | null;
-  offerMessage: { heading: string; body: string; href?: string | null } | null;
+  offerMessage: { heading: string; body: string; href?: string | null; image?: string | null } | null;
   showInventoryStatus: boolean;
   galleryLayout: "carousel" | "grid";
 };

@@ -28,13 +28,12 @@ const SORT_ANCHOR_ID = "sortering";
 // Small campaign line shown directly under the collection title, keyed by the collection's
 // template group -- so a main collection and every sub-collection in its group all get it.
 // Handles in `exclude` share a group's template but aren't part of that offer (gift sets aren't
-// in the "Valfri Plånbok" discount). `icon: false` renders the same box without the gift icon.
+// in the "Valfritt Smycke" discount). `icon: false` renders the same box without the gift icon.
 type CollectionPromo = { text: string; emphasis: string; icon: boolean; exclude?: string[] };
-const WALLET_PROMO: CollectionPromo = { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!", icon: true, exclude: ["gift-sets"] };
+const GIFT_PROMO: CollectionPromo = { text: "Köp en väska få ett valfritt smycke", emphasis: "på köpet!", icon: true, exclude: ["gift-sets"] };
 const JEWELRY_PROMO: CollectionPromo = { text: "3 för 2", emphasis: "på alla smycken!", icon: false };
 const COLLECTION_PROMOS: Record<string, CollectionPromo> = {
-  vaskor: WALLET_PROMO,
-  tillbehor: WALLET_PROMO, // Plånböcker
+  vaskor: GIFT_PROMO,
   "alla-smycken": JEWELRY_PROMO,
   armband: JEWELRY_PROMO,
   "klover-armband": JEWELRY_PROMO,

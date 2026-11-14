@@ -535,24 +535,36 @@ export const getProductByHandle = cache(async (handle: string) => {
   return { ...product, images, variants, sizeOptions: options, reviews: reviews ?? [], variantImageIndex, variantGallery };
 });
 
-/** Real-time eligibility check for the "Valfri Plånbok" wallet promo link -- matches the exact
- * product-for-product BXGY shape against the live `discounts` table (public-read RLS, no secrets
- * in that table), so the link only ever appears on bags genuinely in an active promotion's
- * buy_item_ids, not just products sharing the same display template. Never touches
- * lib/discounts.ts's checkout-time calculation logic -- this is a read-only display gate. */
-export async function isEligibleForWalletPromo(productShopifyId: string | null): Promise<boolean> {
+/** Real-time eligibility check for the "Valfritt Smycke" gift offer box (buy a bag, get any piece
+ * of jewelry free) -- matches the live `discounts` table (public-read RLS, no secrets in that
+ * table): an active automatic buy-X-get-Y promotion whose buy side lists this product (by its
+ * shopify_id, or one of its collections) and whose get side is a DIFFERENT set (the "3 för 2"
+ * promotions use the same set on both sides and are deliberately not matched). So the box only
+ * ever appears on bags genuinely in the promotion, not just products sharing the same display
+ * template. Never touches lib/discounts.ts's checkout-time calculation logic -- this is a
+ * read-only display gate. */
+export async function isEligibleForGiftPromo(productId: string, productShopifyId: string | null): Promise<boolean> {
   if (!productShopifyId) return false;
   const { data } = await supabase
     .from("discounts")
-    .select("buy_item_ids")
+    .select("buy_item_type, buy_item_ids, get_item_type, get_item_ids")
     .eq("status", "active")
-    .eq("buy_item_type", "product")
-    .eq("get_item_type", "product");
-  return (data ?? []).some((d) => (d.buy_item_ids as string[] | null)?.includes(productShopifyId));
+    .eq("kind", "automatic")
+    .in("buy_item_type", ["product", "collection"])
+    .in("get_item_type", ["product", "collection"]);
+  const sameSet = (d: any) =>
+    d.buy_item_type === d.get_item_type &&
+    JSON.stringify([...((d.buy_item_ids as string[] | null) ?? [])].sort()) === JSON.stringify([...((d.get_item_ids as string[] | null) ?? [])].sort());
+  const gifts = (data ?? []).filter((d) => !sameSet(d));
+  if (gifts.some((d) => d.buy_item_type === "product" && (d.buy_item_ids as string[] | null)?.includes(productShopifyId))) return true;
+  if (!gifts.some((d) => d.buy_item_type === "collection")) return false;
+  const { data: rows } = await supabase.from("collection_products").select("collections(shopify_id)").eq("product_id", productId);
+  const collectionIds = new Set(((rows ?? []) as any[]).map((r) => r.collections?.shopify_id).filter(Boolean));
+  return gifts.some((d) => d.buy_item_type === "collection" && ((d.buy_item_ids as string[] | null) ?? []).some((id) => collectionIds.has(id)));
 }
 
 /** Shopify collection IDs eligible for the real, currently-active "3 för 2" BXGY promotion (same
- * public-read `discounts` table isEligibleForWalletPromo above already reads, no secrets in it) --
+ * public-read `discounts` table isEligibleForGiftPromo above already reads, no secrets in it) --
  * used only to decide whether a product card shows a "3 för 2" badge, never duplicating
  * lib/discounts.ts's actual checkout-time pricing math. Matched by exact title, not just shape, so
  * a future unrelated collection-scoped BXGY discount (e.g. a different promotion later) can't make
@@ -573,7 +585,7 @@ export const getThreeForTwoCollectionIds = cache(async (): Promise<Set<string>> 
 });
 
 /** Same "3 för 2" eligibility as getThreeForTwoCollectionIds above, for a single product by its
- * internal id (not shopify_id) -- same shape as isEligibleForWalletPromo, so the PDP
+ * internal id (not shopify_id) -- same shape as isEligibleForGiftPromo, so the PDP
  * (app/(storefront)/products/[handle]/page.tsx) can keep showing the badge on the product page
  * itself, matching the "Rea" badge there, instead of only on grid cards. */
 export async function isEligibleForThreeForTwo(productId: string): Promise<boolean> {

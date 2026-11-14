@@ -1,5 +1,5 @@
 // Product recommendations for the cart drawer's carousel (components/cart/cart-recommendations.tsx).
-// Built only from data the store already has -- the live "Valfri Plånbok" discount's get-items,
+// Built only from data the store already has -- the live "Valfritt Smycke" discount's get-items,
 // the admin's own collection order (Alla smycken, Bästsäljare), the existing "related products"
 // logic, and the visitor's own recently-viewed list (lib/recently-viewed.ts, localStorage only,
 // sent by the client). No new tracking, cookies or external services.
@@ -11,9 +11,9 @@ import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
 import { interleaveNoelle } from "./campaign-products";
 
-export type RecommendationMode = "wallet" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "mixed" | "curated";
+export type RecommendationMode = "gift" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "mixed" | "curated";
 
-export const RECOMMENDATION_MODES: RecommendationMode[] = ["wallet", "complete-3for2", "bags-wallets", "match-bag", "viewed", "mixed", "curated"];
+export const RECOMMENDATION_MODES: RecommendationMode[] = ["gift", "complete-3for2", "bags-wallets", "match-bag", "viewed", "mixed", "curated"];
 
 const MAX_PRODUCTS = 6;
 // "Välj ett smycke till": 5 bracelets/necklaces (incl. at most one more of a design already in the
@@ -29,26 +29,43 @@ const H_BAG_COLLECTION = "h-vaskor"; // "H väskor" -- suggested first once 3 f�
 // "Rekommenderat" sort), picked round-robin so no single category dominates.
 const MIXED_CATEGORY_COLLECTIONS = ["armband", "halsband", "vaskor-och-tillbehor", "ringar", "orhangen", "tillbehor"];
 
-/** Real "get" products of the live automatic buy-a-bag-get-a-wallet promotion (disjoint buy/get
- * product lists), ordered like the Plånböcker collection. Never a hardcoded list. */
-async function getFreeWalletProductIds(): Promise<string[]> {
+// The free-gift pool can be a whole collection (every piece of jewelry); the carousel only ever
+// shows a handful, so only the first few in the store's own order are turned into cards.
+const GIFT_POOL_MAX = 40;
+
+/** Real "get" products of the live automatic buy-a-bag-get-a-free-gift promotion ("Valfritt
+ * Smycke": a disjoint buy set and get set, 100 % off) -- whether the get side lists products or
+ * collections -- ordered like the Alla smycken collection. Never a hardcoded list. */
+async function getFreeGiftProductIds(): Promise<string[]> {
   const { data: discounts } = await supabase
     .from("discounts")
-    .select("buy_item_ids, get_item_ids")
+    .select("buy_item_type, buy_item_ids, get_item_type, get_item_ids")
     .eq("status", "active")
     .eq("kind", "automatic")
-    .eq("buy_item_type", "product")
-    .eq("get_item_type", "product")
+    .in("buy_item_type", ["product", "collection"])
+    .in("get_item_type", ["product", "collection"])
     .eq("get_percentage", 100);
-  const shopifyIds = [...new Set((discounts ?? []).flatMap((d) => (d.get_item_ids as string[] | null) ?? []))];
-  if (shopifyIds.length === 0) return [];
-  const [{ data: products }, collectionOrder] = await Promise.all([
-    supabase.from("products").select("id, shopify_id").in("shopify_id", shopifyIds).eq("status", "active"),
-    getCollectionProductIds(WALLET_COLLECTION),
+  const sorted = (ids: string[] | null) => JSON.stringify([...(ids ?? [])].sort());
+  const gifts = (discounts ?? []).filter(
+    (d) => !(d.buy_item_type === d.get_item_type && sorted(d.buy_item_ids as string[] | null) === sorted(d.get_item_ids as string[] | null))
+  );
+  const productShopifyIds = [...new Set(gifts.filter((d) => d.get_item_type === "product").flatMap((d) => (d.get_item_ids as string[] | null) ?? []))];
+  const collectionShopifyIds = [...new Set(gifts.filter((d) => d.get_item_type === "collection").flatMap((d) => (d.get_item_ids as string[] | null) ?? []))];
+  if (productShopifyIds.length === 0 && collectionShopifyIds.length === 0) return [];
+
+  const [{ data: products }, { data: collections }, collectionOrder] = await Promise.all([
+    productShopifyIds.length
+      ? supabase.from("products").select("id").in("shopify_id", productShopifyIds).eq("status", "active")
+      : Promise.resolve({ data: [] as { id: string }[] }),
+    collectionShopifyIds.length
+      ? supabase.from("collections").select("handle").in("shopify_id", collectionShopifyIds)
+      : Promise.resolve({ data: [] as { handle: string }[] }),
+    getCollectionProductIds(JEWELRY_COLLECTION),
   ]);
-  const ids = (products ?? []).map((p) => p.id as string);
+  const fromCollections = await Promise.all((collections ?? []).map((c) => getCollectionProductIds(c.handle as string)));
+  const ids = [...new Set([...(products ?? []).map((p) => p.id as string), ...fromCollections.flat()])];
   const rank = new Map(collectionOrder.map((id, i) => [id, i]));
-  return ids.sort((a, b) => (rank.get(a) ?? 1e6) - (rank.get(b) ?? 1e6));
+  return ids.sort((a, b) => (rank.get(a) ?? 1e6) - (rank.get(b) ?? 1e6)).slice(0, GIFT_POOL_MAX);
 }
 
 // The candidate pools don't depend on the visitor's cart, so they're cached across requests for
@@ -56,7 +73,7 @@ async function getFreeWalletProductIds(): Promise<string[]> {
 // cheap per-cart filtering below runs per request. Availability is re-checked by /api/cart/totals
 // the moment anything is actually added.
 const CACHE = { revalidate: 60 };
-const cachedWalletCards = unstable_cache(async () => getProductCardsByIds(await getFreeWalletProductIds()), ["cart-recs-wallets"], CACHE);
+const cachedGiftCards = unstable_cache(async () => getProductCardsByIds(await getFreeGiftProductIds()), ["cart-recs-gifts"], CACHE);
 const cachedJewelryIds = unstable_cache(() => getCollectionProductIds(JEWELRY_COLLECTION), ["cart-recs-jewelry-ids"], CACHE);
 const cachedBestsellerIds = unstable_cache(() => getCollectionProductIds(BESTSELLER_COLLECTION), ["cart-recs-bestseller-ids"], CACHE);
 const cachedBagIds = unstable_cache(() => getCollectionProductIds(BAG_COLLECTION), ["cart-recs-bag-ids"], CACHE);
@@ -98,17 +115,18 @@ export async function getCartRecommendations(input: {
   const cartVariants = new Set(input.cartVariantIds);
   const finish = (cards: ProductCard[]) => addable(dedupe(cards), cartVariants).slice(0, MAX_PRODUCTS);
 
-  if (input.mode === "wallet") {
-    // Wallets already in the cart stay out (picking the same wallet twice isn't a new choice).
-    return finish((await cachedWalletCards()).filter((c) => !cartProducts.has(c.id)));
+  if (input.mode === "gift") {
+    // The free gift (any piece of jewelry). Products already in the cart stay out (picking the
+    // same piece twice isn't a new choice).
+    return finish((await cachedGiftCards()).filter((c) => !cartProducts.has(c.id)));
   }
 
   if (input.mode === "bags-wallets") {
     // 3 för 2 is already earned -- suggest something other than more jewelry. H bags come first
     // (Noélle Väska and Noélle Väska Mini alternating, then the other H bags); after them, other
     // bags and wallets from the store's own Väskor / Plånböcker order, mixed (two bags, then a
-    // wallet). Wallets are shown at their normal price here; a free wallet is only ever offered in
-    // "wallet" mode.
+    // wallet). Wallets are shown at their normal price here; the free gift (jewelry) is only ever
+    // offered in "gift" mode.
     const [hBagIds, bagIds, walletIds] = await Promise.all([cachedCategoryIds(H_BAG_COLLECTION), cachedBagIds(), cachedWalletIds()]);
     const hBagSet = new Set(hBagIds);
     const hBags = interleaveNoelle((await cachedCardsByIds(hBagIds)).filter((c) => !cartProducts.has(c.id)));

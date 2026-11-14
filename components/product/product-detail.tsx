@@ -330,7 +330,7 @@ export function ProductDetail({
   complementaryProducts,
   variantImageIndex,
   variantGallery,
-  walletPromoEligible,
+  giftPromoEligible,
   threeForTwoEligible,
   promoBox = null,
   salePriceNote = null,
@@ -360,11 +360,11 @@ export function ProductDetail({
   /** Set for products tagged "galleri-per-variant" (e.g. Noélle Mini): the gallery then shows only
    * the selected variant's photo first, followed by the shared photos -- see getProductByHandle. */
   variantGallery: VariantGallery | null;
-  /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForWalletPromo --
-   * whether this product's real shopify_id is in the live "Valfri Plånbok" discount's
-   * buy_item_ids. Gates the whole offer box (content.offerMessage), since some products share the
+  /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForGiftPromo --
+   * whether this product is on the buy side of the live "Valfritt Smycke" discount (buy a bag,
+   * get any piece of jewelry free). Gates the whole offer box (content.offerMessage), since some products share the
    * same display template without being discount-eligible. */
-  walletPromoEligible: boolean;
+  giftPromoEligible: boolean;
   /** Resolved server-side by the parent page via lib/queries.ts's isEligibleForThreeForTwo --
    * same real, live "3 för 2" collection scope the grid cards (ProductCard) use, so the badge
    * keeps showing on this product's own page instead of disappearing on click, matching "Rea". */
@@ -531,8 +531,8 @@ export function ProductDetail({
           )}
 
           {/* The whole offer box (not just its link) is hidden on products that aren't in the live
-              "Valfri Plånbok" discount -- the box would otherwise promise a deal checkout won't give. */}
-          {content?.offerMessage && walletPromoEligible && (
+              "Valfritt Smycke" discount -- the box would otherwise promise a deal checkout won't give. */}
+          {content?.offerMessage && giftPromoEligible && (
             <div className="relative mt-6 border border-line p-1">
               <div className="border border-line/60 bg-[#f7f7f7] p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -562,7 +562,7 @@ export function ProductDetail({
                     href={content.offerMessage.href}
                     className="btn-fx mt-5 flex h-12 w-full max-w-xs items-center justify-center gap-2 border border-fg text-xs font-semibold uppercase tracking-[0.18em]"
                   >
-                    Välj din plånbok
+                    Välj ditt smycke
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
                       <path d="M5 12h14" />
                       <path d="M13 6l6 6-6 6" />
