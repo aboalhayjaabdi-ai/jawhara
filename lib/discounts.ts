@@ -324,7 +324,13 @@ export async function computeCheckoutTotals(
   const independent = new Map(bxgy.map((d) => [d.id, computeBxgy(d, units, variantMap)]));
   const taken = new Set<number>();
   const bxgyResultById = new Map<string, BxgyResult>();
-  for (const d of [...bxgy].sort((a, b) => independent.get(b.id)!.amountOff - independent.get(a.id)!.amountOff)) {
+  // Ties go to the buy-X-get-Y with separate buy/get sets: verified against Shopify's own cart
+  // (bag + 3 jewelry), where the free piece is credited to "Valfritt Smycke", not "3 för 2".
+  const shapeRank = (d: DiscountRow) => (independent.get(d.id)!.shape === "split" ? 0 : 1);
+  const byPriority = [...bxgy].sort(
+    (a, b) => independent.get(b.id)!.amountOff - independent.get(a.id)!.amountOff || shapeRank(a) - shapeRank(b)
+  );
+  for (const d of byPriority) {
     const r = independent.get(d.id)!;
     const freeUnits = r.freeUnits.filter((u) => !taken.has(u.key));
     for (const u of freeUnits) taken.add(u.key);
