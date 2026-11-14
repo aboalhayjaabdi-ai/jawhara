@@ -18,7 +18,7 @@ if (typeof window !== "undefined") {
 // null = no gift product in that store: the free piece is sent as the real variant (the old
 // behaviour, with Shopify's own discount making it free).
 const GIFT_LINE_VARIANT: Record<StoreKey, string | null> = {
-  new: null,
+  new: "gid://shopify/ProductVariant/55866551828807", // "Gåva – valfritt smycke" (0 kr, no image, headless channel only)
   legacy: null,
 };
 
