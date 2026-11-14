@@ -551,8 +551,8 @@ export function ProductDetail({
                     </div>
                   </div>
                   {content.offerMessage.image && (
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden sm:h-20 sm:w-20">
-                      <Image src={content.offerMessage.image} alt="" fill className="object-contain" sizes="80px" />
+                    <div className="relative -my-2 h-24 w-24 shrink-0 sm:h-28 sm:w-28">
+                      <Image src={content.offerMessage.image} alt="" fill className="object-contain" sizes="112px" />
                     </div>
                   )}
                 </div>
