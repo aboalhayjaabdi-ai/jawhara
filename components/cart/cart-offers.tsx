@@ -20,7 +20,9 @@ export function findPromos(totals: CheckoutTotals | null): { jewelry: PromoProgr
 export function giftStatus(gift: PromoProgress | null) {
   if (!gift || gift.buyUnits === 0) return null;
   const entitled = gift.applications * gift.getQuantity;
-  return { entitled, chosen: Math.min(gift.freeUnits, entitled), needsChoice: gift.freeUnits < entitled };
+  // Jewelry already in the cart counts as chosen even when "3 för 2" made that same piece free
+  // instead (one discount per item), so the carousel never asks for a gift adding can't earn.
+  return { entitled, chosen: Math.min(gift.freeUnits, entitled), needsChoice: gift.freeUnits < entitled && gift.getUnits < entitled };
 }
 
 function ProgressBar({ value, max }: { value: number; max: number }) {
