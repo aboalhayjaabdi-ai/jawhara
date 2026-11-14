@@ -2,6 +2,7 @@
 // hasn't loaded (no consent yet, or no ID configured), since fbq/gtag then simply don't exist on
 // window. No event is ever fired with invented data; every call site passes only real values
 // already present in the page (real product/cart/order data).
+import { getConsent } from "./consent";
 import { logAnalyticsEvent } from "./first-party-analytics";
 import { newEventId, sendMetaServerEvent } from "./meta-server-events";
 
@@ -9,9 +10,17 @@ import { newEventId, sendMetaServerEvent } from "./meta-server-events";
 // sendMetaServerEvent() through the Conversions API (app/api/meta/event). Meta keeps one copy,
 // so nothing is double counted, but the event still arrives when the browser copy is blocked or
 // cut off by navigation. Both are no-ops without cookie consent.
+//
+// On a full page load with consent already given (a returning visitor, e.g. from an ad straight to
+// a product page), ViewContent fires during hydration -- before the pixel's inline script
+// (components/marketing/cookie-consent-and-tracking.tsx) has created window.fbq. Those calls are
+// queued here and replayed by that script right after its first PageView, so the browser copy is
+// no longer lost while its server copy (same event id) still went out.
 function metaTrack(eventName: string, customData: Record<string, unknown>): void {
   const eventId = newEventId();
-  window.fbq?.("track", eventName, customData, { eventID: eventId });
+  const args = ["track", eventName, customData, { eventID: eventId }];
+  if (window.fbq) window.fbq(...args);
+  else if (getConsent() === "accepted") (window.__jawharaPixelQueue ??= []).push(args);
   sendMetaServerEvent(eventName, eventId, customData);
 }
 
@@ -19,6 +28,7 @@ declare global {
   interface Window {
     fbq?: (...args: any[]) => void;
     gtag?: (...args: any[]) => void;
+    __jawharaPixelQueue?: unknown[][];
   }
 }
 

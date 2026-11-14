@@ -51,6 +51,11 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
   // reported at all.
   // The pixel's own first PageView (inline script below) and its Conversions API copy share this
   // one id so Meta deduplicates them.
+  // disablePushState: the pixel otherwise sends its OWN PageView (with no event id) on every
+  // history.pushState, i.e. every client-side page change -- and then drops the PageView that
+  // trackPageView() sends with the shared id as a duplicate, so the browser and server PageViews
+  // never paired up (confirmed against the live pixel, 2026-11-14). allowDuplicatePageViews lets
+  // the pixel accept trackPageView()'s one PageView per page change in its place.
   const firstPageViewId = useRef<string | null>(null);
   if (firstPageViewId.current === null) firstPageViewId.current = newEventId();
   const sentFirstServerPageView = useRef(false);
@@ -94,8 +99,11 @@ export function CookieConsentAndTracking({ metaPixelId, ga4MeasurementId }: { me
             t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
             document,'script','https://connect.facebook.net/en_US/fbevents.js');
             window.__jawharaMetaPixelId = ${JSON.stringify(metaPixelId)};
+            fbq.disablePushState = true;
+            fbq.allowDuplicatePageViews = true;
             fbq('init', ${JSON.stringify(metaPixelId)}, ${JSON.stringify(pixelUserData())});
             fbq('track', 'PageView', {}, { eventID: ${JSON.stringify(firstPageViewId.current)} });
+            (window.__jawharaPixelQueue || []).splice(0).forEach(function (a) { fbq.apply(null, a); });
           `}
         </Script>
       )}
