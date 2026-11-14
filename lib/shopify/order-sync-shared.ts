@@ -3,6 +3,7 @@ import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { getOrderItemImages } from "@/lib/order-images";
 import { shopifyGraphQL } from "./client";
 import { activeStore, ID_COLUMNS, type StoreKey } from "./stores";
+import { GIFT_ATTR_VARIANT } from "./gift-line";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/order-sync-shared.ts must never be imported into client code");
@@ -42,6 +43,7 @@ export type ShopifyOrderNode = {
         sku: string | null;
         variant: { id: string } | null;
         product: { id: string } | null;
+        customAttributes?: { key: string; value: string | null }[];
         originalUnitPriceSet: { shopMoney: { amount: string } };
         discountedUnitPriceSet: { shopMoney: { amount: string } } | null;
       };
@@ -79,7 +81,7 @@ export const ORDER_FIELDS_FRAGMENT = `
   totalDiscountsSet { shopMoney { amount currencyCode } }
   totalPriceSet { shopMoney { amount currencyCode } }
   lineItems(first: 100) {
-    edges { node { id title quantity sku variant { id } product { id } originalUnitPriceSet { shopMoney { amount currencyCode } } discountedUnitPriceSet { shopMoney { amount currencyCode } } } }
+    edges { node { id title quantity sku variant { id } product { id } customAttributes { key value } originalUnitPriceSet { shopMoney { amount currencyCode } } discountedUnitPriceSet { shopMoney { amount currencyCode } } } }
   }
   transactions(first: 10) { id kind status gateway amountSet { shopMoney { amount currencyCode } } processedAt }
   fulfillments(first: 10) { id status createdAt trackingInfo { number url company } }
@@ -137,6 +139,17 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
       ? supabaseService.from("products").select(`id, shopify_product_id:${cols.product}`).in(cols.product, productGids)
       : Promise.resolve({ data: [] as any[] }),
   ]);
+  // Gift lines ("Gåva – valfritt smycke", lib/shopify/gift-line.ts) name the real piece the
+  // customer chose in a hidden line attribute -- the order item then points at that piece.
+  const giftVariantOf = (li: ShopifyOrderNode["lineItems"]["edges"][number]["node"]) =>
+    li.customAttributes?.find((a) => a.key === GIFT_ATTR_VARIANT)?.value ?? null;
+  const giftVariantIds = [...new Set(o.lineItems.edges.map((e) => giftVariantOf(e.node)).filter((v): v is string => !!v))];
+  const { data: giftVariants } = giftVariantIds.length
+    ? await supabaseService.from("product_variants").select("id, product_id, products(title)").in("id", giftVariantIds)
+    : { data: [] as any[] };
+  const giftProductByVariant = new Map(
+    ((giftVariants ?? []) as any[]).map((v) => [v.id as string, { id: v.product_id as string, title: (Array.isArray(v.products) ? v.products[0] : v.products)?.title as string | undefined }])
+  );
   const customerIdByShopify = new Map((customers ?? []).map((c) => [c.shopify_id, c.id]));
   const variantIdByGid = new Map((variants ?? []).map((v) => [v.shopify_variant_id, v.id]));
   const productIdByGid = new Map((products ?? []).map((p) => [p.shopify_product_id, p.id]));
@@ -177,6 +190,21 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
 
   const itemRows = o.lineItems.edges.map((edge) => {
     const li = edge.node;
+    const giftVariantId = giftVariantOf(li);
+    const giftProduct = giftVariantId ? giftProductByVariant.get(giftVariantId) : undefined;
+    if (giftVariantId && giftProduct) {
+      return {
+        shopify_id: idTail(li.id),
+        order_id: orderId,
+        variant_id: giftVariantId,
+        product_id: giftProduct.id,
+        title: giftProduct.title ? `${giftProduct.title} (gåva)` : li.title,
+        sku: li.sku || null,
+        quantity: li.quantity,
+        unit_price: Number(li.originalUnitPriceSet.shopMoney.amount),
+        discounted_unit_price: li.discountedUnitPriceSet ? Number(li.discountedUnitPriceSet.shopMoney.amount) : null,
+      };
+    }
     return {
       shopify_id: idTail(li.id),
       order_id: orderId,

@@ -1,5 +1,6 @@
 import { supabaseService } from "./supabase/service-client";
 import { isVariantAvailable } from "./inventory";
+import { giftLineVariantGid, isGiftOffer } from "./shopify/gift-line";
 
 export type CartLineInput = { variantId: string; qty: number };
 
@@ -216,6 +217,45 @@ function computeBxgy(d: DiscountRow, units: Unit[], variantMap: Map<string, Elig
   return result("split", getUnits.slice(0, applications * d.get_quantity!), buyUnits.length, getUnits.length, applications);
 }
 
+/** The bag gift offer is independent of "3 för 2" (see lib/shopify/gift-line.ts): the gift offer
+ * picks its free piece first, and every other buy-X-get-Y only sees the remaining units -- so the
+ * free piece never counts towards "3 för 2", and both can apply in the same cart. Matches checkout,
+ * where the free piece is a separate 0 kr gift line that "3 för 2" can't see. */
+function giftFirstBxgy(bxgy: DiscountRow[], units: Unit[], variantMap: Map<string, EligibleVariant>): Map<string, BxgyResult> {
+  const results = new Map<string, BxgyResult>();
+  const taken = new Set<number>();
+  const ordered = [...bxgy.filter((d) => isGiftOffer(d)), ...bxgy.filter((d) => !isGiftOffer(d))];
+  for (const d of ordered) {
+    const r = computeBxgy(d, units.filter((u) => !taken.has(u.key)), variantMap);
+    for (const u of r.freeUnits) taken.add(u.key);
+    results.set(d.id, r);
+  }
+  return results;
+}
+
+/** Without a gift line (Shopify's native discounts do everything): Shopify applies only one product
+ * discount per item. Each promotion is evaluated on the whole cart on its own; where two want the
+ * same unit, the larger discount keeps it and the other simply loses that unit (it doesn't move on
+ * to another one). Ties go to the gift offer -- verified against Shopify's own cart (bag + 3
+ * jewelry credits the free piece to "Valfritt Smycke"). */
+function oneDiscountPerUnitBxgy(bxgy: DiscountRow[], units: Unit[], variantMap: Map<string, EligibleVariant>): Map<string, BxgyResult> {
+  const independent = new Map(bxgy.map((d) => [d.id, computeBxgy(d, units, variantMap)]));
+  const shapeRank = (d: DiscountRow) => (independent.get(d.id)!.shape === "split" ? 0 : 1);
+  const byPriority = [...bxgy].sort(
+    (a, b) => independent.get(b.id)!.amountOff - independent.get(a.id)!.amountOff || shapeRank(a) - shapeRank(b)
+  );
+  const taken = new Set<number>();
+  const results = new Map<string, BxgyResult>();
+  for (const d of byPriority) {
+    const r = independent.get(d.id)!;
+    const freeUnits = r.freeUnits.filter((u) => !taken.has(u.key));
+    for (const u of freeUnits) taken.add(u.key);
+    const pct = Number(d.get_percentage ?? 0) / 100;
+    results.set(d.id, { ...r, freeUnits, amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100 });
+  }
+  return results;
+}
+
 export async function computeCheckoutTotals(
   cart: CartLineInput[],
   discountCode: string | null,
@@ -314,29 +354,8 @@ export async function computeCheckoutTotals(
   const appliedDiscounts: AppliedDiscountLine[] = [];
   const promoProgress: PromoProgress[] = [];
 
-  // BXGY promotions can overlap: "Valfritt Smycke" (buy a bag, get any piece of jewelry free) and
-  // "3 för 2" (jewelry) can both pick the same cheapest jewelry unit. Shopify applies only one
-  // product discount per item (outside Shopify Plus stacking): each promotion is evaluated on the
-  // whole cart on its own, and where two want the same unit, the larger discount keeps it and the
-  // other simply loses that unit (it doesn't move on to another one). Same here, so the cart never
-  // promises more than checkout gives.
   const bxgy = toApply.filter((d) => d.buy_quantity != null && d.get_quantity != null);
-  const independent = new Map(bxgy.map((d) => [d.id, computeBxgy(d, units, variantMap)]));
-  const taken = new Set<number>();
-  const bxgyResultById = new Map<string, BxgyResult>();
-  // Ties go to the buy-X-get-Y with separate buy/get sets: verified against Shopify's own cart
-  // (bag + 3 jewelry), where the free piece is credited to "Valfritt Smycke", not "3 för 2".
-  const shapeRank = (d: DiscountRow) => (independent.get(d.id)!.shape === "split" ? 0 : 1);
-  const byPriority = [...bxgy].sort(
-    (a, b) => independent.get(b.id)!.amountOff - independent.get(a.id)!.amountOff || shapeRank(a) - shapeRank(b)
-  );
-  for (const d of byPriority) {
-    const r = independent.get(d.id)!;
-    const freeUnits = r.freeUnits.filter((u) => !taken.has(u.key));
-    for (const u of freeUnits) taken.add(u.key);
-    const pct = Number(d.get_percentage ?? 0) / 100;
-    bxgyResultById.set(d.id, { ...r, freeUnits, amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100 });
-  }
+  const bxgyResultById = giftLineVariantGid() ? giftFirstBxgy(bxgy, units, variantMap) : oneDiscountPerUnitBxgy(bxgy, units, variantMap);
 
   for (const d of toApply) {
     const r = bxgyResultById.get(d.id);

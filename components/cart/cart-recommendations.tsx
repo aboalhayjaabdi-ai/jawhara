@@ -33,12 +33,13 @@ function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMo
   const { jewelry, gift } = findPromos(totals);
   const giftInfo = giftStatus(gift);
   if (giftInfo?.needsChoice) return "gift";
-  // Bag(s) AND jewelry in the cart (free gift already chosen): what they've been looking at,
-  // or -- without any history -- bestsellers mixed from every category.
-  if (giftInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
+  // 1-2 paid jewelry pieces (the free gift piece never counts towards 3 för 2): more jewelry.
   if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < jewelry.buyQuantity + jewelry.getQuantity) {
     return "complete-3for2";
   }
+  // Bag(s) AND paid jewelry in the cart (free gift already chosen): what they've been looking at,
+  // or -- without any history -- bestsellers mixed from every category.
+  if (giftInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
   if (jewelry && jewelry.freeUnits > 0) return "bags-wallets";
   if (giftInfo) return "match-bag";
   if (viewedCount >= 2) return "viewed";

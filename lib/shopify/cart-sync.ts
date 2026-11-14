@@ -16,6 +16,9 @@ import {
   type StorefrontCart,
 } from "@/lib/shopify/storefront";
 import { activeStore, ID_COLUMNS } from "@/lib/shopify/stores";
+import { GIFT_ATTR_ITEM, GIFT_ATTR_VARIANT, giftLineVariantGid, isGiftOffer } from "@/lib/shopify/gift-line";
+import { computeCheckoutTotals } from "@/lib/discounts";
+import { normalizeVariantTitle } from "@/lib/variant-title";
 
 // The browser keeps the Shopify cart id between visits (localStorage). Carts are per store, so a
 // cart from the NEW store is handed to the browser as "new:<cart gid>"; legacy carts keep their bare
@@ -84,10 +87,20 @@ type VariantRow = {
   inventory_tracked: boolean;
   inventory_policy: string | null;
   product_id: string;
-  products: { status: string } | { status: string }[] | null;
+  title: string | null;
+  products: { status: string; title: string } | { status: string; title: string }[] | null;
 };
 
-function productOf(row: VariantRow): { status: string } | null {
+/** Shopify cart lines this sync wants, keyed by lineKey (merchandiseId, plus the chosen piece for
+ * a gift line -- several gift lines share the gift product's one variant). */
+type DesiredLines = Map<string, CartLineInput>;
+
+function lineKey(merchandiseId: string, attributes?: { key: string; value: string }[]): string {
+  const giftOf = attributes?.find((a) => a.key === GIFT_ATTR_VARIANT)?.value;
+  return giftOf ? `${merchandiseId}|${giftOf}` : merchandiseId;
+}
+
+function productOf(row: VariantRow): { status: string; title: string } | null {
   if (!row.products) return null;
   return Array.isArray(row.products) ? row.products[0] ?? null : row.products;
 }
@@ -100,10 +113,11 @@ function productOf(row: VariantRow): { status: string } | null {
  * no longer active) are dropped with a warning instead of ever reaching the Storefront API.
  */
 async function resolveDesiredLines(
-  lines: ShopifyCartSyncLine[]
-): Promise<{ desired: Map<string, number>; contents: Map<string, number>; warnings: string[] }> {
+  lines: ShopifyCartSyncLine[],
+  discountCode: string | null
+): Promise<{ desired: DesiredLines; contents: Map<string, number>; warnings: string[] }> {
   const warnings: string[] = [];
-  const desired = new Map<string, number>();
+  const desired: DesiredLines = new Map();
   // Jawhara products.id -> quantity, for the _jw_contents cart attribute (Meta content_ids).
   const contents = new Map<string, number>();
   if (lines.length === 0) return { desired, contents, warnings };
@@ -111,7 +125,7 @@ async function resolveDesiredLines(
   const variantIds = [...new Set(lines.map((l) => l.variantId))];
   const { data, error } = await supabaseService
     .from("product_variants")
-    .select(`id, shopify_variant_id:${ID_COLUMNS[activeStore()].variant}, inventory_quantity, inventory_tracked, inventory_policy, product_id, products!inner(status)`)
+    .select(`id, shopify_variant_id:${ID_COLUMNS[activeStore()].variant}, inventory_quantity, inventory_tracked, inventory_policy, product_id, title, products!inner(status, title)`)
     .in("id", variantIds);
 
   if (error || !data) {
@@ -156,8 +170,35 @@ async function resolveDesiredLines(
     }
 
     const merchandiseId = row.shopify_variant_id;
-    desired.set(merchandiseId, (desired.get(merchandiseId) ?? 0) + qty);
+    desired.set(merchandiseId, { merchandiseId, quantity: (desired.get(merchandiseId)?.quantity ?? 0) + qty });
     contents.set(row.product_id, (contents.get(row.product_id) ?? 0) + qty);
+  }
+
+  // The free piece of the bag gift offer goes to Shopify as a 0 kr gift line, not as the real
+  // jewelry (see lib/shopify/gift-line.ts). Which unit is the gift comes from the same calculation
+  // the Jawhara cart shows (lib/discounts.ts).
+  const giftGid = giftLineVariantGid();
+  if (giftGid && desired.size > 0) {
+    const totals = await computeCheckoutTotals(lines, discountCode);
+    const giftOfferIds = new Set(totals.promoProgress.filter((p) => p.shape === "split").map((p) => p.discountId));
+    const giftVariantIds = totals.appliedDiscounts.filter((a) => giftOfferIds.has(a.discountId)).flatMap((a) => a.freeVariantIds ?? []);
+    for (const variantId of giftVariantIds) {
+      const row = rowById.get(variantId);
+      const real = row?.shopify_variant_id ? desired.get(row.shopify_variant_id) : undefined;
+      if (!row || !real || real.quantity < 1) continue;
+      if (real.quantity === 1) desired.delete(real.merchandiseId);
+      else real.quantity -= 1;
+      const product = productOf(row);
+      const name = [product?.title, normalizeVariantTitle(row.title)].filter(Boolean).join(" – ");
+      const attributes = [
+        { key: GIFT_ATTR_ITEM, value: name },
+        { key: GIFT_ATTR_VARIANT, value: row.id },
+      ];
+      const key = lineKey(giftGid, attributes);
+      const existing = desired.get(key);
+      if (existing) existing.quantity += 1;
+      else desired.set(key, { merchandiseId: giftGid, quantity: 1, attributes });
+    }
   }
 
   if (droppedUnmapped) warnings.push("En eller flera varor kunde inte synkroniseras med Shopify.");
@@ -215,7 +256,7 @@ function finalize(cart: StorefrontCart, discountCode: string | null, warnings: s
 
 /**
  * Which existing cart lines to remove and which lines to add so the Shopify cart holds exactly
- * `desired` (merchandiseId -> total quantity).
+ * `desired` (line key -> line with its total quantity).
  *
  * Shopify splits a single variant's quantity across MULTIPLE cart lines whenever an automatic
  * quantity-based discount (e.g. "3 för 2") applies to it, to represent which units are discounted
@@ -225,39 +266,40 @@ function finalize(cart: StorefrontCart, discountCode: string | null, warnings: s
  * untouched on every subsequent sync, so the total quantity -- and price -- crept upward every time
  * the cart resynced).
  */
-function planLineChanges(cart: StorefrontCart, desired: Map<string, number>): { toRemove: string[]; toAdd: CartLineInput[] } {
-  const currentByMerchandise = new Map<string, { ids: string[]; quantity: number }>();
+function planLineChanges(cart: StorefrontCart, desired: DesiredLines): { toRemove: string[]; toAdd: CartLineInput[] } {
+  const currentByKey = new Map<string, { ids: string[]; quantity: number }>();
   for (const l of cart.lines) {
-    const group = currentByMerchandise.get(l.merchandiseId);
+    const key = lineKey(l.merchandiseId, l.attributes);
+    const group = currentByKey.get(key);
     if (group) {
       group.ids.push(l.id);
       group.quantity += l.quantity;
     } else {
-      currentByMerchandise.set(l.merchandiseId, { ids: [l.id], quantity: l.quantity });
+      currentByKey.set(key, { ids: [l.id], quantity: l.quantity });
     }
   }
 
   const toRemove: string[] = [];
-  for (const [merchandiseId, group] of currentByMerchandise) {
-    if (!desired.has(merchandiseId)) toRemove.push(...group.ids);
+  for (const [key, group] of currentByKey) {
+    if (!desired.has(key)) toRemove.push(...group.ids);
   }
 
   const toAdd: CartLineInput[] = [];
-  for (const [merchandiseId, quantity] of desired.entries()) {
-    const group = currentByMerchandise.get(merchandiseId);
+  for (const [key, line] of desired.entries()) {
+    const group = currentByKey.get(key);
     if (!group) {
-      toAdd.push({ merchandiseId, quantity });
+      toAdd.push(line);
       continue;
     }
     // Already correct in total -- leave Shopify's own line split alone. Patching just one of
     // several lines it's using to track a quantity discount (what this used to do) destabilized
     // the discount itself, sometimes dropping it entirely on the very next sync.
-    if (group.quantity === quantity) continue;
+    if (group.quantity === line.quantity) continue;
     // Actually changing: remove every line this variant currently has and add ONE fresh line
     // with the full desired quantity, so Shopify's discount engine recomputes its allocation
     // from a clean slate instead of being handed a half-updated split.
     toRemove.push(...group.ids);
-    toAdd.push({ merchandiseId, quantity });
+    toAdd.push(line);
   }
   return { toRemove, toAdd };
 }
@@ -280,13 +322,13 @@ function codesDiffer(desiredCodes: string[], cart: StorefrontCart): boolean {
  */
 async function syncInOneCall(
   existing: StorefrontCart | null,
-  desired: Map<string, number>,
+  desired: DesiredLines,
   desiredCodes: string[],
   tracking: Record<string, string>,
   contents: Map<string, number>
 ): Promise<{ cart: StorefrontCart | null; warnings: string[] }> {
   if (!existing) {
-    const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
+    const lines: CartLineInput[] = [...desired.values()];
     const attributes = desiredAttributes([], tracking, contents) ?? [];
     const { cart, userErrors } = await cartCreate(lines, { discountCodes: desiredCodes, attributes });
     return { cart, warnings: describeUserErrors(userErrors) };
@@ -334,7 +376,7 @@ export async function syncShopifyCart(input: {
   // (buildTrackingAttributes) -- empty when the visitor hasn't accepted marketing cookies.
   trackingAttributes?: Record<string, string>;
 }): Promise<ShopifyCartSyncResult> {
-  const { desired, contents, warnings } = await resolveDesiredLines(input.lines);
+  const { desired, contents, warnings } = await resolveDesiredLines(input.lines, input.discountCode);
 
   if (desired.size === 0) {
     // Either the Jawhara cart is empty, or nothing in it could map to Shopify -- nothing to
@@ -367,7 +409,7 @@ export async function syncShopifyCart(input: {
     const extraWarnings: string[] = [];
 
     if (!cart) {
-      const lines: CartLineInput[] = [...desired.entries()].map(([merchandiseId, quantity]) => ({ merchandiseId, quantity }));
+      const lines: CartLineInput[] = [...desired.values()];
       const { cart: created, userErrors } = await cartCreate(lines);
       extraWarnings.push(...describeUserErrors(userErrors));
       if (!created) return emptyResult(null, [...warnings, ...extraWarnings]);
