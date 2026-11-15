@@ -563,6 +563,21 @@ export async function isEligibleForGiftPromo(productId: string, productShopifyId
   return gifts.some((d) => d.buy_item_type === "collection" && ((d.buy_item_ids as string[] | null) ?? []).some((id) => collectionIds.has(id)));
 }
 
+/** Whether a bag gift offer ("Valfritt Smycke": buy a bag, get a piece of jewelry) is active right
+ * now -- the one switch for every place that advertises it (admin: Rabatter -> status Aktiv/Utkast).
+ * Same buy/get shape test as isEligibleForGiftPromo above. */
+export const isGiftOfferActive = cache(async (): Promise<boolean> => {
+  const { data } = await supabase
+    .from("discounts")
+    .select("buy_item_type, buy_item_ids, get_item_type, get_item_ids")
+    .eq("status", "active")
+    .eq("kind", "automatic")
+    .in("buy_item_type", ["product", "collection"])
+    .in("get_item_type", ["product", "collection"]);
+  const sorted = (ids: unknown) => JSON.stringify([...((ids as string[] | null) ?? [])].sort());
+  return (data ?? []).some((d) => !(d.buy_item_type === d.get_item_type && sorted(d.buy_item_ids) === sorted(d.get_item_ids)));
+});
+
 /** Shopify collection IDs eligible for the real, currently-active "3 för 2" BXGY promotion (same
  * public-read `discounts` table isEligibleForGiftPromo above already reads, no secrets in it) --
  * used only to decide whether a product card shows a "3 för 2" badge, never duplicating
