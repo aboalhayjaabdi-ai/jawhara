@@ -349,7 +349,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                 ) : (
                   // Until the authoritative totals arrive (a fraction of a second), show the cart's
                   // own subtotal right away instead of "Beräknar..." -- discounts, if any, are
-                  // applied as soon as the real totals land. Checkout stays disabled meanwhile.
+                  // applied as soon as the real totals land. "Till kassan" can already be clicked:
+                  // it checks the exact cart's price itself before leaving for checkout.
                   <>
                     <div className="flex items-center justify-between text-sm text-muted">
                       <span>Delsumma</span>
@@ -369,7 +370,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           {checkoutError && <p className="mb-2 text-xs text-red-700">{checkoutError}</p>}
 
           <button
-            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isCheckingOut}
+            // Not held back while totals are still loading: goToCheckout fetches/validates the
+            // exact cart's totals itself (and Shopify's price parity) before navigating anywhere.
+            disabled={items.length === 0 || !CHECKOUT_ENABLED || blockingErrors.length > 0 || isCheckingOut}
             onClick={handleCheckout}
             onPointerEnter={warmCheckout}
             onPointerDown={warmCheckout}
