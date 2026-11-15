@@ -9,20 +9,17 @@ function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
 }
 
-/** "same"-shaped promotion = jewelry "3 för 2"; "split" = buy-a-bag-get-a-free-piece-of-jewelry
- * ("Valfritt Smycke"). */
-export function findPromos(totals: CheckoutTotals | null): { jewelry: PromoProgress | null; gift: PromoProgress | null } {
+/** "same"-shaped promotion = jewelry "3 för 2"; "split" = buy-a-bag-get-a-wallet. */
+export function findPromos(totals: CheckoutTotals | null): { jewelry: PromoProgress | null; wallet: PromoProgress | null } {
   const list = totals?.promoProgress ?? [];
-  return { jewelry: list.find((p) => p.shape === "same") ?? null, gift: list.find((p) => p.shape === "split") ?? null };
+  return { jewelry: list.find((p) => p.shape === "same") ?? null, wallet: list.find((p) => p.shape === "split") ?? null };
 }
 
-/** How many free gifts (jewelry) the cart's bags earn, and how many are already chosen (made free). */
-export function giftStatus(gift: PromoProgress | null) {
-  if (!gift || gift.buyUnits === 0) return null;
-  const entitled = gift.applications * gift.getQuantity;
-  // Jewelry already in the cart counts as chosen even when "3 för 2" made that same piece free
-  // instead (one discount per item), so the carousel never asks for a gift adding can't earn.
-  return { entitled, chosen: Math.min(gift.freeUnits, entitled), needsChoice: gift.freeUnits < entitled && gift.getUnits < entitled };
+/** How many free wallets the cart's bags earn, and how many are already chosen (made free). */
+export function walletStatus(wallet: PromoProgress | null) {
+  if (!wallet || wallet.buyUnits === 0) return null;
+  const entitled = wallet.applications * wallet.getQuantity;
+  return { entitled, chosen: Math.min(wallet.freeUnits, entitled), needsChoice: wallet.freeUnits < entitled };
 }
 
 function ProgressBar({ value, max }: { value: number; max: number }) {
@@ -38,9 +35,9 @@ const STRIP = "cart-fade-in mx-auto w-full max-w-xl flex-shrink-0 border-b borde
 const LINK_BUTTON = "btn-fx inline-flex h-8 flex-shrink-0 items-center border border-fg bg-bg px-3 text-[10px] font-semibold uppercase tracking-[0.14em]";
 
 export function CartOffers({ totals, onNavigate }: { totals: CheckoutTotals | null; onNavigate: () => void }) {
-  // Only the "3 för 2" progress lives here -- the free-gift choice is handled entirely by the
-  // recommendations carousel below (one place to pick it, not two), and a chosen gift is
-  // confirmed on its own cart row ("Gratis (Valfritt Smycke)").
+  // Only the jewelry progress lives here -- the free-wallet choice is handled entirely by the
+  // recommendations carousel below (one place to pick it, not two), and a chosen wallet is
+  // confirmed on its own cart row ("Gratis (Valfri Plånbok)").
   const { jewelry } = findPromos(totals);
 
   const groupSize = jewelry ? jewelry.buyQuantity + jewelry.getQuantity : 0;

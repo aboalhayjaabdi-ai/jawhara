@@ -1,6 +1,5 @@
 import { supabaseService } from "./supabase/service-client";
 import { isVariantAvailable } from "./inventory";
-import { giftLineVariantGid, isGiftOffer } from "./shopify/gift-line";
 
 export type CartLineInput = { variantId: string; qty: number };
 
@@ -50,7 +49,7 @@ export type AppliedDiscountLine = {
 
 /** Display-only progress for one active automatic buy-X-get-Y promotion, derived from the exact
  * same unit pools and formulas the pricing loop below uses -- never an input to pricing. Lets the
- * cart show "1/3 smycken" or "1 av 2 gratis smycken" without re-implementing campaign rules
+ * cart show "1/3 smycken" or "1 av 2 gratis plånböcker" without re-implementing campaign rules
  * client-side. Only present for promotions that were actually eligible to apply to this cart
  * (an exclusive code can keep an automatic promotion out entirely; it then has no entry here). */
 export type PromoProgress = {
@@ -58,7 +57,7 @@ export type PromoProgress = {
   title: string;
   // "same": buy-set === get-set (e.g. "3 för 2" on jewelry collections) -- every
   // (buyQuantity + getQuantity) qualifying units earn getQuantity free.
-  // "split": disjoint buy/get sets (e.g. "Valfritt Smycke": buy a bag, get any piece of jewelry).
+  // "split": disjoint buy/get sets (e.g. "Valfri Plånbok": buy a bag, get a wallet).
   shape: "same" | "split";
   buyQuantity: number;
   getQuantity: number;
@@ -170,90 +169,8 @@ function qualifies(variant: EligibleVariant, itemType: string | null, itemIds: s
 }
 
 /** Cheapest-first, matching Shopify's own documented BXGY behavior (discount applies to the customer's cheapest eligible item). */
-function cheapestFirst<T extends { price: number }>(expanded: T[]): T[] {
+function cheapestFirst(expanded: { variantId: string; price: number }[]): { variantId: string; price: number }[] {
   return [...expanded].sort((a, b) => a.price - b.price);
-}
-
-type Unit = { key: number; variantId: string; price: number };
-
-type BxgyResult = {
-  shape: "same" | "split";
-  freeUnits: Unit[];
-  buyUnits: number;
-  getUnits: number;
-  applications: number;
-  amountOff: number;
-};
-
-/** One buy-X-get-Y promotion over the given units. Two real shapes exist, handled distinctly
- * because they behave differently: "3 för 2" has buy-set === get-set (the same jewelry
- * collections), so a single qualifying item can't simultaneously count as both a "buy" trigger and
- * the "free" item -- each application genuinely consumes (buy_quantity + get_quantity) units from
- * the shared pool. "Valfritt Smycke" has a disjoint buy-set (bags) and get-set (jewelry), so
- * buy/get units are counted independently. */
-function computeBxgy(d: DiscountRow, units: Unit[], variantMap: Map<string, EligibleVariant>): BxgyResult {
-  const buySameAsGet =
-    d.buy_item_type === d.get_item_type &&
-    JSON.stringify([...(d.buy_item_ids ?? [])].sort()) === JSON.stringify([...(d.get_item_ids ?? [])].sort());
-  const cap = (applications: number) => (d.uses_per_order_limit != null ? Math.min(applications, d.uses_per_order_limit) : applications);
-  const pct = Number(d.get_percentage ?? 0) / 100;
-  const result = (shape: "same" | "split", freeUnits: Unit[], buyUnits: number, getUnits: number, applications: number): BxgyResult => ({
-    shape,
-    freeUnits,
-    buyUnits,
-    getUnits,
-    applications,
-    amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100,
-  });
-
-  if (buySameAsGet) {
-    const pool = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids)));
-    const applications = cap(Math.floor(pool.length / (d.buy_quantity! + d.get_quantity!)));
-    return result("same", pool.slice(0, applications * d.get_quantity!), pool.length, pool.length, applications);
-  }
-  const buyUnits = units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids));
-  const getUnits = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.get_item_type, d.get_item_ids)));
-  const applications = cap(Math.floor(buyUnits.length / d.buy_quantity!));
-  return result("split", getUnits.slice(0, applications * d.get_quantity!), buyUnits.length, getUnits.length, applications);
-}
-
-/** The bag gift offer is independent of "3 för 2" (see lib/shopify/gift-line.ts): the gift offer
- * picks its free piece first, and every other buy-X-get-Y only sees the remaining units -- so the
- * free piece never counts towards "3 för 2", and both can apply in the same cart. Matches checkout,
- * where the free piece is a separate 0 kr gift line that "3 för 2" can't see. */
-function giftFirstBxgy(bxgy: DiscountRow[], units: Unit[], variantMap: Map<string, EligibleVariant>): Map<string, BxgyResult> {
-  const results = new Map<string, BxgyResult>();
-  const taken = new Set<number>();
-  const ordered = [...bxgy.filter((d) => isGiftOffer(d)), ...bxgy.filter((d) => !isGiftOffer(d))];
-  for (const d of ordered) {
-    const r = computeBxgy(d, units.filter((u) => !taken.has(u.key)), variantMap);
-    for (const u of r.freeUnits) taken.add(u.key);
-    results.set(d.id, r);
-  }
-  return results;
-}
-
-/** Without a gift line (Shopify's native discounts do everything): Shopify applies only one product
- * discount per item. Each promotion is evaluated on the whole cart on its own; where two want the
- * same unit, the larger discount keeps it and the other simply loses that unit (it doesn't move on
- * to another one). Ties go to the gift offer -- verified against Shopify's own cart (bag + 3
- * jewelry credits the free piece to "Valfritt Smycke"). */
-function oneDiscountPerUnitBxgy(bxgy: DiscountRow[], units: Unit[], variantMap: Map<string, EligibleVariant>): Map<string, BxgyResult> {
-  const independent = new Map(bxgy.map((d) => [d.id, computeBxgy(d, units, variantMap)]));
-  const shapeRank = (d: DiscountRow) => (independent.get(d.id)!.shape === "split" ? 0 : 1);
-  const byPriority = [...bxgy].sort(
-    (a, b) => independent.get(b.id)!.amountOff - independent.get(a.id)!.amountOff || shapeRank(a) - shapeRank(b)
-  );
-  const taken = new Set<number>();
-  const results = new Map<string, BxgyResult>();
-  for (const d of byPriority) {
-    const r = independent.get(d.id)!;
-    const freeUnits = r.freeUnits.filter((u) => !taken.has(u.key));
-    for (const u of freeUnits) taken.add(u.key);
-    const pct = Number(d.get_percentage ?? 0) / 100;
-    results.set(d.id, { ...r, freeUnits, amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100 });
-  }
-  return results;
 }
 
 export async function computeCheckoutTotals(
@@ -290,10 +207,9 @@ export async function computeCheckoutTotals(
 
   const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
 
-  // Expand qty into individual unit entries for per-unit BXGY matching. `key` identifies one
-  // physical unit, so two promotions can never both make the same unit free (see below).
-  const units: Unit[] = [];
-  for (const line of lines) for (let i = 0; i < line.qty; i++) units.push({ key: units.length, variantId: line.variantId, price: line.unitPrice });
+  // Expand qty into individual unit entries for per-unit BXGY matching.
+  const units: { variantId: string; price: number }[] = [];
+  for (const line of lines) for (let i = 0; i < line.qty; i++) units.push({ variantId: line.variantId, price: line.unitPrice });
 
   const automatic = discounts.filter((d) => d.kind === "automatic");
 
@@ -354,35 +270,69 @@ export async function computeCheckoutTotals(
   const appliedDiscounts: AppliedDiscountLine[] = [];
   const promoProgress: PromoProgress[] = [];
 
-  const bxgy = toApply.filter((d) => d.buy_quantity != null && d.get_quantity != null);
-  const bxgyResultById = giftLineVariantGid() ? giftFirstBxgy(bxgy, units, variantMap) : oneDiscountPerUnitBxgy(bxgy, units, variantMap);
-
   for (const d of toApply) {
-    const r = bxgyResultById.get(d.id);
-    if (r) {
+    if (d.buy_quantity != null && d.get_quantity != null) {
+      // BXGY. Two real shapes exist among the 6 actual discounts, handled distinctly because
+      // they behave differently: "3 för 2"/"6 för 4" have buy-set === get-set (the same jewelry
+      // collections), so a single qualifying item can't simultaneously count as both a "buy"
+      // trigger and the "free" item -- each application genuinely consumes
+      // (buy_quantity + get_quantity) units from the shared pool. "Valfri Plånbok" has a
+      // disjoint buy-set (bags) and get-set (wallets), so buy/get units are counted independently.
+      const buySameAsGet =
+        d.buy_item_type === d.get_item_type &&
+        JSON.stringify([...(d.buy_item_ids ?? [])].sort()) === JSON.stringify([...(d.get_item_ids ?? [])].sort());
+
+      let freeUnits: { variantId: string; price: number }[] = [];
+      // Display-only bookkeeping for promoProgress (below) -- same numbers the pricing uses.
+      let progressBuyUnits = 0;
+      let progressGetUnits = 0;
+      let progressApplications = 0;
+
+      if (buySameAsGet) {
+        const pool = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids)));
+        const groupSize = d.buy_quantity + d.get_quantity;
+        const applications = Math.floor(pool.length / groupSize);
+        const capped = d.uses_per_order_limit != null ? Math.min(applications, d.uses_per_order_limit) : applications;
+        freeUnits = pool.slice(0, capped * d.get_quantity);
+        progressBuyUnits = progressGetUnits = pool.length;
+        progressApplications = capped;
+      } else {
+        const buyUnits = units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.buy_item_type, d.buy_item_ids));
+        const getUnits = cheapestFirst(units.filter((u) => qualifies(variantMap.get(u.variantId)!, d.get_item_type, d.get_item_ids)));
+        const applications = Math.floor(buyUnits.length / d.buy_quantity!);
+        const capped = d.uses_per_order_limit != null ? Math.min(applications, d.uses_per_order_limit) : applications;
+        freeUnits = getUnits.slice(0, capped * d.get_quantity);
+        progressBuyUnits = buyUnits.length;
+        progressGetUnits = getUnits.length;
+        progressApplications = capped;
+      }
+
       if (d.kind === "automatic") {
+        const pct = Number(d.get_percentage ?? 0) / 100;
         promoProgress.push({
           discountId: d.id,
           title: d.title,
-          shape: r.shape,
-          buyQuantity: d.buy_quantity!,
-          getQuantity: d.get_quantity!,
+          shape: buySameAsGet ? "same" : "split",
+          buyQuantity: d.buy_quantity,
+          getQuantity: d.get_quantity,
           maxApplications: d.uses_per_order_limit,
-          buyUnits: r.buyUnits,
-          getUnits: r.getUnits,
-          applications: r.applications,
-          freeUnits: r.freeUnits.length,
-          amountOff: r.amountOff,
+          buyUnits: progressBuyUnits,
+          getUnits: progressGetUnits,
+          applications: progressApplications,
+          freeUnits: freeUnits.length,
+          amountOff: Math.round(freeUnits.reduce((sum, u) => sum + u.price * pct, 0) * 100) / 100,
         });
       }
 
-      if (r.freeUnits.length > 0) {
+      if (freeUnits.length > 0) {
+        const pct = Number(d.get_percentage ?? 0) / 100;
+        const amountOff = freeUnits.reduce((sum, u) => sum + u.price * pct, 0);
         appliedDiscounts.push({
           discountId: d.id,
           title: d.title,
           kind: "bxgy_free_item",
-          amountOff: r.amountOff,
-          freeVariantIds: r.freeUnits.map((u) => u.variantId),
+          amountOff: Math.round(amountOff * 100) / 100,
+          freeVariantIds: freeUnits.map((u) => u.variantId),
         });
       }
     } else if (d.get_percentage != null) {

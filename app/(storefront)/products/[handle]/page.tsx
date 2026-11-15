@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
+import { getProductByHandle, getAllProductHandles, isEligibleForWalletPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
@@ -44,9 +44,9 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
-  const [content, giftPromoEligible, threeForTwoEligible, collectionHandles] = await Promise.all([
+  const [content, walletPromoEligible, threeForTwoEligible, collectionHandles] = await Promise.all([
     getProductTemplateContent(product.template_suffix),
-    isEligibleForGiftPromo(product.id, product.shopify_id ?? null),
+    isEligibleForWalletPromo(product.shopify_id ?? null),
     isEligibleForThreeForTwo(product.id),
     getProductCollectionHandles(product.id),
   ]);
@@ -75,7 +75,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       complementaryProducts={<ComplementaryProducts productId={product.id} />}
       variantImageIndex={product.variantImageIndex}
       variantGallery={product.variantGallery}
-      giftPromoEligible={giftPromoEligible}
+      walletPromoEligible={walletPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
       promoBox={promoBox}
       salePriceNote={salePriceNote}

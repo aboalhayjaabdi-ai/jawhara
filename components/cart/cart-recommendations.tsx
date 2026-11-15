@@ -8,14 +8,14 @@ import type { RecommendationMode } from "@/lib/cart-recommendations";
 import { getRecentlyViewed } from "@/lib/recently-viewed";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { useCartActions, type CartItem } from "./cart-provider";
-import { findPromos, giftStatus } from "./cart-offers";
+import { findPromos, walletStatus } from "./cart-offers";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
 }
 
 const HEADINGS: Record<RecommendationMode, string> = {
-  gift: "Välj ditt gratis smycke 🎁",
+  wallet: "Välj din gratis plånbok 🎁",
   "complete-3for2": "Välj ett smycke till och få ett gratis",
   "bags-wallets": "Utvalt för dig",
   "match-bag": "Matcha din väska med dessa favoriter",
@@ -25,23 +25,22 @@ const HEADINGS: Record<RecommendationMode, string> = {
 };
 
 /** Priority order from the cart's own authoritative promotion status (lib/discounts.ts
- * promoProgress): an unclaimed free gift (jewelry, earned with a bag) first; with both bags and jewelry in the cart, the
+ * promoProgress): an unclaimed free wallet first; with both bags and jewelry in the cart, the
  * visitor's own browsing or mixed bestsellers; then, with 1-2 jewelry pieces, more jewelry to
  * reach 3 för 2; once 3 för 2 is earned, bags and wallets instead of more jewelry; jewelry to go
  * with a bag; then the visitor's own browsing; then the store's curated picks. */
 function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMode {
-  const { jewelry, gift } = findPromos(totals);
-  const giftInfo = giftStatus(gift);
-  if (giftInfo?.needsChoice) return "gift";
-  // 1-2 paid jewelry pieces (the free gift piece never counts towards 3 för 2): more jewelry.
+  const { jewelry, wallet } = findPromos(totals);
+  const walletInfo = walletStatus(wallet);
+  if (walletInfo?.needsChoice) return "wallet";
+  // Bag(s) AND jewelry in the cart (free wallet already chosen): what they've been looking at,
+  // or -- without any history -- bestsellers mixed from every category.
+  if (walletInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
   if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < jewelry.buyQuantity + jewelry.getQuantity) {
     return "complete-3for2";
   }
-  // Bag(s) AND paid jewelry in the cart (free gift already chosen): what they've been looking at,
-  // or -- without any history -- bestsellers mixed from every category.
-  if (giftInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
   if (jewelry && jewelry.freeUnits > 0) return "bags-wallets";
-  if (giftInfo) return "match-bag";
+  if (walletInfo) return "match-bag";
   if (viewedCount >= 2) return "viewed";
   return "curated";
 }
@@ -161,7 +160,7 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
   if (items.length === 0 || !shown || shown.products.length === 0) return null;
   const shownMode = shown.mode;
   const products = shown.products;
-  const isGift = shownMode === "gift";
+  const isWallet = shownMode === "wallet";
   // "3 för 2" heading follows how many pieces are still missing (1 or 2).
   const jewelryPromo = findPromos(totals).jewelry;
   const jewelryMissing = jewelryPromo ? jewelryPromo.buyQuantity + jewelryPromo.getQuantity - jewelryPromo.buyUnits : 1;
@@ -174,8 +173,8 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
     const v = product.variants.find((x) => x.id === variantId);
     if (!v) return;
     const label = [v.option1, v.option2, v.option3].filter(Boolean).join(" / ");
-    // The same addItem every other add-to-cart uses -- for a free gift that IS the store's
-    // existing "valfritt smycke" mechanism: the live automatic discount makes it free, both in
+    // The same addItem every other add-to-cart uses -- for a free wallet that IS the store's
+    // existing "valfri plånbok" mechanism: the live automatic discount makes it free, both in
     // /api/cart/totals and in Shopify's checkout.
     addItem({
       productId: product.id,
@@ -226,7 +225,7 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="truncate text-xs">{p.title}</div>
                 <div className="mt-0.5 flex items-baseline gap-1.5 text-xs">
-                  {isGift ? (
+                  {isWallet ? (
                     <>
                       <span className="font-semibold">Gratis</span>
                       <span className="text-muted line-through">{formatSek(p.price)}</span>
@@ -243,16 +242,16 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
                     </>
                   )}
                 </div>
-                {isGift && <div className="text-[10px] text-muted">Ingår utan extra kostnad</div>}
+                {isWallet && <div className="text-[10px] text-muted">Ingår utan extra kostnad</div>}
                 <button
                   type="button"
                   aria-expanded={singleVariantId ? undefined : pickerFor === p.id}
                   onClick={() => (singleVariantId ? add(p, singleVariantId) : setPickerFor((id) => (id === p.id ? null : p.id)))}
                   className={`btn-fx mt-auto flex h-8 w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                    isGift ? "bg-fg text-bg" : "border border-fg"
+                    isWallet ? "bg-fg text-bg" : "border border-fg"
                   }`}
                 >
-                  {added ? "Tillagd ✓" : isGift ? "Välj gratis" : "Lägg till +"}
+                  {added ? "Tillagd ✓" : isWallet ? "Välj gratis" : "Lägg till +"}
                 </button>
               </div>
               {pickerFor === p.id && (
