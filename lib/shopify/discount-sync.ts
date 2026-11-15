@@ -1,5 +1,6 @@
 import { shopifyGraphQL } from "./client";
 import { activeStore, ID_COLUMNS } from "./stores";
+import { giftLineVariantGid, isGiftOffer } from "./gift-line";
 
 // Discounts are pushed to the ACTIVE store (lib/shopify/stores.ts). Each store's discount id lives
 // in its own column (legacy: shopify_discount_id, new: new_shopify_discount_id); DiscountRow's
@@ -420,6 +421,12 @@ export async function syncDiscountToShopify(discountId: string): Promise<Discoun
   const row = { ...d, shopify_discount_id: (d as Record<string, unknown>)[discountIdColumn()] ?? null } as DiscountRow;
 
   const isLive = row.status === "active" || row.status === "scheduled";
+  // The bag gift offer reaches checkout as a 0 kr gift line instead (lib/shopify/gift-line.ts), so
+  // its native Shopify discount stays switched off -- live, it would make a second piece free.
+  if (isLive && isGiftOffer(row) && giftLineVariantGid()) {
+    if (!row.shopify_discount_id) return { ok: true, action: "skipped", shopifyDiscountId: null, warnings: [] };
+    return deactivate(row);
+  }
   if (!isLive) {
     if (!row.shopify_discount_id) return { ok: true, action: "skipped", shopifyDiscountId: null, warnings: [] };
     return deactivate(row);
