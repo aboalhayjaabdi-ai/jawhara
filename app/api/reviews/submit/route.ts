@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { verifyReviewToken } from "@/lib/reviews/token";
 import { findPurchaseForReview } from "@/lib/reviews/verify-purchase";
+import { sendNewReviewNotification } from "@/lib/email/new-review-notification";
+import { revalidatePath } from "next/cache";
 
 const RATE_LIMIT_WINDOW_MINUTES = 60;
 const RATE_LIMIT_MAX_ATTEMPTS = 5;
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Betyg måste vara mellan 1 och 5 stjärnor." }, { status: 400 });
   }
 
-  const { data: product } = await supabaseService.from("products").select("id").eq("id", productId).maybeSingle();
+  const { data: product } = await supabaseService.from("products").select("id, title, handle").eq("id", productId).maybeSingle();
   if (!product) return NextResponse.json({ error: "Produkten hittades inte." }, { status: 404 });
 
   // A signed token proves a genuine purchase of this exact product on this exact order --
@@ -123,24 +125,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error } = await supabaseService.from("reviews").insert({
+  // Published immediately (the shop removes unwanted ones in admin, and is emailed about each one).
+  const { data: inserted, error } = await supabaseService.from("reviews").insert({
     product_id: productId,
     order_id: orderId,
     rating,
     author_name: authorName,
     body: body || null,
     verified_buyer: verifiedBuyer,
-    status: "pending",
+    status: "approved",
     source: "storefront",
     customer_email: customerEmail,
     photo_urls: photoUrls,
-  });
+  }).select("id").single();
   if (error) {
     if (error.code === "23505") {
       return NextResponse.json({ error: "Du har redan recenserat denna produkt för den här ordern." }, { status: 409 });
     }
     return NextResponse.json({ error: "Kunde inte spara recensionen." }, { status: 500 });
   }
+
+  // Shows on the product page right away instead of after the page's next 60 s refresh.
+  revalidatePath(`/products/${product.handle}`);
+
+  const { data: order } = orderId ? await supabaseService.from("orders").select("order_number").eq("id", orderId).maybeSingle() : { data: null };
+  await sendNewReviewNotification({
+    reviewId: inserted.id,
+    productTitle: product.title,
+    productHandle: product.handle,
+    rating,
+    authorName,
+    body: body || null,
+    verified: verifiedBuyer,
+    orderNumber: order?.order_number ?? null,
+    customerEmail,
+    photoUrls,
+  });
 
   return NextResponse.json({ ok: true });
 }

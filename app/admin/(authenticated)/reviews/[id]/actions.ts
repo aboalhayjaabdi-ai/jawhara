@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { reviewProductHandles, revalidateProductPages } from "@/lib/reviews/revalidate";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 
@@ -41,6 +42,7 @@ export async function updateReview(reviewId: string, input: ReviewFormInput): Pr
   await logAdminAction(admin.adminId, "reviews.update", "review", reviewId, { status: input.status, rating: input.rating });
   revalidatePath("/admin/reviews");
   revalidatePath(`/admin/reviews/${reviewId}`);
+  revalidateProductPages(await reviewProductHandles([reviewId]));
   return { ok: true };
 }
 
@@ -61,6 +63,7 @@ export async function setMerchantReply(reviewId: string, replyBody: string | nul
   await logAdminAction(admin.adminId, trimmed ? "reviews.reply" : "reviews.reply_removed", "review", reviewId, {});
   revalidatePath("/admin/reviews");
   revalidatePath(`/admin/reviews/${reviewId}`);
+  revalidateProductPages(await reviewProductHandles([reviewId]));
   return { ok: true };
 }
 
@@ -69,10 +72,12 @@ export async function deleteReview(reviewId: string, confirmed: boolean): Promis
   if (!confirmed) return { ok: false, error: "Bekräfta för att radera permanent." };
 
   const { data: review } = await supabaseService.from("reviews").select("author_name").eq("id", reviewId).maybeSingle();
+  const handles = await reviewProductHandles([reviewId]);
   const { error } = await supabaseService.from("reviews").delete().eq("id", reviewId);
   if (error) return { ok: false, error: error.message };
 
   await logAdminAction(admin.adminId, "reviews.delete", "review", reviewId, { authorName: review?.author_name });
   revalidatePath("/admin/reviews");
+  revalidateProductPages(handles);
   return { ok: true };
 }

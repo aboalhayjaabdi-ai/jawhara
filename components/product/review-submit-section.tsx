@@ -1,10 +1,11 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 
 export function ReviewSubmitSection({ productId }: { productId: string }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const token = searchParams.get("review_token");
   const [open, setOpen] = useState(Boolean(token));
   const [rating, setRating] = useState(0);
@@ -40,6 +41,8 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
         setResult("ok");
         formRef.current?.reset();
         setRating(0);
+        router.refresh(); // the review is published right away -- show it in the list below
+
       }
     } catch {
       setErrorMessage("Något gick fel. Kontrollera din internetanslutning och försök igen.");
@@ -62,7 +65,7 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
       ) : result === "ok" ? (
         <div className="max-w-[480px] border border-line p-6 text-sm leading-6">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">Tack!</div>
-          <p className="mt-2">Din recension har skickats in och granskas innan den publiceras.</p>
+          <p className="mt-2">Din recension är publicerad. Tack för att du tog dig tid!</p>
         </div>
       ) : (
         <form ref={formRef} onSubmit={handleSubmit} className="max-w-[480px]">
