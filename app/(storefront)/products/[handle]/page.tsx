@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
+import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo } from "@/lib/queries";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
 import { ComplementaryProducts } from "@/components/product/complementary-products";
 import { BLACK_MONTH } from "@/lib/campaign";
-import { getDeliveryTimeNote } from "@/lib/delivery-time";
 
 export const revalidate = 60;
 
@@ -44,11 +43,10 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
-  const [content, giftPromoEligible, threeForTwoEligible, collectionHandles] = await Promise.all([
+  const [content, giftPromoEligible, threeForTwoEligible] = await Promise.all([
     getProductTemplateContent(product.template_suffix),
     isEligibleForGiftPromo(product.id, product.shopify_id ?? null),
     isEligibleForThreeForTwo(product.id),
-    getProductCollectionHandles(product.id),
   ]);
 
   // Black Month additions (lib/campaign.ts). The 3 för 2 box only appears on products that are
@@ -56,8 +54,6 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const isBag = (BLACK_MONTH.bagTemplateKeys as readonly string[]).includes(product.template_suffix ?? "");
   const promoBox = BLACK_MONTH.active && threeForTwoEligible ? { heading: BLACK_MONTH.threeForTwo.pdpHeading, body: BLACK_MONTH.threeForTwo.pdpBody } : null;
   const salePriceNote = BLACK_MONTH.active && isBag ? BLACK_MONTH.bagPriceNote : null;
-  // Bag delivery-time box (lib/delivery-time.ts): "H väskor" (incl. Noélle Mini) -> regular, other bags -> 3–4 weeks.
-  const deliveryTimeNote = getDeliveryTimeNote(collectionHandles);
 
   return (
     <ProductDetail
@@ -80,7 +76,6 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       threeForTwoEligible={threeForTwoEligible}
       promoBox={promoBox}
       salePriceNote={salePriceNote}
-      deliveryTimeNote={deliveryTimeNote}
     />
   );
 }
