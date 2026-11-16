@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function ReviewSubmitSection({ productId }: { productId: string }) {
   const searchParams = useSearchParams();
@@ -14,6 +14,15 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
   const [result, setResult] = useState<"ok" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  // Arriving from the review email's link: go straight to the (already open) form. The browser's
+  // own #skriv-recension jump happens before this client section exists, so it can't do it.
+  useEffect(() => {
+    if (!token) return;
+    const t = window.setTimeout(() => sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    return () => window.clearTimeout(t);
+  }, [token]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -53,7 +62,7 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
   }
 
   return (
-    <div id="skriv-recension" className="mt-10 border-t border-line pt-8">
+    <div id="skriv-recension" ref={sectionRef} className="mt-10 scroll-mt-24 border-t border-line pt-8">
       {!open ? (
         <button
           type="button"
@@ -94,9 +103,9 @@ export function ReviewSubmitSection({ productId }: { productId: string }) {
             name="authorName"
             type="text"
             maxLength={100}
-            required={!token}
+            required
             autoComplete="name"
-            placeholder={token ? "Ditt namn (valfritt)" : "Ditt namn"}
+            placeholder="Ditt namn"
             className="mt-4 h-11 w-full border border-line px-3 text-sm placeholder:text-muted"
           />
           {!token && (

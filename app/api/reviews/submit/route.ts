@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Kontrollera e-postadressen." }, { status: 400 });
   }
   const token = form.get("token") ? String(form.get("token")) : null;
-  if (!token && !authorName) return NextResponse.json({ error: "Skriv ditt namn." }, { status: 400 });
+  if (!authorName) return NextResponse.json({ error: "Skriv ditt namn." }, { status: 400 });
 
   if (!productId) return NextResponse.json({ error: "Produkt saknas." }, { status: 400 });
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {

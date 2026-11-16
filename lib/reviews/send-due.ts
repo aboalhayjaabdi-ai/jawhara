@@ -9,7 +9,7 @@ if (typeof window !== "undefined") {
 }
 
 const MAX_ATTEMPTS = 5;
-const BATCH_SIZE = 25;
+const BATCH_SIZE = 100;
 const ELIGIBLE_FINANCIAL_STATUSES = ["paid", "partially_refunded"];
 
 export type ReviewRequestRun = { enabled: boolean; due: number; sent: number; skipped: number; failed: number; orders: string[] };

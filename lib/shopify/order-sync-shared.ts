@@ -1,5 +1,6 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
+import { scheduleReviewRequest } from "@/lib/reviews/schedule";
 import { getOrderItemImages } from "@/lib/order-images";
 import { shopifyGraphQL } from "./client";
 import { activeStore, ID_COLUMNS, type StoreKey } from "./stores";
@@ -341,6 +342,17 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
     newFulfillmentIds = (upserted ?? []).filter((f) => !alreadyKnown.has(f.shopify_id)).map((f) => f.id);
 
     const withTracking = (upserted ?? []).filter((f) => f.tracking_number);
+
+    // A shipment with tracking that was created in Shopify itself (not via Jawhara's admin, which
+    // schedules this when it sends the shipping email) still gets the review-request email 14 days
+    // later. Only recent shipments, so a re-sync of an old order never schedules one; a no-op when
+    // the order already has one (lib/reviews/schedule.ts).
+    const RECENT_MS = 30 * 24 * 60 * 60 * 1000;
+    const recentShipped = fulfillmentRows.some(
+      (f) => f.tracking_number && (f.status ?? "").toUpperCase() === "SUCCESS" && Date.now() - new Date(f.created_at).getTime() < RECENT_MS
+    );
+    if (recentShipped) await scheduleReviewRequest(orderId);
+
     if (withTracking.length) {
       const { data: alreadyCached } = await supabaseService
         .from("tracking_cache")
