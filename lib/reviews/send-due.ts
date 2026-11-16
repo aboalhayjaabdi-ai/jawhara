@@ -2,6 +2,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { sendReviewRequestEmail } from "@/lib/email/review-request";
 import { buildReviewLinkUrl } from "@/lib/reviews/token";
 import { getOrderItemImages } from "@/lib/order-images";
+import { normalizeVariantTitle } from "@/lib/variant-title";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/reviews/send-due.ts must never be imported into client code");
@@ -93,7 +94,8 @@ export async function sendDueReviewRequests(options: { now?: Date; testRecipient
         if (!i.product_id || byProduct.has(i.product_id) || !product?.handle || product.status !== "active") continue;
         byProduct.set(i.product_id, {
           title: i.title,
-          variantTitle: (i as any).product_variants?.title ?? null,
+          // Shopify's "Default Title" (single-variant products) is never shown to customers.
+          variantTitle: normalizeVariantTitle((i as any).product_variants?.title ?? null),
           handle: product.handle,
           variantId: i.variant_id,
           productId: i.product_id,
