@@ -1,5 +1,6 @@
 import { shopifyGraphQL } from "./client";
 import { activeStore, ID_COLUMNS } from "./stores";
+import { giftLineVariantGid, isGiftOffer } from "./gift-line";
 
 // Discounts are pushed to the ACTIVE store (lib/shopify/stores.ts). Each store's discount id lives
 // in its own column (legacy: shopify_discount_id, new: new_shopify_discount_id); DiscountRow's
@@ -141,12 +142,16 @@ async function resolveItems(itemType: "all" | "product" | "collection" | null, l
 // (productsToAdd/productsToRemove, add/remove) against whatever is already on the live discount
 // -- they are never a replacement list. Passing only "add" fields (as a bare target-list would)
 // silently leaves every item that fell out of this sync's target list still active on Shopify,
-// which is exactly how a removed buy/get item (e.g. "Valfri Plånbok" dropping gift sets from the
+// which is exactly how a removed buy/get item (e.g. the bag gift offer dropping gift sets from the
 // buy side) could keep discounting for real at checkout despite Supabase and Shopify's `title`
 // visibly agreeing with the edit. `current` carries the live GIDs this discount already has on
 // Shopify (fetched by fetchCurrentBxgyItems below) so both directions of the diff are always sent.
 function itemsToDiscountItemsInput(items: ItemsInput, current?: { productIds: string[]; collectionIds: string[] }): Record<string, unknown> {
   if ("all" in items) return { all: true };
+  // Shopify refuses products and collections on the same side ("Cannot entitle collections in
+  // combination with product variants or products"), so switching a side from one kind to the
+  // other (e.g. "Valfritt Smycke": wallets -> jewelry collections) must also remove every item of
+  // the old kind in the same call.
   if ("productIds" in items) {
     if (!current) return { products: { productsToAdd: items.productIds } };
     const currentSet = new Set(current.productIds);
@@ -156,6 +161,7 @@ function itemsToDiscountItemsInput(items: ItemsInput, current?: { productIds: st
         productsToAdd: items.productIds.filter((id) => !currentSet.has(id)),
         productsToRemove: current.productIds.filter((id) => !targetSet.has(id)),
       },
+      ...(current.collectionIds.length ? { collections: { remove: current.collectionIds } } : {}),
     };
   }
   if (!current) return { collections: { add: items.collectionIds } };
@@ -166,6 +172,7 @@ function itemsToDiscountItemsInput(items: ItemsInput, current?: { productIds: st
       add: items.collectionIds.filter((id) => !currentSet.has(id)),
       remove: current.collectionIds.filter((id) => !targetSet.has(id)),
     },
+    ...(current.productIds.length ? { products: { productsToRemove: current.productIds } } : {}),
   };
 }
 
@@ -414,6 +421,12 @@ export async function syncDiscountToShopify(discountId: string): Promise<Discoun
   const row = { ...d, shopify_discount_id: (d as Record<string, unknown>)[discountIdColumn()] ?? null } as DiscountRow;
 
   const isLive = row.status === "active" || row.status === "scheduled";
+  // The bag gift offer reaches checkout as a 0 kr gift line instead (lib/shopify/gift-line.ts), so
+  // its native Shopify discount stays switched off -- live, it would make a second piece free.
+  if (isLive && isGiftOffer(row) && giftLineVariantGid()) {
+    if (!row.shopify_discount_id) return { ok: true, action: "skipped", shopifyDiscountId: null, warnings: [] };
+    return deactivate(row);
+  }
   if (!isLive) {
     if (!row.shopify_discount_id) return { ok: true, action: "skipped", shopifyDiscountId: null, warnings: [] };
     return deactivate(row);

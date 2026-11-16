@@ -11,8 +11,6 @@ import type { GiftBoxOffer } from "@/lib/gift-box";
 import { CartOffers } from "./cart-offers";
 import { CartAddedPopup } from "./cart-added-popup";
 import { CartRecommendations } from "./cart-recommendations";
-import { CartLineDeliveryNote } from "./cart-delivery-note";
-import { useCartDeliveryGroups } from "./use-cart-delivery-groups";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -28,9 +26,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
     if (isOpen) warmCheckout();
   }, [isOpen, warmCheckout]);
   const { totals, loading, fetchError } = useCartTotals();
-  // Longer-delivery bags (lib/delivery-time.ts) get a delivery-time note under their name.
-  const cartProductIds = items.map((i) => i.productId);
-  const deliveryGroup = useCartDeliveryGroups(cartProductIds);
 
   // "✓ Tillagd i varukorgen!" is a short-lived confirmation: shown for each new add, then it
   // fades out (the item itself stays visible in the list below).
@@ -247,9 +242,6 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                       {line.title}
                     </Link>
                     {variantTitle && <div className="text-xs uppercase tracking-wide text-muted">{variantTitle}</div>}
-                    {deliveryGroup(items.find((i) => i.variantId === line.variantId)?.productId ?? "") === "long" && (
-                      <CartLineDeliveryNote />
-                    )}
                     {line.isFree && (
                       <div className="mt-1 block w-fit bg-fg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bg">
                         Gratis{line.freeLabel ? ` (${line.freeLabel})` : ""}
@@ -357,7 +349,8 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                 ) : (
                   // Until the authoritative totals arrive (a fraction of a second), show the cart's
                   // own subtotal right away instead of "Beräknar..." -- discounts, if any, are
-                  // applied as soon as the real totals land. Checkout stays disabled meanwhile.
+                  // applied as soon as the real totals land. "Till kassan" can already be clicked:
+                  // it checks the exact cart's price itself before leaving for checkout.
                   <>
                     <div className="flex items-center justify-between text-sm text-muted">
                       <span>Delsumma</span>
@@ -377,7 +370,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
           {checkoutError && <p className="mb-2 text-xs text-red-700">{checkoutError}</p>}
 
           <button
-            disabled={items.length === 0 || !CHECKOUT_ENABLED || loading || blockingErrors.length > 0 || isCheckingOut}
+            // Not held back while totals are still loading: goToCheckout fetches/validates the
+            // exact cart's totals itself (and Shopify's price parity) before navigating anywhere.
+            disabled={items.length === 0 || !CHECKOUT_ENABLED || blockingErrors.length > 0 || isCheckingOut}
             onClick={handleCheckout}
             onPointerEnter={warmCheckout}
             onPointerDown={warmCheckout}

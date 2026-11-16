@@ -9,6 +9,7 @@ import {
   getFilteredAllProducts,
   getFilteredCollectionProducts,
   hasActiveFilter,
+  isGiftOfferActive,
   type CollectionSort,
 } from "@/lib/queries";
 import { getCollectionTileGroup, type CollectionTile } from "@/lib/collection-tiles";
@@ -28,13 +29,14 @@ const SORT_ANCHOR_ID = "sortering";
 // Small campaign line shown directly under the collection title, keyed by the collection's
 // template group -- so a main collection and every sub-collection in its group all get it.
 // Handles in `exclude` share a group's template but aren't part of that offer (gift sets aren't
-// in the "Valfri Plånbok" discount). `icon: false` renders the same box without the gift icon.
-type CollectionPromo = { text: string; emphasis: string; icon: boolean; exclude?: string[] };
-const WALLET_PROMO: CollectionPromo = { text: "Köp en väska få en valfri plånbok", emphasis: "på köpet!", icon: true, exclude: ["gift-sets"] };
+// in the "Valfritt Smycke" discount). `icon: false` renders the same box without the gift icon.
+// `whenGiftOfferActive`: only shown while the bag gift offer is active (lib/queries.ts
+// isGiftOfferActive), so pausing that discount in admin removes the line everywhere at once.
+type CollectionPromo = { text: string; emphasis: string; icon: boolean; exclude?: string[]; whenGiftOfferActive?: boolean };
+const GIFT_PROMO: CollectionPromo = { text: "Köp en väska få ett valfritt smycke", emphasis: "på köpet!", icon: true, exclude: ["gift-sets"], whenGiftOfferActive: true };
 const JEWELRY_PROMO: CollectionPromo = { text: "3 för 2", emphasis: "på alla smycken!", icon: false };
 const COLLECTION_PROMOS: Record<string, CollectionPromo> = {
-  vaskor: WALLET_PROMO,
-  tillbehor: WALLET_PROMO, // Plånböcker
+  vaskor: GIFT_PROMO,
   "alla-smycken": JEWELRY_PROMO,
   armband: JEWELRY_PROMO,
   "klover-armband": JEWELRY_PROMO,
@@ -43,9 +45,10 @@ const COLLECTION_PROMOS: Record<string, CollectionPromo> = {
   orhangen: JEWELRY_PROMO,
 };
 
-function promoFor(templateSuffix: string | null, handle: string) {
+function promoFor(templateSuffix: string | null, handle: string, giftOfferActive: boolean) {
   const promo = templateSuffix ? COLLECTION_PROMOS[templateSuffix] : undefined;
-  return promo && !promo.exclude?.includes(handle) ? promo : undefined;
+  if (!promo || promo.exclude?.includes(handle)) return undefined;
+  return promo.whenGiftOfferActive && !giftOfferActive ? undefined : promo;
 }
 const VALID_SORTS: CollectionSort[] = ["manual", "price-asc", "price-desc", "title-asc", "title-desc", "created-desc", "created-asc"];
 
@@ -101,7 +104,7 @@ export async function CollectionView({ handle, page, sort }: { handle: string; p
   const meta = await getCollectionMeta(handle);
   if (!meta) notFound();
 
-  const [[products, total], tiles] = await Promise.all([
+  const [[products, total], tiles, giftOfferActive] = await Promise.all([
     filtered
       ? getFilteredCollectionProducts(handle, filterOptions, PAGE_SIZE, offset).then((r) => [r.cards, r.total] as const)
       : Promise.all([getCollectionProductCards(handle, PAGE_SIZE, offset), getCollectionProductCount(handle)]),
@@ -109,6 +112,7 @@ export async function CollectionView({ handle, page, sort }: { handle: string; p
     // initial render instead of its own Suspense-streamed component, so the subcollection tiles
     // never visibly pop in after the rest of the page has already painted.
     getCollectionTileGroup(meta.template_suffix, handle),
+    isGiftOfferActive(),
   ]);
 
   return (
@@ -121,7 +125,7 @@ export async function CollectionView({ handle, page, sort }: { handle: string; p
       sort={sort}
       basePath={basePath}
       tiles={tiles}
-      promo={promoFor(meta.template_suffix, handle)}
+      promo={promoFor(meta.template_suffix, handle, giftOfferActive)}
       currentHandle={handle}
     />
   );

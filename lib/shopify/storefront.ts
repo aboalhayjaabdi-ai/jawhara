@@ -71,6 +71,8 @@ export type StorefrontCartLine = {
   id: string;
   quantity: number;
   merchandiseId: string;
+  // Line-level attributes (e.g. the gift line's chosen piece, lib/shopify/gift-line.ts).
+  attributes: { key: string; value: string }[];
 };
 
 export type StorefrontCart = {
@@ -106,6 +108,7 @@ const CART_FIELDS = `
       node {
         id
         quantity
+        attributes { key value }
         merchandise {
           ... on ProductVariant {
             id
@@ -129,11 +132,12 @@ function toCart(raw: any): StorefrontCart | null {
       id: e.node.id,
       quantity: e.node.quantity,
       merchandiseId: e.node.merchandise?.id,
+      attributes: (e.node.attributes ?? []).map((a: any) => ({ key: a.key, value: a.value ?? "" })),
     })),
   };
 }
 
-export type CartLineInput = { merchandiseId: string; quantity: number };
+export type CartLineInput = { merchandiseId: string; quantity: number; attributes?: { key: string; value: string }[] };
 
 /** `extras` lets the cart be created with its discount code and attributes in the SAME call
  * (lib/shopify/cart-sync.ts's one-call path) instead of separate follow-up mutations. */

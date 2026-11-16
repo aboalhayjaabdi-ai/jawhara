@@ -173,6 +173,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // as the customer shops) can reuse it instead of paying for another round trip to Shopify's API.
   const lastShopifySyncRef = useRef<{ fingerprint: string; data: ShopifySyncResponse } | null>(null);
 
+  // Server functions that sat idle start cold (often 1-3 s on a phone connection). Wake the cart's
+  // two price endpoints with an empty, side-effect-free request soon after a page loads -- at most
+  // every few minutes per tab -- so the first real add-to-cart/price check doesn't pay that wait.
+  useEffect(() => {
+    const WARM_KEY = "jawhara_cart_api_warmed_at";
+    const WARM_EVERY_MS = 4 * 60_000;
+    try {
+      const last = Number(sessionStorage.getItem(WARM_KEY) ?? 0);
+      if (Date.now() - last < WARM_EVERY_MS) return;
+      sessionStorage.setItem(WARM_KEY, String(Date.now()));
+    } catch {
+      // storage unavailable -- warm anyway, it's only two tiny requests
+    }
+    const timer = window.setTimeout(() => {
+      const empty = { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true } as const;
+      fetch("/api/cart/totals", { ...empty, body: JSON.stringify({ cart: [] }) }).catch(() => {});
+      fetch("/api/shopify-cart/sync", { ...empty, body: JSON.stringify({ lines: [] }) }).catch(() => {});
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Browsers drop an unused preconnected socket after ~10s, so this re-warms at most every 8s
   // instead of once: the TLS handshake to the checkout domain then happens while the customer is
   // still looking at the cart, not after they click "Till kassan".
@@ -563,6 +584,10 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
       setFetchError(null);
       setLoading(false);
     } else {
+      // A different cart than the last totals were for: never keep showing those (e.g. the
+      // previous cart's discount next to a swapped item) -- the drawer shows the plain subtotal
+      // until this cart's real totals land.
+      setTotals(null);
       setLoading(true);
     }
     const timeout = setTimeout(async () => {

@@ -13,6 +13,7 @@
  *   - Every gift set ("Gift sets", handle gift-sets) also shows "Leveranstid: 3–4 veckor".
  *   - Everything else (jewelry, wallets/"Plånböcker", ...) gets no box.
  * Only ever one box per product -- getDeliveryTimeNote returns a single string or null.
+ * Product pages only: the cart shows no delivery time.
  */
 
 /** "Väskor" plus its sub-categories on the website, so a bag only placed in a sub-category still
@@ -41,13 +42,4 @@ export function getDeliveryTimeNote(collectionHandles: readonly string[]): strin
   if (collectionHandles.some((h) => REGULAR_DELIVERY_COLLECTION_HANDLES.has(h))) return null;
   if (collectionHandles.some((h) => BAG_COLLECTION_HANDLES.has(h))) return DELIVERY_TIME_LONG;
   return null;
-}
-
-/** Cart delivery group: "long" for products with the longer delivery time (same rule as
- * getDeliveryTimeNote above -- they get the delivery-time note under their name in the cart),
- * "regular" for everything else. */
-export type CartDeliveryGroup = "long" | "regular";
-
-export function getCartDeliveryGroup(collectionHandles: readonly string[]): CartDeliveryGroup {
-  return getDeliveryTimeNote(collectionHandles) === DELIVERY_TIME_LONG ? "long" : "regular";
 }
