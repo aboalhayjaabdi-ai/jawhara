@@ -35,6 +35,11 @@ function buildCustomLabel0(handles: string[]): string {
   return kept.join(",");
 }
 
+/** "1699 kr": whole kronor, no decimals, no thousands separator. */
+function formatKr(amount: number): string {
+  return `${Math.round(amount)} kr`;
+}
+
 /**
  * Public, Google Shopping / Meta Catalog-compatible product feed -- RSS 2.0 with the standard
  * <g:*> namespace both platforms accept. Generated entirely from real, active Supabase product
@@ -47,9 +52,14 @@ export async function GET() {
     .map((p) => {
       const link = `${SITE_URL}/products/${p.handle}`;
       const availability = p.available ? "in stock" : "out of stock";
-      const salePriceXml =
-        p.compareAtPrice != null && p.compareAtPrice > p.price ? `<g:sale_price>${p.price.toFixed(2)} ${p.currency}</g:sale_price>` : "";
-      const regularPrice = p.compareAtPrice != null && p.compareAtPrice > p.price ? p.compareAtPrice : p.price;
+      const onSale = p.compareAtPrice != null && p.compareAtPrice > p.price;
+      const salePriceXml = onSale ? `<g:sale_price>${p.price.toFixed(2)} ${p.currency}</g:sale_price>` : "";
+      const regularPrice = onSale ? p.compareAtPrice! : p.price;
+      // Ready-made price texts for the catalog ad template ("329 kr" instead of Meta's own
+      // "SEK329" formatting of price/sale_price): custom_label_1 = what the customer pays,
+      // custom_label_2 = the ordinary price, only when on sale (the struck-through layer).
+      const customLabel1 = formatKr(p.price);
+      const customLabel2 = onSale ? formatKr(p.compareAtPrice!) : "";
       const description = stripHtml(p.descriptionHtml).slice(0, 5000);
       // Commerce Manager product-set rules match this with "Custom label 0" -> "Contains" ->
       // "<handle>", which selects a product that's in multiple collections for every matching set
@@ -70,6 +80,8 @@ export async function GET() {
       <g:brand>Jawhara</g:brand>
       <g:identifier_exists>false</g:identifier_exists>
       ${customLabel0 ? `<g:custom_label_0>${escapeXml(customLabel0)}</g:custom_label_0>` : ""}
+      <g:custom_label_1>${customLabel1}</g:custom_label_1>
+      ${customLabel2 ? `<g:custom_label_2>${customLabel2}</g:custom_label_2>` : ""}
     </item>`;
     })
     .join("");
