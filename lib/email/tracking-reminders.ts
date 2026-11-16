@@ -64,7 +64,12 @@ export type TrackingReminderRun = { due: number; sent: number; skipped: number; 
  * sent and the mark is removed if the send fails, so it is reminded exactly once. Skips cancelled
  * and test orders, and parcels already delivered.
  */
-export async function sendDueTrackingReminders(now: Date = new Date()): Promise<TrackingReminderRun> {
+export async function sendDueTrackingReminders(
+  now: Date = new Date(),
+  // Testing only (app/api/email-health): `testRecipient` sends every due email there instead of
+  // to the customer, with a [TEST] subject, and records nothing -- the real run is unaffected.
+  options: { testRecipient?: string } = {}
+): Promise<TrackingReminderRun & { orders: string[] }> {
   const dueBefore = new Date(now.getTime() - REMINDER_AFTER_DAYS * DAY_MS).toISOString();
   const notOlderThan = new Date(now.getTime() - (REMINDER_AFTER_DAYS + REMINDER_WINDOW_DAYS) * DAY_MS).toISOString();
 
@@ -75,7 +80,9 @@ export async function sendDueTrackingReminders(now: Date = new Date()): Promise<
     )
     .not("tracking_number", "is", null)
     .not("notification_sent_at", "is", null)
-    .neq("status", "cancelled")
+    // Only shipments that actually went out (Shopify/admin status SUCCESS) -- never CANCELLED,
+    // ERROR or FAILURE ones.
+    .eq("status", "SUCCESS")
     // Counted from when the shipping email (with its tracking number) went out, which is also
     // when tracking was added for a shipment that got its number after it was created.
     .lte("notification_sent_at", dueBefore)
@@ -94,7 +101,8 @@ export async function sendDueTrackingReminders(now: Date = new Date()): Promise<
     for (const l of logged ?? []) if (l.entity_id) alreadySent.add(l.entity_id);
   }
   const rows = candidates.filter((c) => !alreadySent.has(c.id));
-  const run: TrackingReminderRun = { due: rows.length, sent: 0, skipped: 0, failed: 0 };
+  const run: TrackingReminderRun & { orders: string[] } = { due: rows.length, sent: 0, skipped: 0, failed: 0, orders: [] };
+  const test = options.testRecipient;
 
   const byOrder = new Map<string, DueRow[]>();
   for (const row of rows) {
@@ -113,7 +121,9 @@ export async function sendDueTrackingReminders(now: Date = new Date()): Promise<
   for (const [orderId, shipments] of byOrder) {
     // Recorded before sending, so a run that overlaps this one (or crashes mid-way) never sends the
     // same reminder twice; removed again if Resend rejects the email, so the next run retries it.
-    const { data: marks, error: markError } = await supabaseService
+    const { data: marks, error: markError } = test
+      ? { data: [] as { id: string }[], error: null }
+      : await supabaseService
       .from("audit_log")
       .insert(
         shipments.map((s) => ({
@@ -136,12 +146,13 @@ export async function sendDueTrackingReminders(now: Date = new Date()): Promise<
       shipments: shipments.map((s) => ({ trackingNumber: s.tracking_number, carrier: s.tracking_company })),
       trackingPageUrl: buildTrackingLinkUrl(orderId, siteUrl),
     });
-    const sent = await sendEmail({ to: order.email!, subject, html });
+    const sent = await sendEmail(test ? { to: test, subject: `[TEST] ${subject}`, html } : { to: order.email!, subject, html });
+    run.orders.push(order.order_number);
     if (sent.ok) {
       run.sent += 1;
     } else {
       run.failed += 1;
-      await supabaseService.from("audit_log").delete().in("id", (marks ?? []).map((m) => m.id));
+      if (!test) await supabaseService.from("audit_log").delete().in("id", (marks ?? []).map((m) => m.id));
     }
   }
   return run;

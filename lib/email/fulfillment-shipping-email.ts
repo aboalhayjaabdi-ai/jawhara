@@ -16,7 +16,12 @@ if (typeof window !== "undefined") {
  * Never throws: a failed send is logged by sendEmail (integration_errors) and the shipment itself
  * stands. Returns whether the email went out.
  */
-export async function sendShippingEmailForFulfillment(fulfillmentId: string): Promise<boolean> {
+export async function sendShippingEmailForFulfillment(
+  fulfillmentId: string,
+  // Testing only (app/api/email-health): sends this real shipment's email to `testRecipient` with a
+  // [TEST] subject instead of to the customer, and does not stamp notification_sent_at.
+  options: { testRecipient?: string } = {}
+): Promise<boolean> {
   try {
     const { data: f } = await supabaseService
       .from("fulfillments")
@@ -56,7 +61,8 @@ export async function sendShippingEmailForFulfillment(fulfillmentId: string): Pr
     );
 
     const sent = await sendShippingConfirmationEmail({
-      to: order.email,
+      to: options.testRecipient ?? order.email,
+      subjectPrefix: options.testRecipient ? "[TEST] " : undefined,
       orderId: order.id,
       orderNumber: order.order_number,
       items: lineItems,
@@ -74,6 +80,7 @@ export async function sendShippingEmailForFulfillment(fulfillmentId: string): Pr
       carrier: f.tracking_company || null,
     });
     if (!sent.ok) return false;
+    if (options.testRecipient) return true;
     await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillmentId);
     return true;
   } catch (err) {

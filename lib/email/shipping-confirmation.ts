@@ -15,11 +15,12 @@ export async function sendShippingConfirmationEmail(params: {
   shippingAddress: ShippingAddress;
   trackingNumber?: string | null;
   carrier?: string | null;
+  subjectPrefix?: string;
 }) {
-  const { to, orderId, ...templateParams } = params;
+  const { to, orderId, subjectPrefix, ...templateParams } = params;
   const content = await getLiveEmailTemplate("shipping_confirmation");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
   const trackingPageUrl = buildTrackingLinkUrl(orderId, siteUrl);
   const { subject, html } = shippingConfirmationTemplate(content, { ...templateParams, trackingPageUrl });
-  return sendEmail({ to, subject, html });
+  return sendEmail({ to, subject: `${subjectPrefix ?? ""}${subject}`, html });
 }
