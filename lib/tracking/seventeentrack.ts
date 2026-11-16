@@ -18,6 +18,11 @@ const ALREADY_REGISTERED_CODE = -18019901;
 // numbers. Not a bug when this happens; just means this number stays unregistered until quota
 // frees up (an old shipment ages out, or the plan is upgraded) and gets retried later.
 const QUOTA_EXCEEDED_CODE = -18019908;
+// "Tracking number {0} is not registered, please register first." -- what gettrackinfo answers
+// for a number that 17TRACK's account (i.e. the current API key) has never registered. Happens for
+// every shipment registered under a previous key after SEVENTEENTRACK_API_KEY is replaced, since
+// registrations belong to the 17TRACK account, not to the number.
+const NOT_REGISTERED_CODE = -18019902;
 
 type SeventeenTrackEvent = {
   time_utc: string | null;
@@ -84,21 +89,31 @@ export async function registerTracking(number: string, carrier: number | null): 
   return false;
 }
 
+export type TrackInfoResult =
+  | { kind: "ok"; status: string; events: TrackingEvent[] }
+  // This account (API key) has never registered the number -- register it, then read again later.
+  | { kind: "not_registered" }
+  // Registered but nothing to read yet (17TRACK hasn't polled the carrier), or an API error.
+  | { kind: "no_data" };
+
 /** Reads back 17TRACK's current stored status/events for an already-registered number -- this
  * is a free re-read of data 17TRACK already polled from the carrier, not a new carrier query, so
  * it carries no tracking-quota cost. */
-export async function getTrackInfo(
-  number: string,
-  carrier: number | null
-): Promise<{ status: string; events: TrackingEvent[] } | null> {
+export async function getTrackInfo(number: string, carrier: number | null): Promise<TrackInfoResult> {
   const body: Record<string, unknown> = { number };
   if (carrier != null) body.carrier = carrier;
 
   const res = await post("/gettrackinfo", [body]);
-  if (res.code !== 0) return null;
+  if (res.code !== 0) {
+    console.error(`17TRACK gettrackinfo failed for ${number}: API returned code ${res.code}`);
+    return { kind: "no_data" };
+  }
+
+  const rejected = res.data?.rejected?.find((r) => r.number === number);
+  if (rejected?.error?.code === NOT_REGISTERED_CODE) return { kind: "not_registered" };
 
   const trackInfo = res.data?.accepted?.find((a) => a.number === number)?.track_info;
-  if (!trackInfo) return null;
+  if (!trackInfo) return { kind: "no_data" };
 
   const events: TrackingEvent[] = [];
   for (const provider of trackInfo.tracking?.providers ?? []) {
@@ -117,7 +132,7 @@ export async function getTrackInfo(
   }
   events.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
 
-  return { status: trackInfo.latest_status?.status ?? "Unknown", events };
+  return { kind: "ok", status: trackInfo.latest_status?.status ?? "Unknown", events };
 }
 
 /** Brings one fulfillment's tracking_cache row up to date from the live 17TRACK API. Meant to
@@ -130,24 +145,34 @@ export async function refreshTrackingCache(
   alreadyRegistered: boolean
 ): Promise<void> {
   try {
+    let registeredNow = false;
     if (!alreadyRegistered) {
-      const registered = await registerTracking(trackingNumber, carrierCode);
-      if (!registered) return;
+      if (!(await registerTracking(trackingNumber, carrierCode))) return;
+      registeredNow = true;
     }
 
-    const info = await getTrackInfo(trackingNumber, carrierCode);
-    const now = new Date().toISOString();
+    let info = await getTrackInfo(trackingNumber, carrierCode);
+    if (info.kind === "not_registered" && !registeredNow) {
+      // Marked registered in our cache, but not in the 17TRACK account behind the current API key
+      // (the key was replaced). Register it again under this account; the events already cached
+      // stay as they are until 17TRACK has fresh data for it.
+      if (!(await registerTracking(trackingNumber, carrierCode))) return;
+      registeredNow = true;
+      info = await getTrackInfo(trackingNumber, carrierCode);
+    }
 
-    const update: Record<string, unknown> = {
-      fulfillment_id: fulfillmentId,
-      raw_status: info ? { status: info.status } : null,
-      events: info?.events ?? [],
-      last_polled_at: now,
-      updated_at: now,
-    };
-    // Only set on first successful registration -- omitted on later refreshes so the upsert
-    // doesn't clobber the original registration timestamp.
-    if (!alreadyRegistered) update.tracking_api_registered_at = now;
+    const now = new Date().toISOString();
+    const update: Record<string, unknown> = { fulfillment_id: fulfillmentId, last_polled_at: now, updated_at: now };
+    // Only overwrite status/events with real data: an empty answer (17TRACK hasn't polled the
+    // carrier yet, a just-re-registered number, an API hiccup) must never wipe events already
+    // cached. A brand-new row gets events = [] from the column default.
+    if (info.kind === "ok") {
+      update.raw_status = { status: info.status };
+      update.events = info.events;
+    }
+    // Set on (re-)registration only -- omitted on later refreshes so the upsert doesn't clobber
+    // the registration timestamp.
+    if (registeredNow) update.tracking_api_registered_at = now;
 
     await supabaseService.from("tracking_cache").upsert(update, { onConflict: "fulfillment_id" });
   } catch (err) {
