@@ -6,6 +6,7 @@ import {
   refundNotificationTemplate,
   orderCancellationTemplate,
   trackingReminderTemplate,
+  reviewRequestTemplate,
   type EmailTemplateContent,
 } from "@/lib/email/templates";
 import type { EmailTemplateKey } from "@/lib/admin/email-templates";
@@ -45,6 +46,12 @@ function sampleParamsFor(key: EmailTemplateKey) {
   if (key === "order_cancellation") {
     return { orderNumber: SAMPLE_ORDER_NUMBER, items, reason: "På kundens begäran." };
   }
+  if (key === "review_request") {
+    return {
+      orderNumber: SAMPLE_ORDER_NUMBER,
+      items: items.map((i) => ({ title: i.title, variantTitle: i.variantTitle, imageUrl: i.imageUrl, reviewUrl: "https://jawhara.se/products/exempel?review_token=exempel#recensioner" })),
+    };
+  }
   if (key === "tracking_reminder") {
     return { orderNumber: SAMPLE_ORDER_NUMBER, shipments: [{ trackingNumber: "YT2632000713274332", carrier: "YunExpress" }], trackingPageUrl: "https://jawhara.se/sparra-mitt-paket?token=exempel" };
   }
@@ -57,5 +64,6 @@ export function renderSampleEmail(key: EmailTemplateKey, content: EmailTemplateC
   if (key === "shipping_confirmation") return shippingConfirmationTemplate(content, params as any);
   if (key === "order_cancellation") return orderCancellationTemplate(content, params as any);
   if (key === "tracking_reminder") return trackingReminderTemplate(content, params as any);
+  if (key === "review_request") return reviewRequestTemplate(content, params as any);
   return refundNotificationTemplate(content, params as any);
 }

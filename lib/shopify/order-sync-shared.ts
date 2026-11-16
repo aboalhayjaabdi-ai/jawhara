@@ -29,6 +29,19 @@ export type ShopifyOrderNode = {
   tags: string[];
   test: boolean;
   customer: { id: string } | null;
+  shippingAddress?: {
+    firstName: string | null;
+    lastName: string | null;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    provinceCode: string | null;
+    zip: string | null;
+    country: string | null;
+    countryCodeV2: string | null;
+    phone: string | null;
+  } | null;
   subtotalPriceSet: { shopMoney: { amount: string } } | null;
   totalShippingPriceSet: { shopMoney: { amount: string } } | null;
   totalTaxSet: { shopMoney: { amount: string } } | null;
@@ -71,10 +84,43 @@ export type ShopifyOrderNode = {
   }[];
 };
 
+export async function upsertOrderShippingAddress(orderId: string, orderShopifyId: string, a: ShopifyOrderNode["shippingAddress"] | null): Promise<void> {
+  if (!a) return;
+  const { data: address, error } = await supabaseService
+    .from("addresses")
+    .upsert(
+      {
+        shopify_id: `order-ship:${orderShopifyId}`,
+        order_id: orderId,
+        first_name: a.firstName || null,
+        last_name: a.lastName || null,
+        address1: a.address1 || null,
+        address2: a.address2 || null,
+        city: a.city || null,
+        province: a.province || null,
+        province_code: a.provinceCode || null,
+        zip: a.zip || null,
+        country: a.country || null,
+        country_code: a.countryCodeV2 || null,
+        phone: a.phone || null,
+        is_default: false,
+      },
+      { onConflict: "shopify_id" }
+    )
+    .select("id")
+    .single();
+  if (error || !address) {
+    console.error(`Could not save shipping address for order ${orderId}:`, error?.message);
+    return;
+  }
+  await supabaseService.from("orders").update({ shipping_address_id: address.id }).eq("id", orderId);
+}
+
 export const ORDER_FIELDS_FRAGMENT = `
   id name email phone createdAt processedAt cancelledAt cancelReason
   displayFinancialStatus displayFulfillmentStatus currencyCode note tags test
   customer { id }
+  shippingAddress { firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone }
   subtotalPriceSet { shopMoney { amount currencyCode } }
   totalShippingPriceSet { shopMoney { amount currencyCode } }
   totalTaxSet { shopMoney { amount currencyCode } }
@@ -187,6 +233,11 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
     .single();
   if (orderError || !upsertedOrder) throw new Error(orderError?.message ?? "upsert failed");
   const orderId = upsertedOrder.id;
+
+  // The order's shipping address (and the customer's name on it), same row shape as the original
+  // order import (addresses.shopify_id "order-ship:<order id>", linked by order_id). Used by the
+  // shipping email, packing slip, admin order page and review "Verifierat köp" name matching.
+  await upsertOrderShippingAddress(orderId, sid, o.shippingAddress ?? null);
 
   const itemRows = o.lineItems.edges.map((edge) => {
     const li = edge.node;

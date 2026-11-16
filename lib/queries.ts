@@ -491,7 +491,7 @@ export const getProductByHandle = cache(async (handle: string) => {
   const { data: product } = await supabase
     .from("products")
     .select(
-      "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), reviews(rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at)"
+      "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), reviews(rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at, photo_urls)"
     )
     .eq("handle", handle)
     .single();

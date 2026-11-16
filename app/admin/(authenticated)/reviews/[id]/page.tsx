@@ -12,10 +12,12 @@ export default async function AdminReviewDetailPage({ params }: { params: Promis
 
   const { data: review } = await supabase
     .from("reviews")
-    .select("*, products(id, title, handle)")
+    .select("*, products(id, title, handle), orders(id, order_number)")
     .eq("id", id)
     .maybeSingle();
   if (!review) notFound();
+
+  const photoUrls: string[] = Array.isArray(review.photo_urls) ? review.photo_urls : [];
 
   const initial: ReviewFormInitial = {
     rating: review.rating,
@@ -47,7 +49,29 @@ export default async function AdminReviewDetailPage({ params }: { params: Promis
         </a>
       )}
 
+      {(review as any).orders?.id && (
+        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          Kopplad till order{" "}
+          <Link href={`/admin/orders/${(review as any).orders.id}`} className="font-medium underline">
+            {(review as any).orders.order_number}
+          </Link>{" "}
+          – köpet är bekräftat (via mejllänk, e-post eller namn på ordern).
+        </div>
+      )}
+
       <div className="mt-6 space-y-6">
+        {photoUrls.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Bilder från kunden</div>
+            <div className="flex flex-wrap gap-3">
+              {photoUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer">
+                  <img src={url} alt="" className="h-24 w-24 rounded-md border border-gray-200 object-cover" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
         <ReviewForm reviewId={id} initial={initial} />
         <ReviewReplyCard reviewId={id} initialReply={review.merchant_reply_body} />
       </div>

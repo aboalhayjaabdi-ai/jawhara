@@ -5,6 +5,7 @@ import { getLiveEmailTemplate } from "@/lib/admin/email-templates";
 import { trackingReminderTemplate } from "@/lib/email/templates";
 import { TRACKING_REMINDER_DEFAULT_CONTENT, sendDueTrackingReminders } from "@/lib/email/tracking-reminders";
 import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
+import { sendDueReviewRequests } from "@/lib/reviews/send-due";
 
 // Fixed recipient: this endpoint can only ever email the shop's own support inbox, never a customer.
 const HEALTH_RECIPIENT = "support@jawhara.se";
@@ -17,6 +18,8 @@ const HEALTH_RECIPIENT = "support@jawhara.se";
  *                                          the admin sends it (items, images, address, tracking)
  *   { "remindersAt": "<ISO date>" }     -> the reminder job as it would run at that moment, every
  *                                          due email redirected to support
+ *   { "reviewRequestsAt": "<ISO date>" } -> the review-request job as it would run then (ignores
+ *                                          the on/off switch), every due email redirected to support
  * Authenticated with EMAIL_HEALTH_SECRET.
  */
 export async function POST(req: NextRequest) {
@@ -34,6 +37,13 @@ export async function POST(req: NextRequest) {
     const at = new Date(body.remindersAt);
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "Invalid remindersAt" }, { status: 400 });
     const run = await sendDueTrackingReminders(at, { testRecipient: HEALTH_RECIPIENT });
+    return NextResponse.json({ ok: run.failed === 0, to: HEALTH_RECIPIENT, ...run }, { status: run.failed === 0 ? 200 : 502 });
+  }
+
+  if (typeof body?.reviewRequestsAt === "string") {
+    const at = new Date(body.reviewRequestsAt);
+    if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "Invalid reviewRequestsAt" }, { status: 400 });
+    const run = await sendDueReviewRequests({ now: at, testRecipient: HEALTH_RECIPIENT });
     return NextResponse.json({ ok: run.failed === 0, to: HEALTH_RECIPIENT, ...run }, { status: run.failed === 0 ? 200 : 502 });
   }
 

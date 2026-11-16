@@ -4,6 +4,8 @@ import { parseReviewsListFilters, applyReviewsListFilters } from "@/lib/admin/re
 import { getReviewStats } from "@/lib/admin/review-stats";
 import { ReviewsFilterBar } from "@/components/admin/reviews-filter-bar";
 import { ReviewsTable, type ReviewRow } from "@/components/admin/reviews-table";
+import { ReviewRequestEmailsToggle } from "@/components/admin/review-request-emails-toggle";
+import { getReviewRequestEmailsEnabled } from "@/app/admin/(authenticated)/reviews/actions/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,7 @@ export default async function AdminReviewsPage({ searchParams }: { searchParams:
   const { data: reviews, count } = await query.range(offset, offset + PAGE_SIZE - 1);
 
   const stats = await getReviewStats();
+  const requestEmailsEnabled = await getReviewRequestEmailsEnabled();
 
   const rows: ReviewRow[] = (reviews ?? []).map((r: any) => ({
     id: r.id,
@@ -61,6 +64,10 @@ export default async function AdminReviewsPage({ searchParams }: { searchParams:
         <Link href="/admin/reviews/new" className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800">
           Ny recension
         </Link>
+      </div>
+
+      <div className="mb-6">
+        <ReviewRequestEmailsToggle initialEnabled={requestEmailsEnabled} />
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

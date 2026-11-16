@@ -1,6 +1,7 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendShippingConfirmationEmail } from "./shipping-confirmation";
 import { buildEmailLineItems } from "./build-line-items";
+import { scheduleReviewRequest } from "@/lib/reviews/schedule";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/email/fulfillment-shipping-email.ts must never be imported into client code");
@@ -82,6 +83,9 @@ export async function sendShippingEmailForFulfillment(
     if (!sent.ok) return false;
     if (options.testRecipient) return true;
     await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillmentId);
+    // The review-request email goes out 14 days after this (once per order: the first shipment's
+    // email starts the countdown, later ones never restart it).
+    await scheduleReviewRequest(order.id);
     return true;
   } catch (err) {
     console.error(`Shipping email for fulfillment ${fulfillmentId} failed:`, err);
