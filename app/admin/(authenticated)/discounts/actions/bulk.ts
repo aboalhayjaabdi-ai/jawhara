@@ -24,6 +24,9 @@ export async function bulkSetDiscountStatus(discountIds: string[], status: "acti
   const failures = results.filter((r) => !r.ok).length;
 
   revalidatePath("/admin/discounts");
+  // Storefront pages show what discounts promise (offer boxes, collection lines, badges) and are
+  // cached; refresh them all now so a paused/changed offer disappears everywhere at once.
+  revalidatePath("/", "layout");
   return {
     ok: true,
     count: discountIds.length,
@@ -48,6 +51,9 @@ export async function bulkDeleteDiscounts(discountIds: string[], confirmed: bool
   if (toDeactivate.length > 0) await logAdminAction(admin.adminId, "discounts.shopify_sync", undefined, undefined, { discountIds: toDeactivate.map((d) => d.id), results });
 
   revalidatePath("/admin/discounts");
+  // Storefront pages show what discounts promise (offer boxes, collection lines, badges) and are
+  // cached; refresh them all now so a paused/changed offer disappears everywhere at once.
+  revalidatePath("/", "layout");
   return {
     ok: true,
     count: discountIds.length,

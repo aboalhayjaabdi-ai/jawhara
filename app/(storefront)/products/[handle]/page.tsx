@@ -70,7 +70,8 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variants={product.variants}
       sizeOptions={product.sizeOptions}
       reviews={product.reviews}
-      content={content}
+      // The offer box's text only reaches the page when this product is in the live offer.
+      content={content && !giftPromoEligible ? { ...content, offerMessage: null } : content}
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
       complementaryProducts={<ComplementaryProducts productId={product.id} />}
       variantImageIndex={product.variantImageIndex}

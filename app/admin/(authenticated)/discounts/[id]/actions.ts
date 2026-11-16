@@ -80,6 +80,9 @@ export async function updateDiscount(discountId: string, input: DiscountFormInpu
   await logAdminAction(admin.adminId, "discounts.shopify_sync", "discount", discountId, syncResult);
 
   revalidatePath("/admin/discounts");
+  // Storefront pages show what discounts promise (offer boxes, collection lines, badges) and are
+  // cached; refresh them all now so a paused/changed offer disappears everywhere at once.
+  revalidatePath("/", "layout");
   revalidatePath(`/admin/discounts/${discountId}`);
   const shopifyWarning = describeDiscountSyncResult(syncResult) ?? undefined;
   return shopifyWarning ? { ok: true, shopifyWarning } : { ok: true };
@@ -116,5 +119,8 @@ export async function deleteDiscount(discountId: string, confirmed: boolean): Pr
   }
 
   revalidatePath("/admin/discounts");
+  // Storefront pages show what discounts promise (offer boxes, collection lines, badges) and are
+  // cached; refresh them all now so a paused/changed offer disappears everywhere at once.
+  revalidatePath("/", "layout");
   return shopifyWarning ? { ok: true, shopifyWarning } : { ok: true };
 }
