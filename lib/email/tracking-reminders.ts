@@ -17,7 +17,7 @@ const REMINDER_WINDOW_DAYS = 7;
 
 /** Sent as-is unless an email_templates row with key "tracking_reminder" exists (that row, once
  * added, makes the copy editable at /admin/email-templates like the other emails). */
-const DEFAULT_CONTENT: EmailTemplateContent = {
+export const TRACKING_REMINDER_DEFAULT_CONTENT: EmailTemplateContent = {
   subject: "Ditt paket är på väg — order {{orderNumber}}",
   heading: "Ditt paket är på väg till dig",
   introHtml:
@@ -30,7 +30,7 @@ async function reminderContent(): Promise<EmailTemplateContent> {
   try {
     return await getLiveEmailTemplate("tracking_reminder");
   } catch {
-    return DEFAULT_CONTENT;
+    return TRACKING_REMINDER_DEFAULT_CONTENT;
   }
 }
 
