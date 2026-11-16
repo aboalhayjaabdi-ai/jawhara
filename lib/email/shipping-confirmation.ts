@@ -21,5 +21,5 @@ export async function sendShippingConfirmationEmail(params: {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
   const trackingPageUrl = buildTrackingLinkUrl(orderId, siteUrl);
   const { subject, html } = shippingConfirmationTemplate(content, { ...templateParams, trackingPageUrl });
-  await sendEmail({ to, subject, html });
+  return sendEmail({ to, subject, html });
 }

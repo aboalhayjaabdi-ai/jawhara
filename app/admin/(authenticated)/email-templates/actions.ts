@@ -87,11 +87,8 @@ export async function sendTestEmail(id: string): Promise<ActionResult> {
   if (!template) return { ok: false, error: "Mallen hittades inte." };
 
   const { subject, html } = renderSampleEmail(template.key, template.draft);
-  try {
-    await sendEmail({ to: admin.email, subject: `[TEST] ${subject}`, html });
-  } catch (err: any) {
-    return { ok: false, error: err?.message ?? "Kunde inte skicka testmejlet." };
-  }
+  const sent = await sendEmail({ to: admin.email, subject: `[TEST] ${subject}`, html });
+  if (!sent.ok) return { ok: false, error: `Kunde inte skicka testmejlet: ${sent.error}` };
 
   await logAdminAction(admin.adminId, "email_templates.send_test", "email_template", id, { to: admin.email });
   return { ok: true };

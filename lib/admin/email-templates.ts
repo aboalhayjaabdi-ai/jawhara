@@ -5,7 +5,7 @@ if (typeof window !== "undefined") {
   throw new Error("lib/admin/email-templates.ts must never be imported into client code");
 }
 
-export type EmailTemplateKey = "order_confirmation" | "shipping_confirmation" | "refund_notification" | "order_cancellation";
+export type EmailTemplateKey = "order_confirmation" | "shipping_confirmation" | "refund_notification" | "order_cancellation" | "tracking_reminder";
 
 export type EmailTemplateRow = {
   id: string;

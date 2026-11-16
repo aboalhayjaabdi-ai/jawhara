@@ -99,14 +99,16 @@ export async function bulkFulfillOrders(orderIds: string[]): Promise<BulkFulfill
           variantTitleSnapshot: i.variant_title_snapshot,
         }))
       );
-      await sendShippingConfirmationEmail({
+      const sent = await sendShippingConfirmationEmail({
         to: order.email,
         orderId,
         orderNumber: order.order_number,
         items: lineItems,
         shippingAddress: null,
       });
-      await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
+      if (sent.ok) {
+        await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
+      }
     }
 
     fulfilled += 1;

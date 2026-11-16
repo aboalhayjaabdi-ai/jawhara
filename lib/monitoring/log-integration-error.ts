@@ -11,7 +11,7 @@ if (typeof window !== "undefined") {
  * a logging failure must never mask or replace the original error it's recording.
  */
 export async function logIntegrationError(
-  source: "webhook" | "capi" | "cron_sync",
+  source: "webhook" | "capi" | "cron_sync" | "email",
   message: string,
   context?: Record<string, unknown>,
   orderId?: string | null

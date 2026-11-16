@@ -203,3 +203,68 @@ export function orderCancellationTemplate(
   `;
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
+
+// One step of the "Beställd -> Skickad -> På väg -> Levererad" bar in the tracking reminder.
+// Table cells with inline styles only, so it renders the same in Outlook and Gmail.
+function progressStep(label: string, state: "done" | "current" | "todo") {
+  const dot = state === "todo" ? "#d9d9d9" : "#111";
+  const ring = state === "current" ? "box-shadow: 0 0 0 4px #e8e8e8;" : "";
+  const text = state === "todo" ? "#999" : "#111";
+  const weight = state === "current" ? "600" : "400";
+  return `
+    <td align="center" valign="top" style="width: 25%; padding: 0 2px;">
+      <div style="width: 12px; height: 12px; border-radius: 6px; background: ${dot}; ${ring} margin: 0 auto 8px;"></div>
+      <div style="font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: ${text}; font-weight: ${weight};">${label}</div>
+    </td>`;
+}
+
+/**
+ * The reminder sent 7 days after a shipment's tracking was added (see lib/email/tracking-reminders.ts).
+ * Deliberately not a copy of the shipping confirmation: no line items, prices or address -- just
+ * where the parcel is in its journey, its tracking number(s), and one button to the tracking page.
+ */
+export function trackingReminderTemplate(
+  content: EmailTemplateContent,
+  params: {
+    orderNumber: string;
+    shipments: Array<{ trackingNumber: string; carrier?: string | null }>;
+    // Jawhara's own tracking page, pre-identified via a signed per-order token.
+    trackingPageUrl: string;
+  }
+) {
+  const { orderNumber, shipments, trackingPageUrl } = params;
+  const numbers = shipments
+    .map(
+      (s) => `
+      <tr><td style="padding: 6px 0; font-size: 15px; letter-spacing: 0.04em; font-family: 'Courier New', Courier, monospace; color: #111;">
+        ${s.trackingNumber}${s.carrier ? `<span style="font-family: Arial, Helvetica, sans-serif; letter-spacing: 0; color: #666; font-size: 12px;">&nbsp;&nbsp;${s.carrier}</span>` : ""}
+      </td></tr>`
+    )
+    .join("");
+  const body = `
+    ${content.introHtml}
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 24px 0 8px;">
+      <tr>
+        ${progressStep("Beställd", "done")}
+        ${progressStep("Skickad", "done")}
+        ${progressStep("På väg", "current")}
+        ${progressStep("Levererad", "todo")}
+      </tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 20px 0; background: #f7f5f2; border: 1px solid #ece8e2;">
+      <tr><td style="padding: 18px 20px;">
+        <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #666; margin-bottom: 6px;">
+          Order ${orderNumber} &middot; Spårningsnummer
+        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0">${numbers}</table>
+      </td></tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 24px 0;"><tr><td align="center">
+      <a href="${trackingPageUrl}" style="display: block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 600; padding: 16px 28px; text-align: center;">
+        Spåra ditt paket
+      </a>
+    </td></tr></table>
+    ${content.outroHtml ?? ""}
+  `;
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
+}

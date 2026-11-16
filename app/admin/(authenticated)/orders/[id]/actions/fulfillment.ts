@@ -158,7 +158,7 @@ export async function createFulfillment(
       })
     );
 
-    await sendShippingConfirmationEmail({
+    const sent = await sendShippingConfirmationEmail({
       to: order.email,
       orderId,
       orderNumber: order.order_number,
@@ -169,8 +169,12 @@ export async function createFulfillment(
       trackingNumber: input.trackingNumber || null,
       carrier: trackingCompany || null,
     });
-    notified = true;
-    await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
+    // Only marked as sent when Resend actually accepted it; a failure is already logged to
+    // integration_errors by sendEmail, and the fulfillment itself stands either way.
+    notified = sent.ok;
+    if (sent.ok) {
+      await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
+    }
   }
 
   await logAdminAction(admin.adminId, "orders.create_fulfillment", "order", orderId, {
