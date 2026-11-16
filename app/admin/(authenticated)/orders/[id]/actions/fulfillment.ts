@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
+import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
-import { buildEmailLineItems } from "@/lib/email/build-line-items";
 import { createShopifyFulfillment } from "@/lib/shopify/fulfillment-sync";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -19,7 +18,6 @@ export async function createFulfillment(
     items: FulfillmentLineInput[];
     trackingNumber?: string;
     trackingUrl?: string;
-    notifyCustomer: boolean;
   }
 ): Promise<ActionResult> {
   const admin = await requireAdmin();
@@ -131,51 +129,9 @@ export async function createFulfillment(
   const newStatus = allFulfilled ? "FULFILLED" : anyFulfilled ? "PARTIALLY_FULFILLED" : "UNFULFILLED";
   await supabaseService.from("orders").update({ fulfillment_status: newStatus }).eq("id", orderId);
 
-  let notified = false;
-  if (input.notifyCustomer && order.email) {
-    const { data: address } = order.shipping_address_id
-      ? await supabaseService
-          .from("addresses")
-          .select("first_name, last_name, address1, address2, city, zip, country")
-          .eq("id", order.shipping_address_id)
-          .maybeSingle()
-      : { data: null };
-
-    const lineItems = await buildEmailLineItems(
-      requested.map((line) => {
-        const item = itemById.get(line.orderItemId)! as any;
-        return {
-          id: item.id,
-          title: item.title,
-          quantity: line.quantity,
-          unitPrice: Number(item.discounted_unit_price ?? item.unit_price),
-          variantId: item.variant_id,
-          productId: item.product_id,
-          variantTitle: item.product_variants?.title ?? null,
-          imageUrlSnapshot: item.image_url,
-          variantTitleSnapshot: item.variant_title_snapshot,
-        };
-      })
-    );
-
-    const sent = await sendShippingConfirmationEmail({
-      to: order.email,
-      orderId,
-      orderNumber: order.order_number,
-      items: lineItems,
-      shippingAddress: address
-        ? { name: [address.first_name, address.last_name].filter(Boolean).join(" "), address1: address.address1, address2: address.address2, city: address.city, zip: address.zip, country: address.country }
-        : null,
-      trackingNumber: input.trackingNumber || null,
-      carrier: trackingCompany || null,
-    });
-    // Only marked as sent when Resend actually accepted it; a failure is already logged to
-    // integration_errors by sendEmail, and the fulfillment itself stands either way.
-    notified = sent.ok;
-    if (sent.ok) {
-      await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
-    }
-  }
+  // Always sent -- there is no option to skip it, for any admin role. Without a tracking number
+  // yet, it is sent instead when one is first added (editFulfillmentTracking).
+  const notified = input.trackingNumber ? await sendShippingEmailForFulfillment(fulfillment.id) : false;
 
   await logAdminAction(admin.adminId, "orders.create_fulfillment", "order", orderId, {
     fulfillmentId: fulfillment.id,

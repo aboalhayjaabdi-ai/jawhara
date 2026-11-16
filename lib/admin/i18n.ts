@@ -58,8 +58,8 @@ const DICTIONARY = {
   "fulfillment.trackingUrl": { sv: "Spårningslänk (valfritt)", zh: "追踪链接（可选）" },
   "fulfillment.notify": { sv: "Meddela kund via e-post", zh: "通过电子邮件通知客户" },
   "fulfillment.notifyHint": {
-    sv: "Kunden får en spårningslänk till Jawhara direkt -- ingen transportör krävs för att spara.",
-    zh: "客户将直接收到 Jawhara 的追踪链接——保存时无需填写承运商。",
+    sv: "Kunden får automatiskt ett mejl med spårningsnumret när du sparar. Utan spårningsnummer skickas mejlet när numret läggs till.",
+    zh: "保存后，客户会自动收到包含追踪号的电子邮件。若暂未填写追踪号，则在添加追踪号时发送邮件。",
   },
   "fulfillment.submit": { sv: "Markera som skickad", zh: "标记为已发货" },
   "fulfillment.submitting": { sv: "Skapar leverans…", zh: "创建发货中…" },

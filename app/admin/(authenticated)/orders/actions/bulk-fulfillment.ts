@@ -3,8 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { sendShippingConfirmationEmail } from "@/lib/email/shipping-confirmation";
-import { buildEmailLineItems } from "@/lib/email/build-line-items";
 import { createShopifyFulfillment } from "@/lib/shopify/fulfillment-sync";
 
 export type BulkFulfillResult = { ok: true; fulfilled: number; skipped: string[] } | { ok: false; error: string };
@@ -15,7 +13,7 @@ export type BulkFulfillResult = { ok: true; fulfilled: number; skipped: string[]
  * left for the single-order fulfillment form (components/admin/fulfillment-form.tsx) instead.
  *
  * Same rule as that single-order action: an order with a shopify_id gets a REAL Shopify
- * fulfillment created first (notifyCustomer: false -- Jawhara's own email below is the one and
+ * fulfillment created first (notifyCustomer: false -- Jawhara's own shipping email is the one and
  * only shipping email), and is skipped (not marked fulfilled locally, no email sent) if Shopify
  * rejects it.
  */
@@ -85,31 +83,8 @@ export async function bulkFulfillOrders(orderIds: string[]): Promise<BulkFulfill
     }
     await supabaseService.from("orders").update({ fulfillment_status: "FULFILLED" }).eq("id", orderId);
 
-    if (order.email) {
-      const lineItems = await buildEmailLineItems(
-        remaining.map((i: any) => ({
-          id: i.id,
-          title: i.title,
-          quantity: i.quantity - i.fulfilled_quantity,
-          unitPrice: Number(i.discounted_unit_price ?? i.unit_price),
-          variantId: i.variant_id,
-          productId: i.product_id,
-          variantTitle: i.product_variants?.title ?? null,
-          imageUrlSnapshot: i.image_url,
-          variantTitleSnapshot: i.variant_title_snapshot,
-        }))
-      );
-      const sent = await sendShippingConfirmationEmail({
-        to: order.email,
-        orderId,
-        orderNumber: order.order_number,
-        items: lineItems,
-        shippingAddress: null,
-      });
-      if (sent.ok) {
-        await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillment.id);
-      }
-    }
+    // Bulk shipments carry no tracking number, so the shipping email (always with its tracking
+    // number) goes out when tracking is added to each one (editFulfillmentTracking).
 
     fulfilled += 1;
   }

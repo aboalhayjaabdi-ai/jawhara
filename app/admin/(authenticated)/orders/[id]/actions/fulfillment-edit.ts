@@ -6,6 +6,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { updateShopifyFulfillmentTracking, cancelShopifyFulfillment } from "@/lib/shopify/fulfillment-sync";
 import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
+import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -13,8 +14,9 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * Edits an existing fulfillment's tracking number/URL -- pushes the change to Shopify FIRST
  * (when this fulfillment has one, i.e. was created for a real Shopify order) and only updates
  * Supabase once Shopify confirms it, same "never show a change as applied when Shopify rejected
- * it" rule as creating a fulfillment. notifyCustomer stays false: this never sends a second
- * email, it only corrects the tracking info the one shipping email already sent pointed to.
+ * it" rule as creating a fulfillment. Shopify's own notification stays off. Adding the first
+ * tracking number to a shipment sends Jawhara's shipping email with it; correcting an existing
+ * number does not send a second one.
  */
 export async function editFulfillmentTracking(
   fulfillmentId: string,
@@ -25,11 +27,14 @@ export async function editFulfillmentTracking(
 
   const { data: fulfillment } = await supabaseService
     .from("fulfillments")
-    .select("id, order_id, shopify_fulfillment_id, status")
+    .select("id, order_id, shopify_fulfillment_id, status, tracking_number, notification_sent_at")
     .eq("id", fulfillmentId)
     .maybeSingle();
   if (!fulfillment || fulfillment.order_id !== orderId) return { ok: false, error: "Leveransen hittades inte." };
   if (fulfillment.status === "CANCELLED") return { ok: false, error: "En avbruten leverans kan inte redigeras." };
+  // Adding the first tracking number to a shipment sends the shipping email (with that number);
+  // correcting a number the customer already got does not send a second one.
+  const addingFirstTracking = !fulfillment.tracking_number && !!input.trackingNumber.trim();
 
   const trackingCompany = detectCarrierFromTrackingNumber(input.trackingNumber);
 
@@ -48,8 +53,9 @@ export async function editFulfillmentTracking(
     .update({ tracking_number: input.trackingNumber, tracking_company: trackingCompany, tracking_url: input.trackingUrl || null })
     .eq("id", fulfillmentId);
   await registerFulfillmentsForTracking([{ id: fulfillmentId, trackingNumber: input.trackingNumber, trackingCompany }]);
+  const notified = addingFirstTracking ? await sendShippingEmailForFulfillment(fulfillmentId) : false;
 
-  await logAdminAction(admin.adminId, "orders.edit_fulfillment_tracking", "order", orderId, { fulfillmentId, trackingNumber: input.trackingNumber });
+  await logAdminAction(admin.adminId, "orders.edit_fulfillment_tracking", "order", orderId, { fulfillmentId, trackingNumber: input.trackingNumber, notified });
   revalidatePath(`/admin/orders/${orderId}`);
   return { ok: true };
 }

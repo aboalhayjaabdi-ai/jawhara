@@ -58,8 +58,8 @@ function isDelivered(row: DueRow): boolean {
 export type TrackingReminderRun = { due: number; sent: number; skipped: number; failed: number };
 
 /**
- * Sends the "your parcel is on its way" reminder for every shipment whose tracking was added
- * 7-14 days ago and whose customer got the shipping confirmation, one email per order (all of that
+ * Sends the "your parcel is on its way" reminder for every shipment whose shipping confirmation
+ * (with its tracking number) went out 7-14 days ago, one email per order (all of that
  * order's due tracking numbers together). A shipment is marked in audit_log before its email is
  * sent and the mark is removed if the send fails, so it is reminded exactly once. Skips cancelled
  * and test orders, and parcels already delivered.
@@ -76,8 +76,10 @@ export async function sendDueTrackingReminders(now: Date = new Date()): Promise<
     .not("tracking_number", "is", null)
     .not("notification_sent_at", "is", null)
     .neq("status", "cancelled")
-    .lte("created_at", dueBefore)
-    .gte("created_at", notOlderThan);
+    // Counted from when the shipping email (with its tracking number) went out, which is also
+    // when tracking was added for a shipment that got its number after it was created.
+    .lte("notification_sent_at", dueBefore)
+    .gte("notification_sent_at", notOlderThan);
   if (error) throw new Error(`Could not load due tracking reminders: ${error.message}`);
 
   const candidates = (data ?? []) as unknown as DueRow[];

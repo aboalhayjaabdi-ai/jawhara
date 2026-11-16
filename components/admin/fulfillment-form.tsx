@@ -14,7 +14,6 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
   const [checked, setChecked] = useState<Record<string, boolean>>(Object.fromEntries(items.map((i) => [i.id, true])));
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
-  const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -30,7 +29,6 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
         items: lines,
         trackingNumber: trackingNumber || undefined,
         trackingUrl: trackingUrl || undefined,
-        notifyCustomer,
       });
       if (!result.ok) setError(result.error);
     });
@@ -83,11 +81,6 @@ export function FulfillmentForm({ orderId, items, locale = "sv" }: { orderId: st
         />
       </div>
       <p className="mt-1.5 text-xs text-gray-400">{t(locale, "fulfillment.notifyHint")}</p>
-
-      <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
-        <input type="checkbox" checked={notifyCustomer} onChange={(e) => setNotifyCustomer(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-        {t(locale, "fulfillment.notify")}
-      </label>
 
       {error && <div className="mt-2 text-sm text-rose-600">{error}</div>}
 
