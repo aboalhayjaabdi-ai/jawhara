@@ -55,7 +55,7 @@ export function ProductGallery({
         style={{ scrollbarWidth: "none" }}
       >
         {images.map((img, i) => (
-          <div key={img + i} className="relative w-full shrink-0 snap-center bg-[#f4f4f4]">
+          <div key={img + i} className="relative w-full shrink-0 snap-center bg-[#f0efeb]">
             <Image src={img} alt={title} fill priority={i === 0} sizes="(min-width: 1024px) 55vw, 100vw" className="object-contain" />
           </div>
         ))}
@@ -99,13 +99,13 @@ export function ProductGallery({
           instead once there's nothing to actually show side by side, matching the mobile
           carousel's own treatment of a single image above. */}
       {images.length === 1 ? (
-        <div className="relative hidden aspect-square w-full overflow-hidden bg-[#f4f4f4] lg:block">
+        <div className="relative hidden aspect-square w-full overflow-hidden bg-[#f0efeb] lg:block">
           <Image src={images[0]} alt={title} fill priority sizes="55vw" className="object-contain" />
         </div>
       ) : (
         <div className="hidden w-full gap-3 lg:grid lg:grid-cols-2">
           {images.map((img, i) => (
-            <div key={img + i} className="relative aspect-square overflow-hidden bg-[#f4f4f4]">
+            <div key={img + i} className="relative aspect-square overflow-hidden bg-[#f0efeb]">
               <Image src={img} alt={title} fill priority={i === 0} sizes="27vw" className="object-contain" />
             </div>
           ))}

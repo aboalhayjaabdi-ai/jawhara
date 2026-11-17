@@ -232,7 +232,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
                 <Link
                   href={`/products/${line.productHandle}`}
                   onClick={close}
-                  className="relative aspect-square h-24 w-24 flex-shrink-0 bg-[#f4f4f4]"
+                  className="relative aspect-square h-24 w-24 flex-shrink-0 bg-[#f0efeb]"
                 >
                   {line.image && <Image src={line.image} alt={line.title} fill sizes="96px" className="object-contain" />}
                 </Link>

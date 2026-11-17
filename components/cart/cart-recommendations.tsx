@@ -220,7 +220,7 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
             // Compact horizontal card (small image left, details right) keeps the carousel short;
             // ~1.3 cards are visible, so it's obvious there's more to swipe/scroll to.
             <div key={p.id} className="relative flex w-[78%] max-w-[300px] flex-shrink-0 snap-start gap-3 border border-line p-2.5">
-              <div className="relative h-[84px] w-[84px] flex-shrink-0 bg-[#f4f4f4]">
+              <div className="relative h-[84px] w-[84px] flex-shrink-0 bg-[#f0efeb]">
                 {p.image && <Image src={p.image} alt={p.title} fill sizes="84px" loading="eager" className="object-contain" />}
               </div>
               <div className="flex min-w-0 flex-1 flex-col">

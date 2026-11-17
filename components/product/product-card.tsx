@@ -57,7 +57,7 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
 
   return (
     <Link href={`/products/${product.handle}`} className="block">
-      <div className="relative aspect-square bg-[#f4f4f4]">
+      <div className="relative aspect-square bg-[#f0efeb]">
         <div className="absolute inset-0 overflow-hidden">
           {product.image && (
             <Image
