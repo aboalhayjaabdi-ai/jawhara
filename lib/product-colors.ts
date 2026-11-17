@@ -1,6 +1,7 @@
-// Products that are the exact same model in the exact same metal, differing only in the colour of
-// their enamel, stones or leather, stored in the catalog as separate products. Never mixes models
-// (with/without stones, thin/wide) or metals (gold, silver, rose gold). Each group lists its members (by handle) with the colour name shown to customers; the
+// Products that are the exact same model, stored in the catalog as separate products: either the
+// same metal in different enamel/stone/leather colours, or (for models without colour variants) the
+// same piece in different metals (silver, gold, rose gold). Never mixes models (with/without stones,
+// thin/wide); colour groups stay within one metal. Each group lists its members (by handle) with the colour name shown to customers; the
 // product page shows the group as colour choices that link to each other.
 import { cache } from "react";
 import { supabase } from "./supabase/client";
@@ -50,6 +51,33 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Klöver ring", [["klover-ring-11", "Röd"], ["klover-ring-4", "Grön"], ["klover-ring-6", "Vit pärlemor"], ["klover-ring-7", "Svart"], ["klover-ring-9", "Guld"]]),
   group("Klöver örhänge guld", [["klover-orhange", "Vinröd"], ["klover-orhange-10", "Grön"], ["klover-orhange-11", "Svart"], ["klover-orhange-12", "Röd"], ["klover-orhange-13", "Ljusgrå"], ["klover-orhange-4", "Rosa"], ["klover-orhange-6", "Tigeröga"], ["klover-orhange-7", "Guld"], ["klover-orhange-8", "Blå"], ["klover-orhange-9", "Ljusrosa"]]),
   group("Klöver halsband hänge silver", [["klover-halsband-3", "Vit pärlemor"], ["klover-halsband-4", "Svart"], ["klover-halsband-5", "Rosa"]]),
+  // Samma modell i olika metall
+  group("Love armband", [["love-armband", "Silver"], ["love-armband-3", "Guld"], ["love-armband-2", "Roséguld"]]),
+  group("Knot armband med stenar", [["knot-armband", "Silver"], ["knot-armband-1", "Roséguld"]]),
+  group("Knot armband", [["knot-armband-2", "Silver"], ["knot-armband-4", "Guld"], ["knot-armband-3", "Roséguld"]]),
+  group("Spik armband", [["spik-armband", "Silver"], ["cordell-armband-l", "Guld"]]),
+  group("Tennis armband", [["tennis-armband-1", "Silver"], ["tennis-armband", "Guld"]]),
+  group("Armband med bokstavsdetalj", [["ysl-armband-1", "Silver"], ["ysl-armband", "Guld"]]),
+  group("Öppet T-armband", [["chain-armband-copy", "Silver"], ["safa-armband", "Guld"]]),
+  group("Öppet T-armband med stenar", [["aria-armband-copy", "Guld"], ["chain-armband", "Roséguld"]]),
+  group("Tvinnat halsband", [["twist-halsband", "Silver"], ["twist-halsband-1", "Guld"]]),
+  group("Knot halsband", [["chain-halsband", "Guld"], ["x-link-halsband", "Roséguld"]]),
+  group("Tennis halsband", [["tennis-halsband-1", "Silver"], ["tennis-halsband", "Guld"]]),
+  group("Droppring med stenkant", [["aura-ring", "Silver"], ["iris-ring", "Guld"]]),
+  group("Rektangulär ring med stenar", [["aurora-ring-1", "Silver"], ["lumi-ring", "Guld"]]),
+  group("Spetsoval ring med stenar", [["niva-ring", "Silver"], ["ava-ring-1", "Guld"]]),
+  group("Oval solitärring", [["elyse-ring", "Silver"], ["opal-ring", "Guld"]]),
+  group("Rektangulär solitärring", [["tara-ring", "Silver"], ["elle-ring", "Guld"]]),
+  group("Astra örhänge", [["astra-orhange", "Silver"], ["astra-orhange-1", "Guld"]]),
+  group("Athena örhänge", [["athena-orhange-1", "Silver"], ["athena-orhange", "Guld"]]),
+  group("Celeste örhänge", [["celeste-orhange", "Silver"], ["celeste-orhange-1", "Guld"]]),
+  group("Diana örhänge", [["diana-orhange-1", "Silver"], ["diana-orhange", "Guld"]]),
+  group("Elara örhänge", [["elara-orhange", "Silver"], ["elara-orhange-1", "Guld"]]),
+  group("Nebula örhänge", [["nebula-orhange", "Silver"], ["nebula-orhange-1", "Guld"]]),
+  group("Sirena örhänge", [["sirena-orhange", "Silver"], ["sirena-orhange-1", "Guld"]]),
+  group("Solaria örhänge", [["solaria-orhange", "Silver"], ["solaria-orhange-1", "Guld"]]),
+  group("Venus örhänge", [["venus-orhange", "Silver"], ["venus-orhange-1", "Guld"]]),
+  group("Vesta örhänge", [["vesta-orhange", "Silver"], ["vesta-orhange-1", "Guld"]]),
 ];
 
 const groupByHandle = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, g] as const)));
