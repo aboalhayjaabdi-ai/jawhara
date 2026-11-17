@@ -13,7 +13,7 @@ export const DELIVERY_CHECK_DEFAULT_CONTENT: EmailTemplateContent = {
   subject: "Har du fått ditt paket? — order {{orderNumber}}",
   heading: "Hur gick det med din beställning?",
   introHtml:
-    '<p style="font-size: 14px; line-height: 1.6;">Hej {{firstName}}!</p><p style="font-size: 14px; line-height: 1.6;">Det har nu gått en tid sedan vi skickade din beställning {{orderNumber}}, och vi vill bara höra hur det har gått.</p>',
+    '<p style="font-size: 14px; line-height: 1.6;">Hej {{firstName}}!</p><p style="font-size: 14px; line-height: 1.6;">Det har nu gått en tid sedan du gjorde din beställning {{orderNumber}}, och vi vill bara höra hur det har gått.</p>',
   outroHtml:
     '<p style="font-size: 13px; line-height: 1.6; color: #666;">Om något inte är som det ska, oavsett vad, hör av dig till oss först – vi löser det alltid tillsammans med dig.</p>',
 };
@@ -24,11 +24,10 @@ export function deliveryCheckContactUrl(orderNumber: string): string {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Sent this long after the order's tracking was added: the latest expected delivery date (an order
- * that got its tracking number on 17 Nov should have arrived by 7 Dec, 20 days later). */
+/** Sent this long after the order was placed (orders.created_at). */
 const DELIVERY_CHECK_AFTER_DAYS = 20;
 /** ...and only considered for this long after that, so a scheduler that skipped a day still sends
- * it, but parcels from weeks back are never emailed out of the blue. */
+ * it, but orders from weeks back are never emailed out of the blue. */
 const DELIVERY_CHECK_WINDOW_DAYS = 7;
 /** Only orders placed from 1 November 2026 (Swedish time) get this email. */
 const ORDERS_FROM = "2026-11-01T00:00:00+01:00";
@@ -39,16 +38,14 @@ const ELIGIBLE_FINANCIAL_STATUSES = ["paid", "partially_refunded"];
 const SENT_ACTION = "email.delivery_check_sent";
 const SUPPORT_EMAIL = "support@jawhara.se";
 
-type DueRow = {
-  order_id: string;
-  orders: {
-    email: string | null;
-    shipping_address_id: string | null;
-    order_number: string;
-    cancelled_at: string | null;
-    is_test_order: boolean | null;
-    financial_status: string | null;
-  } | null;
+type DueOrder = {
+  id: string;
+  email: string | null;
+  shipping_address_id: string | null;
+  order_number: string;
+  cancelled_at: string | null;
+  is_test_order: boolean | null;
+  financial_status: string | null;
 };
 
 /** The first name on the order's shipping address, capitalised ("sara" -> "Sara"), or null. */
@@ -63,9 +60,8 @@ async function orderFirstName(shippingAddressId: string | null): Promise<string 
 export type DeliveryCheckRun = { due: number; sent: number; skipped: number; failed: number; orders: string[] };
 
 /**
- * Sends "Har du fått ditt paket?" once per order, 20 days after the order's first shipping email
- * with a tracking number went out (fulfillments.notification_sent_at), to every eligible order
- * placed from 1 November 2026. Each order is marked in audit_log before its email is sent and the
+ * Sends "Har du fått ditt paket?" once per order, 20 days after the order was placed, to every
+ * eligible order placed from 1 November 2026 (whether or not it has shipped yet). Each order is marked in audit_log before its email is sent and the
  * mark is removed if Resend rejects it, so it goes out exactly once. Replies go to support.
  *
  * Testing only (app/api/email-health): `testRecipient` sends every due email there with a [TEST]
@@ -76,19 +72,15 @@ export async function sendDueDeliveryChecks(now: Date = new Date(), options: { t
   const notOlderThan = new Date(now.getTime() - (DELIVERY_CHECK_AFTER_DAYS + DELIVERY_CHECK_WINDOW_DAYS) * DAY_MS).toISOString();
 
   const { data, error } = await supabaseService
-    .from("fulfillments")
-    .select("order_id, orders!inner(email, order_number, cancelled_at, is_test_order, financial_status, created_at, shipping_address_id)")
-    .not("tracking_number", "is", null)
-    .not("notification_sent_at", "is", null)
-    .eq("status", "SUCCESS")
-    .lte("notification_sent_at", dueBefore)
-    .gte("notification_sent_at", notOlderThan)
-    .gte("orders.created_at", ORDERS_FROM);
+    .from("orders")
+    .select("id, email, order_number, cancelled_at, is_test_order, financial_status, shipping_address_id")
+    .gte("created_at", ORDERS_FROM)
+    .lte("created_at", dueBefore)
+    .gte("created_at", notOlderThan);
   if (error) throw new Error(`Could not load due delivery checks: ${error.message}`);
 
-  // One email per order, however many of its shipments are due.
-  const byOrder = new Map<string, DueRow>();
-  for (const row of (data ?? []) as unknown as DueRow[]) if (!byOrder.has(row.order_id)) byOrder.set(row.order_id, row);
+  const byOrder = new Map<string, DueOrder>();
+  for (const order of (data ?? []) as DueOrder[]) byOrder.set(order.id, order);
 
   const alreadySent = new Set<string>();
   const orderIds = [...byOrder.keys()];
@@ -106,12 +98,11 @@ export async function sendDueDeliveryChecks(now: Date = new Date(), options: { t
   const run: DeliveryCheckRun = { due: 0, sent: 0, skipped: 0, failed: 0, orders: [] };
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
 
-  for (const [orderId, row] of byOrder) {
+  for (const [orderId, order] of byOrder) {
     if (alreadySent.has(orderId)) continue;
     run.due += 1;
-    const order = row.orders;
     if (
-      !order?.email ||
+      !order.email ||
       order.cancelled_at ||
       order.is_test_order ||
       !ELIGIBLE_FINANCIAL_STATUSES.includes((order.financial_status ?? "").toLowerCase())
