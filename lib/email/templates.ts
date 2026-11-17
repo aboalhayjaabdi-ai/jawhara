@@ -320,29 +320,31 @@ export function deliveryCheckTemplate(
         <div style="font-size: 14px; line-height: 1.6; color: #444;">${text}</div>
       </td></tr>
     </table>`;
+  // "Inte fått det?" comes first, with the contact button right under it; "Fått det?" and its
+  // review rows follow.
   const body = `
     ${substitute(content.introHtml, orderNumber)}
-    <div style="margin: 24px 0 8px;">
-      ${box("Har du fått ditt paket?", "Vad roligt! Vi hoppas att du är nöjd med din produkt och att du kommer att trivas med den länge.")}
-      ${
-        reviewItems.length
-          ? `<div style="margin: 20px 0 24px;">
-        <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #666;">Skriv en recension</div>
-        <div style="font-size: 14px; line-height: 1.6; color: #444; margin-top: 6px;">Berätta gärna vad du tycker – det hjälper andra som funderar på samma produkt.</div>
-        ${reviewItemsTable(reviewItems)}
-      </div>`
-          : ""
-      }
+    <div style="margin: 24px 0 0;">
       ${box("Har du inte fått ditt paket?", "Kontakta oss gärna så löser vi det! Svara bara på det här mejlet eller tryck på knappen nedan – vi hjälper dig snabbt.")}
     </div>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 24px 0 12px;"><tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 12px 0;"><tr><td align="center">
       <a href="${contactUrl}" style="display: block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 600; padding: 16px 28px; text-align: center;">
         Kontakta oss
       </a>
     </td></tr></table>
-    <p style="text-align: center; font-size: 13px; margin: 0 0 24px;">
+    <p style="text-align: center; font-size: 13px; margin: 0 0 28px;">
       <a href="${trackingPageUrl}" style="color: #111;">Se var ditt paket är</a>
     </p>
+    ${box("Har du fått ditt paket?", "Vad roligt! Vi hoppas att du är nöjd med din produkt och att du kommer att trivas med den länge.")}
+    ${
+      reviewItems.length
+        ? `<div style="margin: 20px 0 24px;">
+      <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #666;">Skriv en recension</div>
+      <div style="font-size: 14px; line-height: 1.6; color: #444; margin-top: 6px;">Berätta gärna vad du tycker – det hjälper andra som funderar på samma produkt.</div>
+      ${reviewItemsTable(reviewItems)}
+    </div>`
+        : ""
+    }
     ${content.outroHtml ?? ""}
   `;
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
