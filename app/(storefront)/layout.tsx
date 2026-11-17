@@ -39,10 +39,10 @@ export const metadata: Metadata = {
 // security-sensitive -- unstable_cache (Next's cross-request Data Cache, unlike React's cache()
 // which only dedupes within one request) lets every request reuse the same result for 60s,
 // matching the revalidate=60 convention already used throughout this codebase.
-const getCachedSiteMenus = unstable_cache(getSiteMenus, ["layout-site-menus"], { revalidate: 60 });
-const getCachedLogoUrl = unstable_cache(getLogoUrl, ["layout-logo-url"], { revalidate: 60 });
-const getCachedPublicMarketingIds = unstable_cache(getPublicMarketingIds, ["layout-public-marketing-ids"], { revalidate: 60 });
-const getCachedGiftBoxOffer = unstable_cache(getGiftBoxOffer, ["layout-gift-box-offer"], { revalidate: 60 });
+const getCachedSiteMenus = unstable_cache(getSiteMenus, ["layout-site-menus"], { revalidate: 900 });
+const getCachedLogoUrl = unstable_cache(getLogoUrl, ["layout-logo-url"], { revalidate: 900 });
+const getCachedPublicMarketingIds = unstable_cache(getPublicMarketingIds, ["layout-public-marketing-ids"], { revalidate: 900 });
+const getCachedGiftBoxOffer = unstable_cache(getGiftBoxOffer, ["layout-gift-box-offer"], { revalidate: 900 });
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [menus, logoUrl, marketingIds, giftBoxOffer] = await Promise.all([

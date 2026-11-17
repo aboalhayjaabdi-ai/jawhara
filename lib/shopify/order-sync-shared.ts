@@ -20,6 +20,8 @@ export type ShopifyOrderNode = {
   email: string | null;
   phone: string | null;
   createdAt: string;
+  /** Last time anything on the order changed in Shopify (absent on payloads fetched before this field was added). */
+  updatedAt?: string | null;
   processedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
@@ -118,7 +120,7 @@ export async function upsertOrderShippingAddress(orderId: string, orderShopifyId
 }
 
 export const ORDER_FIELDS_FRAGMENT = `
-  id name email phone createdAt processedAt cancelledAt cancelReason
+  id name email phone createdAt updatedAt processedAt cancelledAt cancelReason
   displayFinancialStatus displayFulfillmentStatus currencyCode note tags test
   customer { id }
   shippingAddress { firstName lastName address1 address2 city province provinceCode zip country countryCodeV2 phone }
@@ -407,6 +409,11 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
 
   const isNewlyPaid = o.displayFinancialStatus === "PAID" && existing?.financial_status !== "PAID";
   const isNewlyCancelled = !!o.cancelledAt && !existing?.cancelled_at;
+
+  // Recorded last, once everything above has been saved: lib/shopify/sync-orders.ts's frequent
+  // sweeps skip an order whose Shopify updatedAt still equals this, so a failure part-way through
+  // leaves it unrecorded and the next sweep redoes the order.
+  if (o.updatedAt) await supabaseService.from("orders").update({ shopify_updated_at: o.updatedAt }).eq("id", orderId);
 
   return { orderId, isNewlyPaid, isNewlyCancelled, newFulfillmentIds, newRefundIds };
 }

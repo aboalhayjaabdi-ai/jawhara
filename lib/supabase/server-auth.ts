@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 // Server-only -- never import from a "use client" component (same split as lib/supabase/client.ts).
 if (typeof window !== "undefined") {
@@ -20,6 +21,7 @@ if (proxyUrl) {
 export async function createAuthServerClient() {
   const cookieStore = await cookies();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    global: { fetch: fetchWithTimeout(15_000) },
     cookies: {
       getAll() {
         return cookieStore.getAll();
