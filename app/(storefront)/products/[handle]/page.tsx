@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
-import { hasLongDelivery } from "@/lib/delivery-time";
+import { getProductByHandle, isEligibleForGiftPromo, isEligibleForThreeForTwo } from "@/lib/queries";
 import { PRODUCT_INTROS } from "@/lib/product-intros";
 import { getColorOptions } from "@/lib/product-colors";
 import { getProductTemplateContent } from "@/lib/product-templates";
@@ -45,11 +44,10 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
-  const [content, giftPromoEligible, threeForTwoEligible, collectionHandles, colorOptions] = await Promise.all([
+  const [content, giftPromoEligible, threeForTwoEligible, colorOptions] = await Promise.all([
     getProductTemplateContent(product.template_suffix),
     isEligibleForGiftPromo(product.id, product.shopify_id ?? null),
     isEligibleForThreeForTwo(product.id),
-    getProductCollectionHandles(product.id),
     getColorOptions(product.handle),
   ]);
 
@@ -85,10 +83,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variantGallery={product.variantGallery}
       giftPromoEligible={giftPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
-      // "Beräknad leverans": 9–18 working days for bags with the longer delivery time, 8–14 for
-      // everything else (lib/delivery-time.ts).
       colorOptions={colorOptions}
-      deliveryKind={hasLongDelivery(collectionHandles) ? "long" : "regular"}
       promoBox={promoBox}
       salePriceNote={salePriceNote}
     />

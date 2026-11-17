@@ -11,7 +11,6 @@ import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { SALE_LABEL } from "@/lib/campaign";
-import { formatDeliveryRange, type DeliveryKind } from "@/lib/delivery-time";
 import type { ColorOption } from "@/lib/product-colors";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ReviewSubmitSection } from "@/components/product/review-submit-section";
@@ -338,7 +337,6 @@ export function ProductDetail({
   threeForTwoEligible,
   promoBox = null,
   salePriceNote = null,
-  deliveryKind = "regular",
   colorOptions = null,
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
@@ -380,9 +378,6 @@ export function ProductDetail({
   /** Short line under the price, only rendered while the selected variant has a compare-at price
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
-  /** Decided server-side (lib/delivery-time.ts): "long" (bags with the longer delivery time, 9–18
-   * working days) or "regular" (8–14) for the "Beräknad leverans" line under the stock status. */
-  deliveryKind?: DeliveryKind;
   /** The same model in other colours (lib/product-colors.ts), each its own product page. */
   colorOptions?: ColorOption[] | null;
 }) {
@@ -600,8 +595,6 @@ export function ProductDetail({
             </div>
           )}
 
-          {status === "active" && <EstimatedDelivery kind={deliveryKind} />}
-
           <button
             onClick={() =>
               variant &&
@@ -743,29 +736,6 @@ export function ProductDetail({
             ))}
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-/** "Beräknad leverans: 8–15 december" -- in Swedish working days from today. Worked out in the visitor's browser
- * (Swedish date) rather than on the server, so a cached page never shows a stale range; the line
- * keeps its height before that so nothing below it jumps. */
-function EstimatedDelivery({ kind }: { kind: DeliveryKind }) {
-  const [range, setRange] = useState<string | null>(null);
-  useEffect(() => setRange(formatDeliveryRange(kind)), [kind]);
-  return (
-    <div className="mt-2 flex min-h-5 items-center gap-1.5 text-[13px] leading-5">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="-ml-px shrink-0 text-muted" aria-hidden>
-        <path d="M3 7h11v9H3z" />
-        <path d="M14 10h4l3 3v3h-7z" />
-        <circle cx="7" cy="19" r="1.6" />
-        <circle cx="17.5" cy="19" r="1.6" />
-      </svg>
-      {range && (
-        <span>
-          <span className="text-muted">Beräknad leverans:</span> <span className="font-medium">{range}</span>
-        </span>
       )}
     </div>
   );
