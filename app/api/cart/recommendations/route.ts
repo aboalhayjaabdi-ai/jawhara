@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCartRecommendationBundle, getCartRecommendations, RECOMMENDATION_MODES, type RecommendationMode } from "@/lib/cart-recommendations";
+import { getCartKinds, getCartRecommendationBundle, getCartRecommendations, RECOMMENDATION_MODES, type RecommendationMode } from "@/lib/cart-recommendations";
 
 // Read-only product suggestions for the cart drawer's carousel. Never prices anything or touches
 // discounts -- whatever gets added from the carousel is priced by the same /api/cart/totals and
@@ -15,12 +15,16 @@ export async function POST(req: NextRequest) {
   const mode = body?.mode as RecommendationMode | "all";
   if (mode === "all") {
     try {
-      const byMode = await getCartRecommendationBundle({
-        cartProductIds: stringList(body?.cartProductIds, MAX_IDS),
-        cartVariantIds: stringList(body?.cartVariantIds, MAX_IDS),
-        viewedHandles: stringList(body?.viewedHandles, 10),
-      });
-      return NextResponse.json({ byMode });
+      const cartProductIds = stringList(body?.cartProductIds, MAX_IDS);
+      const [byMode, cartKinds] = await Promise.all([
+        getCartRecommendationBundle({
+          cartProductIds,
+          cartVariantIds: stringList(body?.cartVariantIds, MAX_IDS),
+          viewedHandles: stringList(body?.viewedHandles, 10),
+        }),
+        getCartKinds(cartProductIds),
+      ]);
+      return NextResponse.json({ byMode, cartKinds });
     } catch {
       return NextResponse.json({ byMode: {} });
     }

@@ -17,36 +17,39 @@ function formatSek(amount: number) {
 const HEADINGS: Record<RecommendationMode, string> = {
   gift: "Välj ditt gratis smycke 🎁",
   "complete-3for2": "Välj ett smycke till och få ett gratis",
-  "bags-wallets": "Utvalt för dig",
+  "bags-wallets": "Du kanske också gillar",
+  "with-bag": "Du kanske också gillar",
+  "with-wallet": "Du kanske också gillar",
   "match-bag": "Matcha din väska med dessa favoriter",
   viewed: "Du kanske också gillar",
   mixed: "Utvalt för dig",
   curated: "Utvalt för dig",
 };
 
-/** Priority order from the cart's own authoritative promotion status (lib/discounts.ts
- * promoProgress): an unclaimed free gift (jewelry, earned with a bag) first; with both bags and jewelry in the cart, the
- * visitor's own browsing or mixed bestsellers; then, with 1-2 jewelry pieces, more jewelry to
- * reach 3 för 2; once 3 för 2 is earned, bags and wallets instead of more jewelry; jewelry to go
- * with a bag; then the visitor's own browsing; then the store's curated picks. */
-function pickMode(totals: CheckoutTotals, viewedCount: number): RecommendationMode {
+type CartKinds = { bag: boolean; wallet: boolean };
+
+/** Priority order, from the cart's own authoritative promotion status (lib/discounts.ts
+ * promoProgress) and the kinds of products in it (server-side, by the store's collections):
+ *   1. an unclaimed free gift (when the bag gift offer is on);
+ *   2. 1-2 jewelry pieces: more jewelry, to reach 3 för 2;
+ *   3. 3 för 2 reached (3+ jewelry): bags and wallets, mostly bags;
+ *   4. a bag in the cart: jewelry and wallets, mostly jewelry;
+ *   5. a wallet in the cart: bags and jewelry, mixed;
+ *   6. otherwise the visitor's own browsing, or the store's curated picks. */
+function pickMode(totals: CheckoutTotals, viewedCount: number, kinds: CartKinds | null): RecommendationMode {
   const { jewelry, gift } = findPromos(totals);
   const giftInfo = giftStatus(gift);
   if (giftInfo?.needsChoice) return "gift";
-  // 1-2 paid jewelry pieces (the free gift piece never counts towards 3 för 2): more jewelry.
-  if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < jewelry.buyQuantity + jewelry.getQuantity) {
-    return "complete-3for2";
-  }
-  // Bag(s) AND paid jewelry in the cart (free gift already chosen): what they've been looking at,
-  // or -- without any history -- bestsellers mixed from every category.
-  if (giftInfo && jewelry && jewelry.buyUnits > 0) return viewedCount >= 1 ? "viewed" : "mixed";
-  if (jewelry && jewelry.freeUnits > 0) return "bags-wallets";
-  if (giftInfo) return "match-bag";
+  const groupSize = jewelry ? jewelry.buyQuantity + jewelry.getQuantity : 0;
+  if (jewelry && jewelry.freeUnits === 0 && jewelry.buyUnits > 0 && jewelry.buyUnits < groupSize) return "complete-3for2";
+  if (jewelry && (jewelry.freeUnits > 0 || jewelry.buyUnits >= groupSize)) return "bags-wallets";
+  if (kinds?.bag || giftInfo) return "with-bag";
+  if (kinds?.wallet) return "with-wallet";
   if (viewedCount >= 2) return "viewed";
   return "curated";
 }
 
-type Bundle = Partial<Record<RecommendationMode, ProductCard[]>>;
+type Bundle = { byMode: Partial<Record<RecommendationMode, ProductCard[]>>; cartKinds: CartKinds | null };
 
 // Bundles already fetched for an exact cart (+ viewing history), kept for up to BUNDLE_TTL_MS so
 // going back to a cart state seen moments ago is instant -- but never longer, so a changed price
@@ -76,7 +79,7 @@ function fetchBundle(key: string, body: object): Promise<Bundle> {
   })
     .then((r) => r.json())
     .then((data) => {
-      const bundle = (data?.byMode ?? {}) as Bundle;
+      const bundle: Bundle = { byMode: data?.byMode ?? {}, cartKinds: data?.cartKinds ?? null };
       bundleCache.set(key, bundle);
       bundleFetchedAt.set(key, Date.now());
       if (bundleCache.size > 30) {
@@ -93,7 +96,7 @@ function fetchBundle(key: string, body: object): Promise<Bundle> {
 
 export function CartRecommendations({ items, totals }: { items: CartItem[]; totals: CheckoutTotals | null }) {
   const { addItem } = useCartActions();
-  const [bundle, setBundle] = useState<{ key: string; byMode: Bundle } | null>(null);
+  const [bundle, setBundle] = useState<{ key: string; data: Bundle } | null>(null);
   const [shown, setShown] = useState<{ mode: RecommendationMode; products: ProductCard[] } | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
@@ -119,12 +122,12 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
     let cancelled = false;
     const cached = freshBundle(bundleKey);
     if (cached) {
-      setBundle({ key: bundleKey, byMode: cached });
+      setBundle({ key: bundleKey, data: cached });
       return;
     }
     fetchBundle(bundleKey, { cartProductIds, cartVariantIds: [...cartVariantIds], viewedHandles })
-      .then((byMode) => {
-        if (!cancelled) setBundle({ key: bundleKey, byMode });
+      .then((data) => {
+        if (!cancelled) setBundle({ key: bundleKey, data });
       })
       .catch(() => {
         // Recommendations are optional -- keep whatever is on screen.
@@ -138,8 +141,9 @@ export function CartRecommendations({ items, totals }: { items: CartItem[]; tota
   // The mode follows the authoritative totals; the products come from the bundle (filtered against
   // the live cart, so something just added disappears from the carousel immediately). While either
   // is still on its way, whatever was shown last stays on screen instead of flickering.
-  const mode = totals ? pickMode(totals, viewedHandles.length) : null;
-  const available = mode && bundle ? (bundle.byMode[mode] ?? []) : null;
+  // The cart's product kinds come with the bundle, so the mode waits for both.
+  const mode = totals && bundle ? pickMode(totals, viewedHandles.length, bundle.data.cartKinds) : null;
+  const available = mode && bundle ? (bundle.data.byMode[mode] ?? []) : null;
   const fresh = available
     ? available.filter((p) => p.variants.some((v) => v.available && !cartVariantIds.has(v.id)) && !(p.quickAddVariantId && cartVariantIds.has(p.quickAddVariantId)))
     : null;

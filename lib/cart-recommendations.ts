@@ -11,9 +11,9 @@ import { supabase } from "./supabase/client";
 import { getCollectionProductIds, getProductCardsByIds, getRelatedProductCards, type ProductCard } from "./queries";
 import { interleaveNoelle } from "./campaign-products";
 
-export type RecommendationMode = "gift" | "complete-3for2" | "bags-wallets" | "match-bag" | "viewed" | "mixed" | "curated";
+export type RecommendationMode = "gift" | "complete-3for2" | "bags-wallets" | "with-bag" | "with-wallet" | "match-bag" | "viewed" | "mixed" | "curated";
 
-export const RECOMMENDATION_MODES: RecommendationMode[] = ["gift", "complete-3for2", "bags-wallets", "match-bag", "viewed", "mixed", "curated"];
+export const RECOMMENDATION_MODES: RecommendationMode[] = ["gift", "complete-3for2", "bags-wallets", "with-bag", "with-wallet", "match-bag", "viewed", "mixed", "curated"];
 
 const MAX_PRODUCTS = 6;
 // "Välj ett smycke till": 5 bracelets/necklaces (incl. at most one more of a design already in the
@@ -100,6 +100,30 @@ function addable(cards: ProductCard[], cartVariantIds: Set<string>): ProductCard
   return cards.filter((c) => c.available && c.variants.some((v) => v.available && !cartVariantIds.has(v.id)));
 }
 
+/** Takes cards from `lists` following `pattern` (indexes into lists), repeating it; once a list runs
+ * out the others keep going. E.g. [[bags], [wallets]] with [0, 0, 1] -> bag, bag, wallet, bag, ... */
+function interleavePattern(lists: ProductCard[][], pattern: number[]): ProductCard[] {
+  const queues = lists.map((l) => [...l]);
+  const out: ProductCard[] = [];
+  while (queues.some((q) => q.length)) {
+    for (const i of pattern) {
+      const next = queues[i].shift() ?? queues.find((q) => q.length)?.shift();
+      if (next) out.push(next);
+    }
+  }
+  return out;
+}
+
+/** What kinds of products the cart holds (by the store's own Väskor / Plånböcker collections) --
+ * lets the cart pick suggestions that complement it. */
+export async function getCartKinds(cartProductIds: string[]): Promise<{ bag: boolean; wallet: boolean }> {
+  if (cartProductIds.length === 0) return { bag: false, wallet: false };
+  const [bagIds, walletIds] = await Promise.all([cachedBagIds(), cachedWalletIds()]);
+  const bags = new Set(bagIds);
+  const wallets = new Set(walletIds);
+  return { bag: cartProductIds.some((id) => bags.has(id)), wallet: cartProductIds.some((id) => wallets.has(id)) };
+}
+
 function dedupe(cards: ProductCard[]): ProductCard[] {
   const seen = new Set<string>();
   return cards.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
@@ -127,16 +151,15 @@ export async function getCartRecommendations(input: {
     // bags and wallets from the store's own Väskor / Plånböcker order, mixed (two bags, then a
     // wallet). Wallets are shown at their normal price here; the free gift (jewelry) is only ever
     // offered in "gift" mode.
+    // Mostly bags: two bags, then a wallet (H bags lead the bags).
     const [hBagIds, bagIds, walletIds] = await Promise.all([cachedCategoryIds(H_BAG_COLLECTION), cachedBagIds(), cachedWalletIds()]);
     const hBagSet = new Set(hBagIds);
-    const hBags = interleaveNoelle((await cachedCardsByIds(hBagIds)).filter((c) => !cartProducts.has(c.id)));
-    const bags = bagIds.filter((id) => !cartProducts.has(id) && !hBagSet.has(id)).slice(0, 8);
-    const wallets = walletIds.filter((id) => !cartProducts.has(id)).slice(0, 4);
-    const mixed: string[] = [];
-    while (bags.length || wallets.length) {
-      mixed.push(...bags.splice(0, 2), ...wallets.splice(0, 1));
-    }
-    return finish([...hBags, ...(await cachedCardsByIds(mixed))]);
+    const hBags = addable(interleaveNoelle((await cachedCardsByIds(hBagIds)).filter((c) => !cartProducts.has(c.id))), cartVariants).slice(0, 2);
+    const [otherBags, wallets] = await Promise.all([
+      cachedCardsByIds(bagIds.filter((id) => !cartProducts.has(id) && !hBagSet.has(id)).slice(0, 12)),
+      cachedCardsByIds(walletIds.filter((id) => !cartProducts.has(id)).slice(0, 8)),
+    ]);
+    return finish(interleavePattern([[...hBags, ...addable(otherBags, cartVariants)], addable(wallets, cartVariants)], [0, 0, 1]));
   }
 
   // Bestsellers from every category, mixed -- used directly ("mixed") and as the fallback when a
@@ -154,6 +177,30 @@ export async function getCartRecommendations(input: {
   const [jewelryIds, bestsellerIds] = await Promise.all([cachedJewelryIds(), cachedBestsellerIds()]);
   const jewelrySet = new Set(jewelryIds);
   const topJewelry = jewelryIds.slice(0, 24);
+
+  // The store's best-selling jewelry first, then its own jewelry order.
+  const jewelryPicks = async () =>
+    addable((await cachedCardsByIds([...new Set([...bestsellerIds.filter((id) => jewelrySet.has(id)), ...topJewelry])].slice(0, 24))).filter((c) => !cartProducts.has(c.id)), cartVariants);
+
+  if (input.mode === "with-bag") {
+    // A bag in the cart: jewelry and wallets, mostly jewelry (two pieces of jewelry, then a wallet).
+    const walletIds = await cachedWalletIds();
+    const [jewelry, wallets] = await Promise.all([jewelryPicks(), cachedCardsByIds(walletIds.filter((id) => !cartProducts.has(id)).slice(0, 8))]);
+    return finish(interleavePattern([jewelry, addable(wallets, cartVariants)], [0, 0, 1]));
+  }
+
+  if (input.mode === "with-wallet") {
+    // A wallet in the cart: bags and jewelry, alternating (H bags lead the bags).
+    const [hBagIds, bagIds] = await Promise.all([cachedCategoryIds(H_BAG_COLLECTION), cachedBagIds()]);
+    const hBagSet = new Set(hBagIds);
+    const [hBags, otherBags, jewelry] = await Promise.all([
+      cachedCardsByIds(hBagIds),
+      cachedCardsByIds(bagIds.filter((id) => !cartProducts.has(id) && !hBagSet.has(id)).slice(0, 12)),
+      jewelryPicks(),
+    ]);
+    const bags = addable([...interleaveNoelle(hBags.filter((c) => !cartProducts.has(c.id))).slice(0, 2), ...otherBags], cartVariants);
+    return finish(interleavePattern([bags, jewelry], [0, 1]));
+  }
 
   if (input.mode === "complete-3for2") {
     // Variety over repetition: bracelets and necklaces alternating (each category's own admin
