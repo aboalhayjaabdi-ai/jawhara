@@ -310,9 +310,11 @@ export function trackingReminderTemplate(
  */
 export function deliveryCheckTemplate(
   content: EmailTemplateContent,
-  params: { orderNumber: string; contactUrl: string; trackingPageUrl: string; reviewItems?: ReviewRequestItem[] }
+  params: { orderNumber: string; contactUrl: string; trackingPageUrl: string; reviewItems?: ReviewRequestItem[]; firstName?: string | null }
 ) {
-  const { orderNumber, contactUrl, trackingPageUrl, reviewItems = [] } = params;
+  const { orderNumber, contactUrl, trackingPageUrl, reviewItems = [], firstName } = params;
+  // "Hej {{firstName}}!" becomes "Hej Sara!", or "Hej!" when the order has no name.
+  const intro = substitute(content.introHtml, orderNumber).replace(/ ?\{\{\s*firstName\s*\}\}/g, firstName ? ` ${escapeAttr(firstName)}` : "");
   const box = (title: string, text: string) => `
     <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 12px; border: 1px solid #ece8e2;">
       <tr><td style="padding: 18px 20px;">
@@ -323,9 +325,9 @@ export function deliveryCheckTemplate(
   // "Inte fått det?" comes first, with the contact button right under it; "Fått det?" and its
   // review rows follow.
   const body = `
-    ${substitute(content.introHtml, orderNumber)}
+    ${intro}
     <div style="margin: 24px 0 0;">
-      ${box("Har du inte fått ditt paket?", "Kontakta oss gärna så löser vi det! Svara bara på det här mejlet eller tryck på knappen nedan – vi hjälper dig snabbt.")}
+      ${box("Har du inte fått ditt paket?", "Kontakta oss gärna så löser vi det! Hör av dig till oss <strong>innan du vänder dig till din bank eller Klarna</strong> – det går mycket snabbare, och vi löser det alltid. Svara bara på det här mejlet eller tryck på knappen nedan. Vi svarar inom 24 timmar.")}
     </div>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 12px 0;"><tr><td align="center">
       <a href="${contactUrl}" style="display: block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 600; padding: 16px 28px; text-align: center;">

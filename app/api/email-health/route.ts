@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
     const draft = deliveryCheckTemplate(DELIVERY_CHECK_DEFAULT_CONTENT, {
       orderNumber: "#SE1234",
+      firstName: "Sara",
       contactUrl: deliveryCheckContactUrl("#SE1234"),
       trackingPageUrl: "https://jawhara.se/sparra-mitt-paket",
       reviewItems: typeof body.orderId === "string" ? await buildReviewItemsForOrder(body.orderId, siteUrl) : [],

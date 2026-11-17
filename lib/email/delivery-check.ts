@@ -13,7 +13,7 @@ export const DELIVERY_CHECK_DEFAULT_CONTENT: EmailTemplateContent = {
   subject: "Har du fått ditt paket? — order {{orderNumber}}",
   heading: "Hur gick det med din beställning?",
   introHtml:
-    '<p style="font-size: 14px; line-height: 1.6;">Hej!</p><p style="font-size: 14px; line-height: 1.6;">Det har nu gått en tid sedan vi skickade din beställning {{orderNumber}}, och vi vill bara höra hur det har gått.</p>',
+    '<p style="font-size: 14px; line-height: 1.6;">Hej {{firstName}}!</p><p style="font-size: 14px; line-height: 1.6;">Det har nu gått en tid sedan vi skickade din beställning {{orderNumber}}, och vi vill bara höra hur det har gått.</p>',
   outroHtml:
     '<p style="font-size: 13px; line-height: 1.6; color: #666;">Om något inte är som det ska, oavsett vad, hör av dig till oss först – vi löser det alltid tillsammans med dig.</p>',
 };
@@ -43,12 +43,22 @@ type DueRow = {
   order_id: string;
   orders: {
     email: string | null;
+    shipping_address_id: string | null;
     order_number: string;
     cancelled_at: string | null;
     is_test_order: boolean | null;
     financial_status: string | null;
   } | null;
 };
+
+/** The first name on the order's shipping address, capitalised ("sara" -> "Sara"), or null. */
+async function orderFirstName(shippingAddressId: string | null): Promise<string | null> {
+  if (!shippingAddressId) return null;
+  const { data } = await supabaseService.from("addresses").select("first_name").eq("id", shippingAddressId).maybeSingle();
+  const first = (data?.first_name ?? "").trim().split(/\s+/)[0];
+  if (!first) return null;
+  return first.charAt(0).toLocaleUpperCase("sv-SE") + first.slice(1).toLocaleLowerCase("sv-SE");
+}
 
 export type DeliveryCheckRun = { due: number; sent: number; skipped: number; failed: number; orders: string[] };
 
@@ -67,7 +77,7 @@ export async function sendDueDeliveryChecks(now: Date = new Date(), options: { t
 
   const { data, error } = await supabaseService
     .from("fulfillments")
-    .select("order_id, orders!inner(email, order_number, cancelled_at, is_test_order, financial_status, created_at)")
+    .select("order_id, orders!inner(email, order_number, cancelled_at, is_test_order, financial_status, created_at, shipping_address_id)")
     .not("tracking_number", "is", null)
     .not("notification_sent_at", "is", null)
     .eq("status", "SUCCESS")
@@ -125,6 +135,7 @@ export async function sendDueDeliveryChecks(now: Date = new Date(), options: { t
 
     const { subject, html } = deliveryCheckTemplate(DELIVERY_CHECK_DEFAULT_CONTENT, {
       orderNumber: order.order_number,
+      firstName: await orderFirstName(order.shipping_address_id),
       contactUrl: deliveryCheckContactUrl(order.order_number),
       trackingPageUrl: buildTrackingLinkUrl(orderId, siteUrl),
       reviewItems: await buildReviewItemsForOrder(orderId, siteUrl),
