@@ -30,6 +30,10 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Quiltad axelväska", [["cc-vaska-2", "Vit"], ["cc-vaska", "Svart"], ["cc-vaska-3", "Röd"], ["cc-vaska-1", "Beige"]]),
   group("Gift set axelväska", [["coach-gift-set-3", "Brun"], ["coach-gift-set", "Mörkbrun"], ["coach-gift-set-2", "Beige och rosa"]]),
   group("Gift set handväska", [["dior-giftset", "Vinröd"], ["dior-giftset-4", "Röd"], ["dior-giftset-2", "Puderrosa"], ["dior-giftset-5", "Marinblå"], ["dior-giftset-3", "Salviagrön"]]),
+  // Plånböcker
+  group("Kelly Plånbok", [["mimmi-planbok-3", "Rosa"], ["mimmi-planbok-4", "Svart"], ["mimmi-planbok-5", "Orange"], ["mimmi-planbok-6", "Cognac"], ["mimmi-planbok-7", "Salviagrön"], ["mimmi-planbok-8", "Vit"]]),
+  group("Lady Plånbok", [["lady-planbok", "Mörkgrå"], ["lady-planbok-1", "Korallrosa"], ["lady-planbok-2", "Krämvit och ljusbrun"], ["lady-planbok-3", "Krämvit och rosa"], ["lady-planbok-4", "Ljusrosa"], ["lady-planbok-5", "Krämvit och svart"]]),
+  group("Mimmi Plånbok", [["mimmi-planbok", "Svart"], ["mimmi-planbok-1", "Krämvit"], ["mimmi-planbok-2", "Rosa"]]),
   // Armband: guld, silver och roséguld var för sig
   group("H armband guld", [["h-armband-1", "Beige"], ["h-armband-13", "Mörkgrå"], ["h-armband-3", "Ljusblå"], ["h-armband-36", "Vit"], ["h-armband-37", "Röd"], ["h-armband-6", "Ljusrosa"], ["h-armband-7", "Orange"]]),
   group("H armband silver", [["h-armband-11", "Ljusbeige"], ["h-armband-30", "Mörkgrå"], ["h-armband-31", "Lila"], ["h-armband-33", "Mörkbrun"], ["h-armband-34", "Röd"], ["h-armband-35", "Orange"], ["h-armband-9", "Svart"], ["x-link-armband-1", "Vit"]]),
