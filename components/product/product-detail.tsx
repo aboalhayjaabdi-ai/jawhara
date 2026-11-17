@@ -12,6 +12,7 @@ import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { SALE_LABEL } from "@/lib/campaign";
 import { formatDeliveryRange, type DeliveryKind } from "@/lib/delivery-time";
+import type { ColorOption } from "@/lib/product-colors";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ReviewSubmitSection } from "@/components/product/review-submit-section";
 
@@ -338,6 +339,7 @@ export function ProductDetail({
   promoBox = null,
   salePriceNote = null,
   deliveryKind = "regular",
+  colorOptions = null,
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
   // content_ids actually match a real catalog item instead of a variant id the catalog has no
@@ -381,6 +383,8 @@ export function ProductDetail({
   /** Decided server-side (lib/delivery-time.ts): "long" (bags with the longer delivery time, 9–18
    * working days) or "regular" (8–14) for the "Beräknad leverans" line under the stock status. */
   deliveryKind?: DeliveryKind;
+  /** The same model in other colours (lib/product-colors.ts), each its own product page. */
+  colorOptions?: ColorOption[] | null;
 }) {
   // With a per-variant gallery, land on the color whose photo the collection cards show (position
   // 0) rather than simply the first variant in the list.
@@ -491,6 +495,29 @@ export function ProductDetail({
 
           {content?.introParagraph && (
             <p className="mt-4 text-sm leading-6 text-muted">{content.introParagraph}</p>
+          )}
+
+          {colorOptions && (
+            <div className="mt-8">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                Färg — {colorOptions.find((c) => c.current)?.color}
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {colorOptions.map((c) => (
+                  <Link
+                    key={c.handle}
+                    href={`/products/${c.handle}`}
+                    scroll={false}
+                    aria-label={c.color}
+                    aria-current={c.current ? "true" : undefined}
+                    title={c.color}
+                    className={`btn-fx relative h-14 w-14 overflow-hidden border bg-[#f0efeb] ${c.current ? "border-fg" : "border-line"}`}
+                  >
+                    {c.image && <Image src={c.image} alt={c.color} fill sizes="56px" className="object-contain p-1" />}
+                  </Link>
+                ))}
+              </div>
+            </div>
           )}
 
           {sizeOptions.length > 1 && (
