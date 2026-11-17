@@ -549,9 +549,40 @@ function writeCachedTotals(fingerprint: string, totals: CheckoutTotals) {
   }
 }
 
-export function useCartTotals(): { totals: CheckoutTotals | null; loading: boolean; fetchError: string | null } {
+/** One /api/cart/totals request, retried on a network failure, timeout or server error (a phone
+ * connection dropping a request, or a server that's still starting up) before giving up -- an
+ * invalid cart (4xx) is never retried. Resolves with the parsed body and whether it was ok. */
+const TOTALS_ATTEMPTS = [
+  { timeoutMs: 6000, waitBeforeMs: 0 },
+  { timeoutMs: 8000, waitBeforeMs: 500 },
+  { timeoutMs: 10000, waitBeforeMs: 1500 },
+];
+async function fetchTotalsWithRetry(body: string, isStale: () => boolean): Promise<{ ok: boolean; data: any } | null> {
+  for (const attempt of TOTALS_ATTEMPTS) {
+    if (attempt.waitBeforeMs) await new Promise((r) => setTimeout(r, attempt.waitBeforeMs));
+    if (isStale()) return null;
+    try {
+      const res = await fetchWithTimeout("/api/cart/totals", { method: "POST", headers: { "Content-Type": "application/json" }, body }, attempt.timeoutMs);
+      if (res.status >= 500) continue;
+      return { ok: res.ok, data: await res.json() };
+    } catch {
+      // network failure or timeout -- try again
+    }
+  }
+  throw new Error("totals unavailable");
+}
+
+export function useCartTotals(): {
+  totals: CheckoutTotals | null;
+  /** The most recent totals for any cart state -- for the offer strip and suggestions, which would
+   * otherwise disappear and reappear on every change while the new totals load. Never for prices. */
+  lastTotals: CheckoutTotals | null;
+  loading: boolean;
+  fetchError: string | null;
+} {
   const { items, discountCode, syncPrices } = useCart();
   const [totals, setTotals] = useState<CheckoutTotals | null>(null);
+  const [lastTotals, setLastTotals] = useState<CheckoutTotals | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -571,6 +602,7 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
   useEffect(() => {
     if (items.length === 0) {
       setTotals(null);
+      setLastTotals(null);
       setLoading(false);
       setFetchError(null);
       return;
@@ -581,6 +613,7 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
     if (cached) {
       // Instant: show the known totals and only re-validate quietly (no "loading" state).
       setTotals(cached);
+      setLastTotals(cached);
       setFetchError(null);
       setLoading(false);
     } else {
@@ -598,22 +631,19 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
         // was the real cause of the button going permanently grey after an ordinary add/remove/
         // qty change: no logic bug in the state transitions themselves, just no ceiling on how
         // long one was ever allowed to take.
-        const res = await fetchWithTimeout("/api/cart/totals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })),
-            discountCode,
-          }),
-        });
-        const data = await res.json();
-        if (id !== requestId.current) return; // a newer request superseded this one
-        if (!res.ok) {
+        const result = await fetchTotalsWithRetry(
+          JSON.stringify({ cart: items.map((i) => ({ variantId: i.variantId, qty: i.qty })), discountCode }),
+          () => id !== requestId.current
+        );
+        if (!result || id !== requestId.current) return; // a newer request superseded this one
+        const { ok, data } = result;
+        if (!ok) {
           setFetchError(data.error ?? "Kunde inte beräkna totalsumman.");
           setTotals(null);
         } else {
           writeCachedTotals(fingerprint, data as CheckoutTotals);
           setTotals(data as CheckoutTotals);
+          setLastTotals(data as CheckoutTotals);
           setFetchError(null);
           syncPrices((data as CheckoutTotals).lines);
         }
@@ -630,5 +660,5 @@ export function useCartTotals(): { totals: CheckoutTotals | null; loading: boole
     return () => clearTimeout(timeout);
   }, [items, discountCode, refreshNonce]);
 
-  return { totals, loading, fetchError };
+  return { totals, lastTotals, loading, fetchError };
 }

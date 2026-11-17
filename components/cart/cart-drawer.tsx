@@ -25,7 +25,9 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   useEffect(() => {
     if (isOpen) warmCheckout();
   }, [isOpen, warmCheckout]);
-  const { totals, loading, fetchError } = useCartTotals();
+  // totals: this exact cart's (prices, errors, checkout). lastTotals: the latest for any cart
+  // state -- keeps the 3 för 2 strip and the suggestions on screen while a change recalculates.
+  const { totals, lastTotals, loading, fetchError } = useCartTotals();
 
   // "✓ Tillagd i varukorgen!" is a short-lived confirmation: shown for each new add, then it
   // fades out (the item itself stays visible in the list below).
@@ -207,7 +209,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
         <CartAddedPopup key={lastAdded.at} item={lastAdded.item} qty={lastAdded.qty} onDismiss={() => setConfirmAt(null)} />
       )}
 
-      {items.length > 0 && <CartOffers totals={totals} onNavigate={close} />}
+      {items.length > 0 && <CartOffers totals={totals ?? lastTotals} onNavigate={close} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto flex max-w-xl flex-col gap-6 px-6 py-6">
@@ -302,7 +304,7 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
             </div>
           )}
 
-          <CartRecommendations items={items} totals={totals} />
+          <CartRecommendations items={items} totals={totals ?? lastTotals} />
         </div>
       </div>
 
