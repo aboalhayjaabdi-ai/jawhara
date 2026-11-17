@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { fetchWithTimeout } from "@/lib/supabase/fetch-timeout";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
 import { isAdminPathAllowedForFulfillmentStaff } from "@/lib/admin/permissions";
@@ -31,6 +32,7 @@ async function handleAdminAuth(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    global: { fetch: fetchWithTimeout(8_000) },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -91,6 +93,7 @@ async function handleAdminAuth(request: NextRequest): Promise<NextResponse> {
  */
 async function handleAdminApiAuth(request: NextRequest): Promise<NextResponse> {
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    global: { fetch: fetchWithTimeout(8_000) },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -184,12 +187,20 @@ async function getRedirectsMap(event: NextFetchEvent): Promise<Map<string, strin
 function refreshRedirectsMap(): Promise<Map<string, string>> {
   redirectsFetchInFlight = (async () => {
     const anon = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      // Short: every storefront page waits on this when an instance has no copy yet.
+      global: { fetch: fetchWithTimeout(2_500) },
       cookies: { getAll: () => [], setAll: () => {} },
     });
     try {
       const { data, error } = await anon.from("url_redirects").select("source_path, destination_path");
-      // A failed refresh keeps serving the last good copy rather than wiping every redirect.
-      if (error && redirectsCache) return redirectsCache.map;
+      // A failed refresh keeps serving the last good copy rather than wiping every redirect. With no
+      // copy yet (database down on a fresh instance), the page loads without redirects and the
+      // lookup is retried shortly -- a redirect is never worth a page that does not load.
+      if (error) {
+        if (redirectsCache) return redirectsCache.map;
+        redirectsCache = { map: new Map(), expiresAt: Date.now() + 15_000 };
+        return redirectsCache.map;
+      }
       const map = new Map((data ?? []).map((r) => [r.source_path as string, r.destination_path as string]));
       redirectsCache = { map, expiresAt: Date.now() + REDIRECTS_TTL_MS };
       return map;

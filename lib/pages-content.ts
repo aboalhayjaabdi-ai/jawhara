@@ -15,11 +15,13 @@ export type PageContent = HtmlPageContent | FaqPageContent | ContactPageContent;
 // this with the same handle -- without dedup, that's two serial Supabase round trips before the
 // page can start rendering.
 export const getPageContent = cache(async (handle: string): Promise<PageContent | null> => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("content_pages")
     .select("type, title, body_html, faq_items, contact_intro, contact_email_note")
     .eq("handle", handle)
     .maybeSingle();
+  // Thrown, not "no such page": a background refresh then keeps the cached page (see lib/queries.ts).
+  if (error) throw new Error(`page ${handle}: ${error.message}`);
   if (!data) return null;
 
   if (data.type === "html") return { type: "html", title: data.title, bodyHtml: data.body_html ?? "" };

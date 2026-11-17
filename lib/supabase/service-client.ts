@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 // Server-only, service-role client. Bypasses RLS -- this is required and correct for
 // checkout/webhook writes: orders/payments/discount_redemptions/webhook_events have no
@@ -19,5 +20,6 @@ if (proxyUrl) {
 export const supabaseService = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
+  // 30 s: generous for admin uploads and order sync, still far below the 300 s function limit.
+  { auth: { persistSession: false }, global: { fetch: fetchWithTimeout(30_000) } }
 );

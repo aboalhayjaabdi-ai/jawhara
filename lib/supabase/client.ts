@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 // This sandboxed dev environment only allows outbound HTTPS through a local
 // proxy, and Node's native fetch doesn't honor HTTPS_PROXY automatically
@@ -15,5 +16,6 @@ if (proxyUrl && typeof window === "undefined") {
 // never pass the service role key to this client.
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { global: { fetch: fetchWithTimeout(10_000) } }
 );

@@ -346,12 +346,15 @@ export async function getCollectionsByHandles(handles: string[]) {
 
 // cache()'d for the same reason as getProductByHandle -- the collection page's generateMetadata()
 // and its page component both call this with the same handle.
+// A database error (timeout, outage) is thrown, never read as "no such row": during a background
+// refresh that keeps the last good page cached instead of replacing it with a 404.
 export const getCollectionMeta = cache(async (handle: string) => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("collections")
     .select("title, handle, description_html, image_url, seo_title, seo_description, template_suffix")
     .eq("handle", handle)
     .single();
+  if (error && error.code !== "PGRST116") throw new Error(`collection ${handle}: ${error.message}`);
   return data;
 });
 
@@ -487,14 +490,17 @@ export type VariantGallery = {
 // this same query (a real FK, reviews.product_id -> products.id, so PostgREST can nest it) rather
 // than a second sequential round trip -- this alone used to add a full extra request to the
 // critical path of every product page.
+// A database error (timeout, outage) is thrown, never read as "no such row": during a background
+// refresh that keeps the last good page cached instead of replacing it with a 404.
 export const getProductByHandle = cache(async (handle: string) => {
-  const { data: product } = await supabase
+  const { data: product, error } = await supabase
     .from("products")
     .select(
       "id, shopify_id, title, handle, description_html, vendor, tags, seo_title, seo_description, status, template_suffix, media(shopify_id, storage_path, position, alt_text, variant_id), product_variants(id, title, sku, price, compare_at_price, option1, option2, option3, inventory_quantity, inventory_tracked, inventory_policy), reviews(rating, author_name, body, verified_buyer, created_at, merchant_reply_body, merchant_reply_at, photo_urls)"
     )
     .eq("handle", handle)
     .single();
+  if (error && error.code !== "PGRST116") throw new Error(`product ${handle}: ${error.message}`);
   if (!product) return null;
 
   const reviews = [...product.reviews].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
