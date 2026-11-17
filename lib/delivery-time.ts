@@ -1,6 +1,6 @@
 /**
  * "Beräknad leverans" line on every product page (components/product/product-detail.tsx, just
- * under the "I lager" status): a date range in Swedish working days from today -- 10–18 for bags
+ * under the "I lager" status): a date range in Swedish working days from today -- 9–18 for bags
  * with the longer delivery time, 8–14 for everything else.
  *
  * Which products count as longer delivery is decided purely from their collection membership on
@@ -32,7 +32,7 @@ const REGULAR_DELIVERY_COLLECTION_HANDLES = new Set(["h-vaskor", "noelle-mini-va
 
 /** Delivery windows in Swedish working days (Mon–Fri, not public holidays) from today. */
 export const DELIVERY_WORKING_DAYS = {
-  long: { min: 10, max: 18 },
+  long: { min: 9, max: 18 },
   regular: { min: 8, max: 14 },
 } as const;
 export type DeliveryKind = keyof typeof DELIVERY_WORKING_DAYS;

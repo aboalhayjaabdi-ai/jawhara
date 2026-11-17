@@ -76,7 +76,7 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variantGallery={product.variantGallery}
       giftPromoEligible={giftPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
-      // "Beräknad leverans": 10–18 working days for bags with the longer delivery time, 8–14 for
+      // "Beräknad leverans": 9–18 working days for bags with the longer delivery time, 8–14 for
       // everything else (lib/delivery-time.ts).
       deliveryKind={hasLongDelivery(collectionHandles) ? "long" : "regular"}
       promoBox={promoBox}

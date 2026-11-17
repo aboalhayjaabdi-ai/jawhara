@@ -378,7 +378,7 @@ export function ProductDetail({
   /** Short line under the price, only rendered while the selected variant has a compare-at price
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
-  /** Decided server-side (lib/delivery-time.ts): "long" (bags with the longer delivery time, 10–18
+  /** Decided server-side (lib/delivery-time.ts): "long" (bags with the longer delivery time, 9–18
    * working days) or "regular" (8–14) for the "Beräknad leverans" line under the stock status. */
   deliveryKind?: DeliveryKind;
 }) {
