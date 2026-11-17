@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo } from "@/lib/queries";
+import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
+import { hasLongDelivery } from "@/lib/delivery-time";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
@@ -43,10 +44,11 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
   const product = await getProductByHandle(handle);
   if (!product) notFound();
 
-  const [content, giftPromoEligible, threeForTwoEligible] = await Promise.all([
+  const [content, giftPromoEligible, threeForTwoEligible, collectionHandles] = await Promise.all([
     getProductTemplateContent(product.template_suffix),
     isEligibleForGiftPromo(product.id, product.shopify_id ?? null),
     isEligibleForThreeForTwo(product.id),
+    getProductCollectionHandles(product.id),
   ]);
 
   // Black Month additions (lib/campaign.ts). The 3 för 2 box only appears on products that are
@@ -74,6 +76,8 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variantGallery={product.variantGallery}
       giftPromoEligible={giftPromoEligible}
       threeForTwoEligible={threeForTwoEligible}
+      // Bags with the longer delivery time (lib/delivery-time.ts) show "Beräknad leverans: <dates>".
+      showEstimatedDelivery={hasLongDelivery(collectionHandles)}
       promoBox={promoBox}
       salePriceNote={salePriceNote}
     />
