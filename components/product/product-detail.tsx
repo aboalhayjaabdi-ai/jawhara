@@ -11,7 +11,7 @@ import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
 import { SALE_LABEL } from "@/lib/campaign";
-import { formatDeliveryRange } from "@/lib/delivery-time";
+import { formatDeliveryRange, type DeliveryKind } from "@/lib/delivery-time";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ReviewSubmitSection } from "@/components/product/review-submit-section";
 
@@ -337,7 +337,7 @@ export function ProductDetail({
   threeForTwoEligible,
   promoBox = null,
   salePriceNote = null,
-  showEstimatedDelivery = false,
+  deliveryKind = "regular",
 }: {
   // products.id -- same id the Meta/Google feed uses as g:id, needed so ViewContent/AddToCart
   // content_ids actually match a real catalog item instead of a variant id the catalog has no
@@ -378,9 +378,9 @@ export function ProductDetail({
   /** Short line under the price, only rendered while the selected variant has a compare-at price
    * (e.g. "Black Month-pris · Fri frakt inom Sverige" on bags). */
   salePriceNote?: string | null;
-  /** Bags with the longer delivery time (decided server-side, lib/delivery-time.ts): shows
-   * "Beräknad leverans: <3–4 weeks from today>" under the stock status. */
-  showEstimatedDelivery?: boolean;
+  /** Decided server-side (lib/delivery-time.ts): "long" (bags with the longer delivery time, 10–18
+   * working days) or "regular" (8–14) for the "Beräknad leverans" line under the stock status. */
+  deliveryKind?: DeliveryKind;
 }) {
   // With a per-variant gallery, land on the color whose photo the collection cards show (position
   // 0) rather than simply the first variant in the list.
@@ -573,7 +573,7 @@ export function ProductDetail({
             </div>
           )}
 
-          {showEstimatedDelivery && status === "active" && <EstimatedDelivery />}
+          {status === "active" && <EstimatedDelivery kind={deliveryKind} />}
 
           <button
             onClick={() =>
@@ -721,12 +721,12 @@ export function ProductDetail({
   );
 }
 
-/** "Beräknad leverans: 8–15 december" -- 3–4 weeks from today. Worked out in the visitor's browser
+/** "Beräknad leverans: 8–15 december" -- in Swedish working days from today. Worked out in the visitor's browser
  * (Swedish date) rather than on the server, so a cached page never shows a stale range; the line
  * keeps its height before that so nothing below it jumps. */
-function EstimatedDelivery() {
+function EstimatedDelivery({ kind }: { kind: DeliveryKind }) {
   const [range, setRange] = useState<string | null>(null);
-  useEffect(() => setRange(formatDeliveryRange()), []);
+  useEffect(() => setRange(formatDeliveryRange(kind)), [kind]);
   return (
     <div className="mt-2 flex min-h-5 items-center gap-1.5 text-[13px] leading-5">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="-ml-px shrink-0 text-muted" aria-hidden>
