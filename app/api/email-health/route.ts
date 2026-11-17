@@ -3,7 +3,8 @@ import { sendEmail } from "@/lib/email/send";
 import { renderSampleEmail } from "@/lib/email/sample-data";
 import { getLiveEmailTemplate } from "@/lib/admin/email-templates";
 import { trackingReminderTemplate, deliveryCheckTemplate } from "@/lib/email/templates";
-import { DELIVERY_CHECK_DEFAULT_CONTENT, deliveryCheckContactUrl } from "@/lib/email/delivery-check";
+import { DELIVERY_CHECK_DEFAULT_CONTENT, deliveryCheckContactUrl, sendDueDeliveryChecks } from "@/lib/email/delivery-check";
+import { buildReviewItemsForOrder } from "@/lib/reviews/review-items";
 import { TRACKING_REMINDER_DEFAULT_CONTENT, sendDueTrackingReminders } from "@/lib/email/tracking-reminders";
 import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
 import { sendDueReviewRequests } from "@/lib/reviews/send-due";
@@ -21,7 +22,10 @@ const HEALTH_RECIPIENT = "support@jawhara.se";
  *                                          due email redirected to support
  *   { "reviewRequestsAt": "<ISO date>" } -> the review-request job as it would run then (ignores
  *                                          the on/off switch), every due email redirected to support
- *   { "sample": "delivery_check" }    -> draft of the "Har du fått ditt paket?" email
+ *   { "sample": "delivery_check", "orderId"?: "<uuid>" } -> the "Har du fått ditt paket?" email
+ *                                          (with that real order's review links when given)
+ *   { "deliveryChecksAt": "<ISO date>" } -> the delivery-check job as it would run then, every due
+ *                                          email redirected to support
  * Authenticated with EMAIL_HEALTH_SECRET.
  */
 export async function POST(req: NextRequest) {
@@ -49,11 +53,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: run.failed === 0, to: HEALTH_RECIPIENT, ...run }, { status: run.failed === 0 ? 200 : 502 });
   }
 
+  if (typeof body?.deliveryChecksAt === "string") {
+    const at = new Date(body.deliveryChecksAt);
+    if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "Invalid deliveryChecksAt" }, { status: 400 });
+    const run = await sendDueDeliveryChecks(at, { testRecipient: HEALTH_RECIPIENT });
+    return NextResponse.json({ ok: run.failed === 0, to: HEALTH_RECIPIENT, ...run }, { status: run.failed === 0 ? 200 : 502 });
+  }
+
   if (body?.sample === "delivery_check") {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
     const draft = deliveryCheckTemplate(DELIVERY_CHECK_DEFAULT_CONTENT, {
       orderNumber: "#SE1234",
       contactUrl: deliveryCheckContactUrl("#SE1234"),
       trackingPageUrl: "https://jawhara.se/sparra-mitt-paket",
+      reviewItems: typeof body.orderId === "string" ? await buildReviewItemsForOrder(body.orderId, siteUrl) : [],
     });
     const sent = await sendEmail({ to: HEALTH_RECIPIENT, subject: `[UTKAST] ${draft.subject}`, html: draft.html, replyTo: HEALTH_RECIPIENT });
     return NextResponse.json({ ok: sent.ok, to: HEALTH_RECIPIENT, sent }, { status: sent.ok ? 200 : 502 });

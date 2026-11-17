@@ -1,8 +1,6 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { sendReviewRequestEmail } from "@/lib/email/review-request";
-import { buildReviewLinkUrl } from "@/lib/reviews/token";
-import { getOrderItemImages } from "@/lib/order-images";
-import { normalizeVariantTitle } from "@/lib/variant-title";
+import { buildReviewItemsForOrder } from "@/lib/reviews/review-items";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/reviews/send-due.ts must never be imported into client code");
@@ -82,46 +80,19 @@ export async function sendDueReviewRequests(options: { now?: Date; testRecipient
         continue;
       }
 
-      const { data: items } = await supabaseService
-        .from("order_items")
-        .select("product_id, title, variant_id, product_variants(title), products(handle, status)")
-        .eq("order_id", row.order_id);
-
-      // One invite per distinct product still on sale (not per variant/line item).
-      const byProduct = new Map<string, { title: string; variantTitle: string | null; handle: string; variantId: string | null; productId: string }>();
-      for (const i of items ?? []) {
-        const product = (i as any).products;
-        if (!i.product_id || byProduct.has(i.product_id) || !product?.handle || product.status !== "active") continue;
-        byProduct.set(i.product_id, {
-          title: i.title,
-          // Shopify's "Default Title" (single-variant products) is never shown to customers.
-          variantTitle: normalizeVariantTitle((i as any).product_variants?.title ?? null),
-          handle: product.handle,
-          variantId: i.variant_id,
-          productId: i.product_id,
-        });
-      }
-      const products = Array.from(byProduct.values());
-      if (products.length === 0) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
+      const reviewItems = await buildReviewItemsForOrder(row.order_id, siteUrl);
+      if (reviewItems.length === 0) {
         await setStatus(row.id, { status: "skipped" });
         run.skipped += 1;
         continue;
       }
 
-      const images = await getOrderItemImages(
-        products.filter((p) => p.variantId).map((p) => ({ id: p.variantId!, variantId: p.variantId, productId: p.productId }))
-      );
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://jawhara.se";
       const sent = await sendReviewRequestEmail({
         to: test ?? order.email,
         subjectPrefix: test ? "[TEST] " : undefined,
         orderNumber: order.order_number,
-        items: products.map((p) => ({
-          title: p.title,
-          variantTitle: p.variantTitle,
-          imageUrl: p.variantId ? images[p.variantId]?.imageUrl ?? null : null,
-          reviewUrl: buildReviewLinkUrl(p.handle, row.order_id, p.productId, siteUrl),
-        })),
+        items: reviewItems,
       });
       if (!sent.ok) throw new Error(sent.error);
 

@@ -310,9 +310,9 @@ export function trackingReminderTemplate(
  */
 export function deliveryCheckTemplate(
   content: EmailTemplateContent,
-  params: { orderNumber: string; contactUrl: string; trackingPageUrl: string }
+  params: { orderNumber: string; contactUrl: string; trackingPageUrl: string; reviewItems?: ReviewRequestItem[] }
 ) {
-  const { orderNumber, contactUrl, trackingPageUrl } = params;
+  const { orderNumber, contactUrl, trackingPageUrl, reviewItems = [] } = params;
   const box = (title: string, text: string) => `
     <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 12px; border: 1px solid #ece8e2;">
       <tr><td style="padding: 18px 20px;">
@@ -324,6 +324,15 @@ export function deliveryCheckTemplate(
     ${substitute(content.introHtml, orderNumber)}
     <div style="margin: 24px 0 8px;">
       ${box("Har du fått ditt paket?", "Vad roligt! Vi hoppas att du är nöjd med din produkt och att du kommer att trivas med den länge.")}
+      ${
+        reviewItems.length
+          ? `<div style="margin: 20px 0 24px;">
+        <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #666;">Skriv en recension</div>
+        <div style="font-size: 14px; line-height: 1.6; color: #444; margin-top: 6px;">Berätta gärna vad du tycker – det hjälper andra som funderar på samma produkt.</div>
+        ${reviewItemsTable(reviewItems)}
+      </div>`
+          : ""
+      }
       ${box("Har du inte fått ditt paket?", "Kontakta oss gärna så löser vi det! Svara bara på det här mejlet eller tryck på knappen nedan – vi hjälper dig snabbt.")}
     </div>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 24px 0 12px;"><tr><td align="center">
