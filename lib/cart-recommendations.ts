@@ -72,7 +72,7 @@ async function getFreeGiftProductIds(): Promise<string[]> {
 // 60s -- the same freshness the storefront pages themselves use (revalidate = 60) -- and only the
 // cheap per-cart filtering below runs per request. Availability is re-checked by /api/cart/totals
 // the moment anything is actually added.
-const CACHE = { revalidate: 60 };
+const CACHE = { revalidate: 900 }; // shared by every cart open; 60 s caused heavy product-card queries on the small database
 const cachedGiftCards = unstable_cache(async () => getProductCardsByIds(await getFreeGiftProductIds()), ["cart-recs-gifts"], CACHE);
 const cachedJewelryIds = unstable_cache(() => getCollectionProductIds(JEWELRY_COLLECTION), ["cart-recs-jewelry-ids"], CACHE);
 const cachedBestsellerIds = unstable_cache(() => getCollectionProductIds(BESTSELLER_COLLECTION), ["cart-recs-bestseller-ids"], CACHE);

@@ -1,4 +1,4 @@
-export const revalidate = 60; // re-fetch prices/stock/collection membership at most once a minute
+export const revalidate = 900; // admin edits refresh these pages at once (revalidatePath); this only bounds staleness from other changes (e.g. stock after orders)
 
 import { getPublishedHomeSections } from "@/lib/queries";
 import { SectionList } from "@/components/home/section-registry";

@@ -8,7 +8,7 @@ import { ContactForm } from "@/components/pages/contact-form";
 // products/[handle]) -- without this, Next statically caches the page indefinitely (no dynamic
 // API is otherwise called here), so an admin edit would never show up without a full rebuild.
 // The content actions also call revalidatePath() for immediate consistency after a save.
-export const revalidate = 60;
+export const revalidate = 3600; // admin edits refresh these pages at once (revalidatePath); this only bounds staleness from other changes (e.g. stock after orders)
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;

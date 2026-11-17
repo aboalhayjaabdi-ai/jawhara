@@ -8,7 +8,7 @@ import { getPrioritizedHBags, interleaveNoelle, resolveMixedJewelry } from "@/li
 import { ProductListSection } from "@/components/home/product-list";
 import { CollectionLinks } from "@/components/home/collection-links";
 
-export const revalidate = 60; // same cadence as the homepage/collection pages (prices, stock, membership)
+export const revalidate = 900; // admin edits refresh these pages at once (revalidatePath); this only bounds staleness from other changes (e.g. stock after orders)
 
 const page = BLACK_MONTH.page;
 

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
+import { getProductByHandle, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
 import { hasLongDelivery } from "@/lib/delivery-time";
 import { PRODUCT_INTROS } from "@/lib/product-intros";
 import { getProductTemplateContent } from "@/lib/product-templates";
@@ -9,16 +9,15 @@ import { RelatedProducts } from "@/components/product/related-products";
 import { ComplementaryProducts } from "@/components/product/complementary-products";
 import { BLACK_MONTH } from "@/lib/campaign";
 
-export const revalidate = 60;
+export const revalidate = 900; // admin edits refresh these pages at once (revalidatePath); this only bounds staleness from other changes (e.g. stock after orders)
 
-// Required for revalidate to actually take effect on this dynamic segment -- see
-// getAllProductHandles's comment in lib/queries.ts for the full story (confirmed via the real
-// build output: this route was always compiled "ƒ Dynamic", never respecting revalidate, without
-// this). dynamicParams defaults to true, so a product added after this build still generates (and
-// then caches) correctly on its own first visit.
+// generateStaticParams is required for revalidate to take effect on this dynamic segment (without
+// it the route compiled as "ƒ Dynamic" and was rendered on every request). It returns no handles:
+// building every product on each deploy fired thousands of queries at the small Supabase database
+// within minutes and took it down twice on 2026-11-17. Each page is rendered on its first visit
+// instead (dynamicParams defaults to true) and then cached; admin edits still refresh it at once.
 export async function generateStaticParams() {
-  const handles = await getAllProductHandles();
-  return handles.map((handle) => ({ handle }));
+  return [];
 }
 
 function stripHtml(html: string | null): string | undefined {
