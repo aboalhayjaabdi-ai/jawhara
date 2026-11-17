@@ -1,5 +1,6 @@
-// Products that are the exact same model in different colours, stored in the catalog as separate
-// products. Each group lists its members (by handle) with the colour name shown to customers; the
+// Products that are the exact same model in the exact same metal, differing only in the colour of
+// their enamel, stones or leather, stored in the catalog as separate products. Never mixes models
+// (with/without stones, thin/wide) or metals (gold, silver, rose gold). Each group lists its members (by handle) with the colour name shown to customers; the
 // product page shows the group as colour choices that link to each other.
 import { cache } from "react";
 import { supabase } from "./supabase/client";
@@ -37,6 +38,16 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Klöver armband guld", [["klover-armband", "Guld"], ["klover-armband-10", "Tigeröga"], ["klover-armband-14", "Lila"], ["klover-armband-16", "Rosa pärlemor"], ["klover-armband-17", "Blågrå"], ["klover-armband-18", "Turkos"], ["klover-armband-3", "Vit pärlemor"], ["klover-armband-4", "Svart"], ["klover-armband-5", "Grön"], ["klover-armband-6", "Blå"], ["klover-armband-7", "Röd"]]),
   group("Klöver armband silver", [["klover-armband-1", "Silver"], ["klover-armband-11", "Ljusblå"], ["klover-armband-12", "Ljusrosa"]]),
   group("Klöver armband tvåfärgat", [["klover-armband-15", "Rosa och guld"], ["klover-armband-9", "Guld och stenar"], ["klover-armband-copy-1", "Röd och guld"]]),
+  group("Blom armband", [["blom-armband", "Krämvit"], ["blom-armband-1", "Mintgrön"], ["blom-armband-2", "Blå blommor"], ["blom-armband-3", "Beige"], ["blom-armband-4", "Rosa"], ["blom-armband-5", "Gul och orange"]]),
+  group("Riri armband", [["riri-armband", "Klara stenar"], ["riri-armband-1", "Rosa och lila"], ["riri-armband-3", "Flerfärgad"], ["riri-armband-4", "Blå och grön"], ["riri-armband-5", "Rosa"]]),
+  group("Klöver diamant armband", [["klover-diamant-armband", "Svart och klar"], ["klover-diamant-armband-1", "Blå"], ["klover-diamant-armband-2", "Flerfärgad"], ["klover-diamant-armband-3", "Klar"]]),
+  group("Klöver diamant armband tunt", [["klover-diamant-armband-4", "Grön"], ["klover-diamant-armband-5", "Rosa"]]),
+  group("Klöver smyckesset guld", [["klover-armband-8", "Ljusblå"], ["klover-smyckesset-2", "Vit"], ["klover-smyckesset-4", "Cerise"], ["klover-smyckesset-5", "Ljusrosa"], ["klover-smyckesset-6", "Mintgrön"]]),
+  group("Klöver smyckesset silver", [["klover-smyckesset", "Rosa"], ["klover-smyckesset-1", "Ljuslila"], ["klover-smyckesset-3", "Blågrön"]]),
+  group("Klöver halsband hänge guld", [["klover-halsband", "Svart"], ["klover-halsband-1", "Grön"], ["klover-halsband-2", "Vinröd"], ["klover-halsband-6", "Guld"], ["klover-halsband-copy", "Vit pärlemor"]]),
+  group("Klöver halsband kedja guld", [["klover-halsband-10", "Guld"], ["klover-halsband-13", "Grön"], ["klover-halsband-14", "Röd"], ["klover-halsband-15", "Blå"]]),
+  group("Klöver ring med sten", [["klover-ring", "Svart"], ["klover-ring-1", "Röd"], ["klover-ring-2", "Vit"], ["klover-ring-5", "Tigeröga"], ["klover-ring-8", "Grön"]]),
+  group("Klöver ring", [["klover-ring-11", "Röd"], ["klover-ring-4", "Grön"], ["klover-ring-6", "Vit pärlemor"], ["klover-ring-7", "Svart"], ["klover-ring-9", "Guld"]]),
 ];
 
 const groupByHandle = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, g] as const)));
