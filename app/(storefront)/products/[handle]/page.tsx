@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getProductByHandle, getAllProductHandles, isEligibleForGiftPromo, isEligibleForThreeForTwo, getProductCollectionHandles } from "@/lib/queries";
 import { hasLongDelivery } from "@/lib/delivery-time";
+import { PRODUCT_INTROS } from "@/lib/product-intros";
 import { getProductTemplateContent } from "@/lib/product-templates";
 import { ProductDetail } from "@/components/product/product-detail";
 import { RelatedProducts } from "@/components/product/related-products";
@@ -68,8 +69,15 @@ export default async function ProductPage({ params }: { params: Promise<{ handle
       variants={product.variants}
       sizeOptions={product.sizeOptions}
       reviews={product.reviews}
-      // The offer box's text only reaches the page when this product is in the live offer.
-      content={content && !giftPromoEligible ? { ...content, offerMessage: null } : content}
+      content={
+        content && {
+          ...content,
+          // The product's own intro (lib/product-intros.ts) replaces the category template's.
+          introParagraph: PRODUCT_INTROS[product.handle] ?? content.introParagraph,
+          // The offer box's text only reaches the page when this product is in the live offer.
+          offerMessage: giftPromoEligible ? content.offerMessage : null,
+        }
+      }
       relatedProducts={<RelatedProducts productId={product.id} excludeHandle={product.handle} />}
       complementaryProducts={<ComplementaryProducts productId={product.id} />}
       variantImageIndex={product.variantImageIndex}
