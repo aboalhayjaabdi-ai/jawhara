@@ -46,7 +46,7 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Klöver smyckesset guld", [["klover-armband-8", "Ljusblå"], ["klover-smyckesset-2", "Vit"], ["klover-smyckesset-4", "Cerise"], ["klover-smyckesset-5", "Ljusrosa"], ["klover-smyckesset-6", "Mintgrön"]]),
   group("Klöver smyckesset silver", [["klover-smyckesset", "Rosa"], ["klover-smyckesset-1", "Ljuslila"], ["klover-smyckesset-3", "Blågrön"]]),
   group("Klöver halsband hänge guld", [["klover-halsband", "Svart"], ["klover-halsband-1", "Grön"], ["klover-halsband-2", "Vinröd"], ["klover-halsband-6", "Guld"], ["klover-halsband-copy", "Vit pärlemor"]]),
-  group("Klöver halsband kedja guld", [["klover-halsband-10", "Guld"], ["klover-halsband-13", "Grön"], ["klover-halsband-14", "Röd"], ["klover-halsband-15", "Blå"]]),
+  group("Klöver halsband med flera klöver", [["klover-halsband-10", "Guld"], ["klover-halsband-13", "Grön"], ["klover-halsband-14", "Röd"], ["klover-halsband-15", "Blå"], ["klover-halsband-9", "Svart"], ["klover-halsband-8", "Vit"], ["klover-halsband-11", "Vit, silver"]]),
   group("Klöver ring med sten", [["klover-ring", "Svart"], ["klover-ring-1", "Röd"], ["klover-ring-2", "Vit"], ["klover-ring-5", "Tigeröga"], ["klover-ring-8", "Grön"]]),
   group("Klöver ring", [["klover-ring-11", "Röd"], ["klover-ring-4", "Grön"], ["klover-ring-6", "Vit pärlemor"], ["klover-ring-7", "Svart"], ["klover-ring-9", "Guld"]]),
   group("Klöver örhänge guld", [["klover-orhange", "Vinröd"], ["klover-orhange-10", "Grön"], ["klover-orhange-11", "Svart"], ["klover-orhange-12", "Röd"], ["klover-orhange-13", "Ljusgrå"], ["klover-orhange-4", "Rosa"], ["klover-orhange-6", "Tigeröga"], ["klover-orhange-7", "Guld"], ["klover-orhange-8", "Blå"], ["klover-orhange-9", "Ljusrosa"]]),
