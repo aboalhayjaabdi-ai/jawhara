@@ -28,11 +28,15 @@ export async function scheduleReviewRequest(orderId: string): Promise<void> {
   const shippedAt = new Date();
   const sendAfter = new Date(shippedAt.getTime() + REVIEW_REQUEST_DELAY_DAYS * 24 * 60 * 60 * 1000);
 
-  // Plain insert, not upsert -- a unique-violation (23505) on an existing order_id is the
-  // expected, silent "don't restart the countdown" case, not a real error.
+  // ON CONFLICT DO NOTHING: an order that already has a schedule row keeps it (the countdown never
+  // restarts), without a unique-violation error -- the order sync calls this for recently shipped
+  // orders on every run, and each violation used to be written to the database error log.
   const { error } = await supabaseService
     .from("review_request_schedule")
-    .insert({ order_id: orderId, shipped_at: shippedAt.toISOString(), send_after: sendAfter.toISOString() });
+    .upsert(
+      { order_id: orderId, shipped_at: shippedAt.toISOString(), send_after: sendAfter.toISOString() },
+      { onConflict: "order_id", ignoreDuplicates: true }
+    );
   if (error && error.code !== "23505") {
     console.error(`Failed to schedule review request for order ${orderId}:`, error);
   }

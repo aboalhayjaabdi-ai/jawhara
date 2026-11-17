@@ -1,3 +1,4 @@
+import { supabaseService } from "@/lib/supabase/service-client";
 import { paginateAll } from "./client";
 import { orderStores } from "./stores";
 import { upsertShopifyOrder, ORDER_FIELDS_FRAGMENT, type ShopifyOrderNode } from "./order-sync-shared";
@@ -67,9 +68,29 @@ export async function syncOrdersFromShopify(recoverySource?: RecoverySource): Pr
     }
   }
 
+  // The 5-minute sweeps (pg_cron, GitHub Actions) only redo orders that changed in Shopify since
+  // they were last saved -- re-saving all ~60 days of orders every 5 minutes was ~18,000 order
+  // upserts a day (many database requests each) for nothing. The daily Vercel cron and the admin's
+  // "Sync from Shopify" button still redo every order, as a full safety net.
+  const skipUnchanged = recoverySource === "pg_cron" || recoverySource === "github_actions";
+  const savedUpdatedAt = new Map<string, number>();
+  if (skipUnchanged && orders.length) {
+    const sids = orders.map(({ o }) => o.id.split("/").pop()!);
+    for (let i = 0; i < sids.length; i += 200) {
+      const { data, error } = await supabaseService
+        .from("orders")
+        .select("shopify_id, shopify_updated_at")
+        .in("shopify_id", sids.slice(i, i + 200));
+      if (error) break; // can't tell what changed: fall back to redoing every order
+      for (const r of data ?? []) if (r.shopify_updated_at) savedUpdatedAt.set(r.shopify_id, new Date(r.shopify_updated_at).getTime());
+    }
+  }
+
   let importedCount = 0;
 
   for (const { o, store } of orders) {
+    const saved = savedUpdatedAt.get(o.id.split("/").pop()!);
+    if (saved !== undefined && o.updatedAt && new Date(o.updatedAt).getTime() <= saved) continue;
     try {
       const result = await upsertShopifyOrder(o, store);
       importedCount += 1;
