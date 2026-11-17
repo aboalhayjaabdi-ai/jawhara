@@ -502,6 +502,10 @@ export function ProductDetail({
                   <Link
                     key={c.handle}
                     href={`/products/${c.handle}`}
+                    // Replaces the current history entry instead of adding one, so the browser's back
+                    // button returns to wherever the visitor came from (collection, start page), not
+                    // through every colour they looked at.
+                    replace
                     scroll={false}
                     aria-label={c.color}
                     aria-current={c.current ? "true" : undefined}
