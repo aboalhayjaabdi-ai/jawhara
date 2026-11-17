@@ -300,3 +300,41 @@ export function trackingReminderTemplate(
   `;
   return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
 }
+
+/**
+ * "Har du fått ditt paket?" -- sent once the latest expected delivery date has passed (see
+ * lib/email/delivery-check.ts). Its job is to make contacting Jawhara the obvious first step for a
+ * customer whose parcel has not arrived, before they turn to their bank or card issuer. Kept
+ * visually different from the shipping and reminder emails: no progress bar, no tracking card --
+ * two short answers ("Fått paketet?" / "Inte fått det?") and one contact button.
+ */
+export function deliveryCheckTemplate(
+  content: EmailTemplateContent,
+  params: { orderNumber: string; contactUrl: string; trackingPageUrl: string }
+) {
+  const { orderNumber, contactUrl, trackingPageUrl } = params;
+  const box = (title: string, text: string) => `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 12px; border: 1px solid #ece8e2;">
+      <tr><td style="padding: 18px 20px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #111;">${title}</div>
+        <div style="font-size: 14px; line-height: 1.6; color: #444;">${text}</div>
+      </td></tr>
+    </table>`;
+  const body = `
+    ${substitute(content.introHtml, orderNumber)}
+    <div style="margin: 24px 0 8px;">
+      ${box("Har du fått ditt paket?", "Vad roligt! Vi hoppas att du är nöjd med din produkt och att du kommer att trivas med den länge.")}
+      ${box("Har du inte fått ditt paket?", "Kontakta oss gärna så löser vi det! Svara bara på det här mejlet eller tryck på knappen nedan – vi hjälper dig snabbt.")}
+    </div>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 24px 0 12px;"><tr><td align="center">
+      <a href="${contactUrl}" style="display: block; background: #111; color: #fff; text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 600; padding: 16px 28px; text-align: center;">
+        Kontakta oss
+      </a>
+    </td></tr></table>
+    <p style="text-align: center; font-size: 13px; margin: 0 0 24px;">
+      <a href="${trackingPageUrl}" style="color: #111;">Se var ditt paket är</a>
+    </p>
+    ${content.outroHtml ?? ""}
+  `;
+  return { subject: substitute(content.subject, orderNumber), html: layout(content.heading, body) };
+}

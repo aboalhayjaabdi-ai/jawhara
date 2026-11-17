@@ -14,7 +14,7 @@ export type SendEmailResult = { ok: true; id: string | null } | { ok: false; err
  * every failure is written to integration_errors (source "email") so it is visible without Vercel
  * log access.
  */
-export async function sendEmail(params: { to: string; subject: string; html: string }): Promise<SendEmailResult> {
+export async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     const error = "RESEND_API_KEY saknas";

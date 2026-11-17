@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email/send";
 import { renderSampleEmail } from "@/lib/email/sample-data";
 import { getLiveEmailTemplate } from "@/lib/admin/email-templates";
-import { trackingReminderTemplate } from "@/lib/email/templates";
+import { trackingReminderTemplate, deliveryCheckTemplate } from "@/lib/email/templates";
+import { DELIVERY_CHECK_DEFAULT_CONTENT, deliveryCheckContactUrl } from "@/lib/email/delivery-check";
 import { TRACKING_REMINDER_DEFAULT_CONTENT, sendDueTrackingReminders } from "@/lib/email/tracking-reminders";
 import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
 import { sendDueReviewRequests } from "@/lib/reviews/send-due";
@@ -20,6 +21,7 @@ const HEALTH_RECIPIENT = "support@jawhara.se";
  *                                          due email redirected to support
  *   { "reviewRequestsAt": "<ISO date>" } -> the review-request job as it would run then (ignores
  *                                          the on/off switch), every due email redirected to support
+ *   { "sample": "delivery_check" }    -> draft of the "Har du fått ditt paket?" email
  * Authenticated with EMAIL_HEALTH_SECRET.
  */
 export async function POST(req: NextRequest) {
@@ -45,6 +47,16 @@ export async function POST(req: NextRequest) {
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "Invalid reviewRequestsAt" }, { status: 400 });
     const run = await sendDueReviewRequests({ now: at, testRecipient: HEALTH_RECIPIENT });
     return NextResponse.json({ ok: run.failed === 0, to: HEALTH_RECIPIENT, ...run }, { status: run.failed === 0 ? 200 : 502 });
+  }
+
+  if (body?.sample === "delivery_check") {
+    const draft = deliveryCheckTemplate(DELIVERY_CHECK_DEFAULT_CONTENT, {
+      orderNumber: "#SE1234",
+      contactUrl: deliveryCheckContactUrl("#SE1234"),
+      trackingPageUrl: "https://jawhara.se/sparra-mitt-paket",
+    });
+    const sent = await sendEmail({ to: HEALTH_RECIPIENT, subject: `[UTKAST] ${draft.subject}`, html: draft.html, replyTo: HEALTH_RECIPIENT });
+    return NextResponse.json({ ok: sent.ok, to: HEALTH_RECIPIENT, sent }, { status: sent.ok ? 200 : 502 });
   }
 
   const shipping = renderSampleEmail("shipping_confirmation", await getLiveEmailTemplate("shipping_confirmation"));
