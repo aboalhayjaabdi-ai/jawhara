@@ -48,6 +48,8 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Klöver halsband kedja guld", [["klover-halsband-10", "Guld"], ["klover-halsband-13", "Grön"], ["klover-halsband-14", "Röd"], ["klover-halsband-15", "Blå"]]),
   group("Klöver ring med sten", [["klover-ring", "Svart"], ["klover-ring-1", "Röd"], ["klover-ring-2", "Vit"], ["klover-ring-5", "Tigeröga"], ["klover-ring-8", "Grön"]]),
   group("Klöver ring", [["klover-ring-11", "Röd"], ["klover-ring-4", "Grön"], ["klover-ring-6", "Vit pärlemor"], ["klover-ring-7", "Svart"], ["klover-ring-9", "Guld"]]),
+  group("Klöver örhänge guld", [["klover-orhange", "Vinröd"], ["klover-orhange-10", "Grön"], ["klover-orhange-11", "Svart"], ["klover-orhange-12", "Röd"], ["klover-orhange-13", "Ljusgrå"], ["klover-orhange-4", "Rosa"], ["klover-orhange-6", "Tigeröga"], ["klover-orhange-7", "Guld"], ["klover-orhange-8", "Blå"], ["klover-orhange-9", "Ljusrosa"]]),
+  group("Klöver halsband hänge silver", [["klover-halsband-3", "Vit pärlemor"], ["klover-halsband-4", "Svart"], ["klover-halsband-5", "Rosa"]]),
 ];
 
 const groupByHandle = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, g] as const)));
