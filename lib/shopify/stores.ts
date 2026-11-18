@@ -59,14 +59,16 @@ export function isStoreConfigured(key: StoreKey): boolean {
 }
 
 /**
- * Stores that hold orders this site must keep in sync, active store first. While legacy is active
- * this is just ["legacy"] (exactly today's behaviour). Once "new" is active, the legacy store stays
- * in the list as long as its credentials are configured, so orders placed before the switch can
- * still be synced, fulfilled and tracked there.
+ * Stores that hold orders this site must keep in sync, active store first, then the other store
+ * whenever its credentials are configured -- so orders placed in a store before the checkout was
+ * switched away from it can still be synced, fulfilled and tracked there.
  */
 export function orderStores(): StoreKey[] {
-  if (activeStore() === "legacy") return ["legacy"];
-  return isStoreConfigured("legacy") ? ["new", "legacy"] : ["new"];
+  const active = activeStore();
+  const other: StoreKey = active === "new" ? "legacy" : "new";
+  // The other store stays in the list whenever its credentials are configured, whichever way the
+  // checkout was last switched, so its orders keep syncing, fulfilling and tracking.
+  return isStoreConfigured(other) ? [active, other] : [active];
 }
 
 /** Which configured store a webhook came from, by its X-Shopify-Shop-Domain header. */
