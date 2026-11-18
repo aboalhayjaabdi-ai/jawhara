@@ -248,7 +248,9 @@ function finalize(cart: StorefrontCart, discountCode: string | null, warnings: s
   return {
     shopifyCartId: encodeCartId(cart.id),
     checkoutUrl: cart.checkoutUrl,
-    shopifyTotal: Number(cart.cost.totalAmount.amount),
+    // The goods total: Shopify's total minus any shipping the customer already picked in its
+    // checkout (an earlier visit there leaves e.g. Express Frakt selected on the cart).
+    shopifyTotal: Number(cart.cost.totalAmount.amount) - cart.selectedShippingAmount,
     discountCodeApplicable: applicable,
     warnings: allWarnings,
   };

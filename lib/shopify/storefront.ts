@@ -89,6 +89,11 @@ export type StorefrontCart = {
   // visible to the checkout's custom web pixel as checkout.attributes. Keys starting with "_" are
   // hidden from the customer. Used for Meta tracking: see lib/marketing/cart-tracking-attributes.ts.
   attributes: { key: string; value: string }[];
+  // Shipping already chosen for this cart in Shopify's checkout (e.g. Express Frakt), summed over
+  // its delivery groups -- 0 until the customer has picked a paid option. cost.totalAmount includes
+  // it, so the "Till kassan" price check (lib/shopify/cart-sync.ts) takes it off before comparing
+  // with the Jawhara cart, which never includes shipping.
+  selectedShippingAmount: number;
 };
 
 export type CartUserError = { field: string[] | null; message: string; code?: string | null };
@@ -103,6 +108,7 @@ const CART_FIELDS = `
   }
   discountCodes { code applicable }
   attributes { key value }
+  deliveryGroups(first: 10) { edges { node { selectedDeliveryOption { estimatedCost { amount } } } } }
   lines(first: 100) {
     edges {
       node {
@@ -128,6 +134,10 @@ function toCart(raw: any): StorefrontCart | null {
     cost: raw.cost,
     discountCodes: (raw.discountCodes ?? []).map((d: any) => ({ code: d.code, applicable: d.applicable })),
     attributes: (raw.attributes ?? []).map((a: any) => ({ key: a.key, value: a.value ?? "" })),
+    selectedShippingAmount: (raw.deliveryGroups?.edges ?? []).reduce(
+      (sum: number, e: any) => sum + Number(e.node?.selectedDeliveryOption?.estimatedCost?.amount ?? 0),
+      0
+    ),
     lines: (raw.lines?.edges ?? []).map((e: any) => ({
       id: e.node.id,
       quantity: e.node.quantity,
