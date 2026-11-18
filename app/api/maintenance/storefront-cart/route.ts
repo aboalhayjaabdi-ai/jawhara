@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
          cart { id totalQuantity
            lines(first: 20) { nodes { quantity merchandise { ... on ProductVariant { id title product { handle } } } cost { totalAmount { amount } } } }
            cost { subtotalAmount { amount } totalAmount { amount } checkoutChargeAmount { amount } totalTaxAmount { amount } }
-           deliveryGroups(first: 10, withCarrierRates: true) { nodes { groupType cartLines(first: 20) { nodes { merchandise { ... on ProductVariant { product { handle } } } } }
+           deliveryGroups(first: 10) { nodes { groupType cartLines(first: 20) { nodes { merchandise { ... on ProductVariant { product { handle } } } } }
              deliveryOptions { handle title description deliveryMethodType estimatedCost { amount } } selectedDeliveryOption { title } } }
          }
          userErrors { field message code } warnings { code message } } }`,
