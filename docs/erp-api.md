@@ -22,6 +22,8 @@ Authorization: Bearer jwerp_...
   several keys separated by commas, so a key can be rotated without downtime: add the new key,
   give it to the ERP, then remove the old one. Keys shorter than 32 characters are ignored.
 - Optional **`ERP_ALLOWED_IPS`**: comma-separated IP addresses. When set, only those IPs are accepted.
+- Optional **`ERP_ORDERS_FROM`**: go-live date (ISO, e.g. `2026-11-20T00:00:00+01:00`). Orders placed
+  before it are not listed by `GET /orders` (they are handled the way they are today).
 - HTTPS only. Never put the key in a URL.
 
 ## Common behaviour
@@ -39,8 +41,9 @@ Authorization: Bearer jwerp_...
 
 ### `GET /orders`
 
-Orders that are **paid** (or partly refunded), **not cancelled, not hidden, not test orders**, and
-still have something left to ship. Oldest first.
+Shopify orders that are **paid** (or partly refunded), **not cancelled, not hidden, not test
+orders**, and still have something left to ship (placed on or after `ERP_ORDERS_FROM` when set).
+Oldest first.
 
 | Query | Default | Meaning |
 |---|---|---|
@@ -122,6 +125,10 @@ time. Refused (`409`) for cancelled, unpaid or hidden orders.
 **Recommended flow:** `GET /orders` → store each order → `POST …/acknowledge` → pick & pack →
 `POST /shipments`.
 
+> **Identify lines by `lineId` (or `variantId`), not by SKU.** In Jawhara's current product data
+> the SKU field often holds a material description (e.g. "18K GULDPLÄTERAT ROSTFRITT STÅL") or is
+> empty, so it is not unique. `items[].sku` is passed through as-is for information.
+
 ## 2. Products and images
 
 ### `GET /products`
@@ -181,7 +188,7 @@ Registers a sent parcel. It does exactly what "Lägg till leverans" in Jawhara a
   "trackingNumber": "YT2632000713274332",
   "carrier": "YunExpress",
   "trackingUrl": "https://www.yuntrack.com/parcelTracking?id=YT2632000713274332",
-  "items": [ { "sku": "LADY-RED", "quantity": 1 } ],
+  "items": [ { "lineId": "0b5d…", "quantity": 1 } ],
   "dryRun": false
 }
 ```
@@ -192,7 +199,7 @@ Registers a sent parcel. It does exactly what "Lägg till leverans" in Jawhara a
 | `trackingNumber` | yes | 6–40 letters/digits (spaces and dashes are removed) |
 | `carrier` | no | Detected from the tracking number when left out (YunExpress, 4PX, …) |
 | `trackingUrl` | no | Must be `https://` |
-| `items` | no | Lines in this parcel, each `{ "lineId": "…" }` or `{ "sku": "…" }` plus `quantity`. Left out = **everything still unshipped** on the order. |
+| `items` | no | Lines in this parcel, each `{ "lineId": "…" }` (recommended) or `{ "sku": "…" }` plus `quantity`. Left out = **everything still unshipped** on the order. |
 | `dryRun` | no | `true` = validate and return the plan, write nothing |
 
 Responses:
