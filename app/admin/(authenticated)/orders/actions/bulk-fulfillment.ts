@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { createShopifyFulfillment } from "@/lib/shopify/fulfillment-sync";
+import { beginShipment, completeShipment, markShopifyFailed } from "@/lib/fulfillment/shipment-intents";
 
 export type BulkFulfillResult = { ok: true; fulfilled: number; skipped: string[] } | { ok: false; error: string };
 
@@ -41,47 +42,47 @@ export async function bulkFulfillOrders(orderIds: string[]): Promise<BulkFulfill
       continue;
     }
 
+    if (order.shopify_id && remaining.some((i) => !i.shopify_id)) {
+      skipped.push(orderId);
+      continue;
+    }
+
+    // Recorded before Shopify is called (lib/fulfillment/shipment-intents.ts), so a shipment Shopify
+    // accepted is finished even if a later step fails.
+    const intent = await beginShipment({
+      orderId,
+      source: "admin_bulk",
+      createdBy: admin.adminId,
+      trackingNumber: null,
+      trackingCompany: null,
+      trackingUrl: null,
+      items: remaining.map((i) => ({ orderItemId: i.id, quantity: i.quantity - i.fulfilled_quantity })),
+      shopifyRequired: !!order.shopify_id,
+      registerTracking: false,
+      sendEmail: false,
+    }).catch(() => null);
+    if (!intent) {
+      skipped.push(orderId);
+      continue;
+    }
+
     let shopifyFulfillmentId: string | null = null;
     if (order.shopify_id) {
-      if (remaining.some((i) => !i.shopify_id)) {
-        skipped.push(orderId);
-        continue;
-      }
       const result = await createShopifyFulfillment({
         shopifyOrderId: order.shopify_id,
         lineItems: remaining.map((i) => ({ shopifyLineItemId: i.shopify_id!, quantity: i.quantity - i.fulfilled_quantity })),
       });
       if (!result.ok) {
+        await markShopifyFailed(intent.id, result.error);
         skipped.push(orderId);
         continue;
       }
       shopifyFulfillmentId = result.shopifyFulfillmentId;
     }
 
-    const { data: fulfillment } = await supabaseService
-      .from("fulfillments")
-      .insert({
-        order_id: orderId,
-        status: "SUCCESS",
-        shipped_at: new Date().toISOString(),
-        created_by: admin.adminId,
-        shopify_id: shopifyFulfillmentId ? shopifyFulfillmentId.split("/").pop() : null,
-        shopify_fulfillment_id: shopifyFulfillmentId,
-      })
-      .select("id")
-      .single();
-    if (!fulfillment) {
-      skipped.push(orderId);
-      continue;
-    }
-
-    await supabaseService
-      .from("fulfillment_items")
-      .insert(remaining.map((i) => ({ fulfillment_id: fulfillment.id, order_item_id: i.id, quantity: i.quantity - i.fulfilled_quantity })));
-    for (const item of remaining) {
-      await supabaseService.from("order_items").update({ fulfilled_quantity: item.quantity }).eq("id", item.id);
-    }
-    await supabaseService.from("orders").update({ fulfillment_status: "FULFILLED" }).eq("id", orderId);
+    // The fulfillment row, its lines, fulfilled_quantity and the order's fulfillment_status, each
+    // done exactly once (finished automatically later if a step fails now).
+    await completeShipment(intent.id, { shopifyFulfillmentId });
 
     // Bulk shipments carry no tracking number, so the shipping email (always with its tracking
     // number) goes out when tracking is added to each one (editFulfillmentTracking).

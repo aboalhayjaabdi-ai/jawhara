@@ -79,8 +79,14 @@ export async function sendShippingEmailForFulfillment(
         : null,
       trackingNumber: f.tracking_number || null,
       carrier: f.tracking_company || null,
+      // One shipping email per shipment, even if this is retried (lib/fulfillment/shipment-intents.ts
+      // finishes interrupted shipments): Resend never sends a second email with the same key.
+      idempotencyKey: options.testRecipient ? undefined : `shipping-confirmation/${fulfillmentId}`,
     });
-    if (!sent.ok) return false;
+    // "invalid_idempotent_request": this shipment's email already went out earlier with different
+    // content (e.g. a template edit since) -- it was sent, so it is recorded as sent, never resent.
+    const alreadySent = !sent.ok && !options.testRecipient && /^invalid_idempotent_request/.test(sent.error);
+    if (!sent.ok && !alreadySent) return false;
     if (options.testRecipient) return true;
     await supabaseService.from("fulfillments").update({ notification_sent_at: new Date().toISOString() }).eq("id", fulfillmentId);
     // The review-request email goes out 14 days after this (once per order: the first shipment's

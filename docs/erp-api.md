@@ -223,10 +223,22 @@ Responses:
 
 // 200 -- this tracking number is already registered on this order (nothing new is created)
 { "result": "already_registered", "shipment": { … }, "requestId": "…" }
+
+// 202 Accepted -- Shopify has the shipment, but a later step (Jawhara's own records, tracking
+// registration, the customer's shipping email) did not finish in this call. Nothing more to do:
+// it is finished automatically within minutes. Sending the same request again finishes it at once
+// and answers 201 (or 200 already_registered); it never creates a second shipment or email.
+{ "result": "accepted", "orderNumber": "#SE103139", "trackingNumber": "YT2632000713274332",
+  "items": [ … ], "message": "…", "requestId": "…" }
 ```
 
-**Duplicate protection:** the same tracking number on the same order is never registered twice,
-quantities can never exceed what is left to ship, and Shopify itself refuses to fulfil items twice.
+**Duplicate protection:** the same tracking number on the same order is never registered twice
+(two simultaneous requests for it get `409 shipment_in_progress` for the second), quantities can
+never exceed what is left to ship, and Shopify itself refuses to fulfil items twice.
+
+**Shipments made directly in Shopify count too:** if someone fulfils (part of) an order directly in
+Shopify, the order's lines show it within minutes (`quantity` = what is still left to ship), so the
+ERP never ships those items again.
 
 ### `POST /shipments/{trackingNumber}/status`
 
@@ -259,6 +271,7 @@ Notifications, Shopify may email the customer on these events.
 | 403 | `ip_not_allowed` | IP not in `ERP_ALLOWED_IPS` (or an edge block: retry later) |
 | 404 | `order_not_found`, `shipment_not_found` | Check the number |
 | 409 | `order_cancelled`, `order_unpaid`, `order_hidden`, `nothing_to_fulfill`, `quantity_exceeds_remaining` | Do not ship / nothing left to ship |
+| 409 | `shipment_in_progress` | The same tracking number is being registered by another request; retry in a minute |
 | 413 | `payload_too_large` | Body over 100 kB |
 | 422 | `invalid_tracking_number`, `invalid_status`, `unknown_item`, … | Fix the field named in `message` |
 | 502 | `shopify_rejected` | Shopify refused; retry later with the same Idempotency-Key |

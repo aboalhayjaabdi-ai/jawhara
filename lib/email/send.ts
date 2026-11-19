@@ -14,7 +14,11 @@ export type SendEmailResult = { ok: true; id: string | null } | { ok: false; err
  * every failure is written to integration_errors (source "email") so it is visible without Vercel
  * log access.
  */
-export async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendEmailResult> {
+export async function sendEmail(
+  params: { to: string; subject: string; html: string; replyTo?: string },
+  // Optional: Resend sends one email per key (within 24 hours) however many times it is retried.
+  options: { idempotencyKey?: string } = {}
+): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     const error = "RESEND_API_KEY saknas";
@@ -24,7 +28,10 @@ export async function sendEmail(params: { to: string; subject: string; html: str
   }
   try {
     const resend = new Resend(apiKey);
-    const { data, error } = await resend.emails.send({ from: "Jawhara <bestallning@jawhara.se>", ...params });
+    const { data, error } = await resend.emails.send(
+      { from: "Jawhara <bestallning@jawhara.se>", ...params },
+      options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined
+    );
     if (error) {
       const message = `${error.name ?? "resend_error"}: ${error.message}`;
       console.error(`Resend rejected email "${params.subject}" to ${params.to}: ${message}`);

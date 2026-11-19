@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin, logAdminAction } from "@/lib/admin/auth";
 import { supabaseService } from "@/lib/supabase/service-client";
-import { sendShippingEmailForFulfillment } from "@/lib/email/fulfillment-shipping-email";
-import { registerFulfillmentsForTracking } from "@/lib/tracking/lookup";
 import { detectCarrierFromTrackingNumber } from "@/lib/tracking/detect-carrier";
 import { createShopifyFulfillment } from "@/lib/shopify/fulfillment-sync";
+import { beginShipment, completeShipment, markShopifyFailed, ShipmentInProgressError } from "@/lib/fulfillment/shipment-intents";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -60,12 +59,36 @@ export async function createFulfillment(
   // Jawhara when Shopify itself doesn't agree it shipped. An order with no shopify_id (a manual,
   // Jawhara-only order that was never pushed to Shopify) skips this entirely -- there is nothing
   // in Shopify to sync to.
+  // Recorded before Shopify is called (lib/fulfillment/shipment-intents.ts), so a shipment Shopify
+  // accepted is finished even if a later step fails here -- automatically, without a second
+  // shipment or a second email.
+  let intent;
+  try {
+    intent = await beginShipment({
+      orderId,
+      source: "admin",
+      createdBy: admin.adminId,
+      trackingNumber: input.trackingNumber || null,
+      trackingCompany: trackingCompany || null,
+      trackingUrl: input.trackingUrl || null,
+      items: requested,
+      shopifyRequired: !!order.shopify_id,
+      registerTracking: true,
+      // Always sent -- there is no option to skip it, for any admin role. Without a tracking number
+      // yet, it is sent instead when one is first added (editFulfillmentTracking).
+      sendEmail: !!input.trackingNumber,
+    });
+  } catch (err) {
+    if (err instanceof ShipmentInProgressError) return { ok: false, error: "Leveransen med detta spårningsnummer registreras redan. Vänta en stund och ladda om sidan." };
+    return { ok: false, error: "Kunde inte skapa leverans." };
+  }
+
   let shopifyFulfillmentId: string | null = null;
-  let shopifySyncError: string | null = null;
   if (order.shopify_id) {
     const itemsWithShopifyId = requested.map((line) => ({ line, item: itemById.get(line.orderItemId)! }));
     const missingShopifyId = itemsWithShopifyId.find(({ item }) => !item.shopify_id);
     if (missingShopifyId) {
+      await markShopifyFailed(intent.id, "line has no Shopify link");
       return {
         ok: false,
         error: `${missingShopifyId.item.title}: artikeln saknar Shopify-koppling och kan inte levereras via Shopify.`,
@@ -79,65 +102,24 @@ export async function createFulfillment(
       trackingUrl: input.trackingUrl || null,
     });
     if (!result.ok) {
+      await markShopifyFailed(intent.id, result.error);
       return { ok: false, error: `Shopify nekade leveransen: ${result.error}` };
     }
     shopifyFulfillmentId = result.shopifyFulfillmentId;
   }
 
-  const { data: fulfillment, error: fulfillmentError } = await supabaseService
-    .from("fulfillments")
-    .insert({
-      order_id: orderId,
-      status: "SUCCESS",
-      tracking_number: input.trackingNumber || null,
-      tracking_company: trackingCompany || null,
-      tracking_url: input.trackingUrl || null,
-      shipped_at: new Date().toISOString(),
-      created_by: admin.adminId,
-      // shopify_id follows the same bare-numeric-tail convention every other table uses (and
-      // that sync-orders.ts/order-sync-shared.ts upsert fulfillments pulled FROM Shopify by), so
-      // a fulfillment is recognizable as "known to Shopify" the same way regardless of which
-      // direction created it. shopify_fulfillment_id caches the full GID so later edits/cancels
-      // can call the Admin API directly without reconstructing it.
-      shopify_id: shopifyFulfillmentId ? shopifyFulfillmentId.split("/").pop() : null,
-      shopify_fulfillment_id: shopifyFulfillmentId,
-      shopify_sync_error: shopifySyncError,
-    })
-    .select("id")
-    .single();
-  if (fulfillmentError || !fulfillment) return { ok: false, error: fulfillmentError?.message ?? "Kunde inte skapa leverans." };
-
-  await registerFulfillmentsForTracking([
-    { id: fulfillment.id, trackingNumber: input.trackingNumber || null, trackingCompany: trackingCompany || null },
-  ]);
-
-  await supabaseService.from("fulfillment_items").insert(
-    requested.map((line) => ({ fulfillment_id: fulfillment.id, order_item_id: line.orderItemId, quantity: line.quantity }))
-  );
-
-  for (const line of requested) {
-    const item = itemById.get(line.orderItemId)!;
-    await supabaseService
-      .from("order_items")
-      .update({ fulfilled_quantity: item.fulfilled_quantity + line.quantity })
-      .eq("id", line.orderItemId);
-  }
-
-  const { data: refreshedItems } = await supabaseService.from("order_items").select("quantity, fulfilled_quantity").eq("order_id", orderId);
-  const allFulfilled = (refreshedItems ?? []).every((i) => i.fulfilled_quantity >= i.quantity);
-  const anyFulfilled = (refreshedItems ?? []).some((i) => i.fulfilled_quantity > 0);
-  const newStatus = allFulfilled ? "FULFILLED" : anyFulfilled ? "PARTIALLY_FULFILLED" : "UNFULFILLED";
-  await supabaseService.from("orders").update({ fulfillment_status: newStatus }).eq("id", orderId);
-
-  // Always sent -- there is no option to skip it, for any admin role. Without a tracking number
-  // yet, it is sent instead when one is first added (editFulfillmentTracking).
-  const notified = input.trackingNumber ? await sendShippingEmailForFulfillment(fulfillment.id) : false;
+  // The fulfillment row (shopify_id: the bare numeric tail every table uses, shopify_fulfillment_id:
+  // the full GID), its lines, fulfilled_quantity, the order's fulfillment_status, 17TRACK and the
+  // shipping email -- all in completeShipment, each step done exactly once.
+  const done = await completeShipment(intent.id, { shopifyFulfillmentId });
+  const notified = done.done ? done.customerNotified : false;
 
   await logAdminAction(admin.adminId, "orders.create_fulfillment", "order", orderId, {
-    fulfillmentId: fulfillment.id,
+    fulfillmentId: done.fulfillmentId,
     shopifyFulfillmentId,
     items: requested,
     notified,
+    ...(done.done ? {} : { pending: done.error }),
   });
   revalidatePath(`/admin/orders/${orderId}`);
   return { ok: true };

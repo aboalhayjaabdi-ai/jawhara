@@ -5,6 +5,8 @@ import { getOrderItemImages } from "@/lib/order-images";
 import { shopifyGraphQL } from "./client";
 import { activeStore, ID_COLUMNS, type StoreKey } from "./stores";
 import { GIFT_ATTR_VARIANT } from "./gift-line";
+import { recomputeFulfilledQuantities } from "./fulfilled-quantities";
+import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/shopify/order-sync-shared.ts must never be imported into client code");
@@ -333,15 +335,30 @@ export async function upsertShopifyOrder(o: ShopifyOrderNode, store: StoreKey = 
   if (fulfillmentRows.length) {
     const { data: existingFulfillments } = await supabaseService
       .from("fulfillments")
-      .select("shopify_id")
+      .select("shopify_id, status")
       .in("shopify_id", fulfillmentRows.map((f) => f.shopify_id!).filter(Boolean));
     const alreadyKnown = new Set((existingFulfillments ?? []).map((f) => f.shopify_id));
+    const knownStatus = new Map((existingFulfillments ?? []).map((f) => [f.shopify_id, f.status]));
 
     const { data: upserted } = await supabaseService
       .from("fulfillments")
       .upsert(fulfillmentRows, { onConflict: "shopify_id" })
       .select("id, shopify_id, tracking_number, tracking_company");
     newFulfillmentIds = (upserted ?? []).filter((f) => !alreadyKnown.has(f.shopify_id)).map((f) => f.id);
+
+    // Shipped quantity per line (what the ERP API and admin count "left to ship" from), taken from
+    // Shopify itself, so a (partial) shipment created directly in Shopify counts too. Only when a
+    // shipment is new or changed status in Shopify, or the order is partially shipped there -- an
+    // unchanged order costs no extra Shopify call. A failure here never stops the order sync.
+    const fulfillmentsChanged = fulfillmentRows.some((f) => !alreadyKnown.has(f.shopify_id) || knownStatus.get(f.shopify_id) !== f.status);
+    if (fulfillmentsChanged || o.displayFulfillmentStatus === "PARTIALLY_FULFILLED") {
+      try {
+        await recomputeFulfilledQuantities(orderId, { store });
+      } catch (err) {
+        console.error(`Shipped quantities for order ${o.name} not updated:`, (err as Error).message);
+        await logIntegrationError("webhook", `fulfilled_quantity not updated: ${(err as Error).message}`, { order: o.name }, orderId);
+      }
+    }
 
     const withTracking = (upserted ?? []).filter((f) => f.tracking_number);
 

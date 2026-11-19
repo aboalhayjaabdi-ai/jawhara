@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseService } from "@/lib/supabase/service-client";
 import { syncOrdersFromShopify } from "@/lib/shopify/sync-orders";
 import { logIntegrationError } from "@/lib/monitoring/log-integration-error";
+import { recoverShipmentIntents } from "@/lib/fulfillment/shipment-intents";
 
 /**
  * Reconciliation safety net, hit by three independent schedulers:
@@ -52,5 +53,10 @@ export async function GET(req: NextRequest) {
     await logIntegrationError("cron_sync", result.errors.join("; "), { source, pulledCount: result.pulledCount });
   }
 
-  return NextResponse.json(result);
+  // Shipments that Shopify accepted but whose remaining steps (Supabase rows, 17TRACK, shipping
+  // email) did not finish -- finished here, right after Shopify's shipments were brought in.
+  // Never throws, never repeats a step that is already done.
+  const shipments = await recoverShipmentIntents();
+
+  return NextResponse.json({ ...result, shipments });
 }
