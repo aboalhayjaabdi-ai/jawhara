@@ -145,7 +145,12 @@ export async function listReadyOrders(params: { exportState: "new" | "acknowledg
       .or("fulfillment_status.is.null,fulfillment_status.not.in.(FULFILLED,FULFILLMENT_NOT_REQUIRED,RESTOCKED)")
       .order("created_at", { ascending: true })
       .limit(100);
-    if (!includeTest) q = q.eq("is_test_order", false);
+    // Shopify orders only (the old Stripe-era site orders are never handed out); test orders only
+    // when asked for (integration testing).
+    q = includeTest ? q.or("source.eq.shopify,is_test_order.eq.true") : q.eq("source", "shopify").eq("is_test_order", false);
+    // Optional go-live date: orders placed before it are left to be handled the way they are today.
+    const from = process.env.ERP_ORDERS_FROM && !Number.isNaN(new Date(process.env.ERP_ORDERS_FROM).getTime()) ? new Date(process.env.ERP_ORDERS_FROM).toISOString() : null;
+    if (from) q = q.gte("created_at", from);
     if (cursor) q = q.gt("created_at", cursor);
     const { data, error } = await q;
     if (error) throw new Error(`orders query failed: ${error.message}`);
