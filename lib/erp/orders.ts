@@ -216,5 +216,5 @@ export async function acknowledgeOrder(orderNumber: string, erpReference: string
   };
   if (existing) await supabaseService.from("erp_order_exports").update(row).eq("order_id", order.id);
   else await supabaseService.from("erp_order_exports").insert({ ...row, first_fetched_at: now });
-  return { orderNumber: order.order_number, status, acknowledgedAt: row.acknowledged_at, erpReference: row.erp_reference, alreadyAcknowledged: !!existing?.acknowledged_at };
+  return { orderNumber: order.order_number, status, acknowledgedAt: new Date(row.acknowledged_at).toISOString(), erpReference: row.erp_reference, alreadyAcknowledged: !!existing?.acknowledged_at };
 }
