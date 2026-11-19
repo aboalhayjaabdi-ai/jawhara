@@ -3,11 +3,17 @@ import { getOrderItemImages } from "@/lib/order-images";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { orderStores } from "@/lib/shopify/stores";
 import { normalizeVariantTitle } from "@/lib/variant-title";
+import { COLOR_GROUPS } from "@/lib/product-colors";
 import { ErpError } from "./http";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/erp/orders.ts must never be imported into client code");
 }
+
+/** Products that are one colour of a model (e.g. "Lilly Väska" in black is its own product,
+ * lilly-vaska-1): handle -> model and colour, from the site's own colour choices
+ * (lib/product-colors.ts). Lets every order line name its colour in text, not only in the image. */
+const COLOR_BY_HANDLE = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, { model: g.model, color: m.color }] as const)));
 
 /** Paid (or partly refunded), not cancelled, test or hidden -- and something left to ship. */
 const PAYABLE = ["PAID", "PARTIALLY_REFUNDED", "paid", "partially_refunded"];
@@ -117,6 +123,10 @@ async function toErpOrders(rows: any[]): Promise<any[]> {
           productId: i.product_id,
           variantId: i.variant_id,
           productHandle: i.products?.handle ?? null,
+          // Model and colour when the product is one colour of a model (bags, many jewellery
+          // models); null otherwise -- then the colour/size is in variantTitle.
+          model: COLOR_BY_HANDLE.get(i.products?.handle)?.model ?? null,
+          color: COLOR_BY_HANDLE.get(i.products?.handle)?.color ?? null,
         })),
       erp: exp ? { firstFetchedAt: exp.first_fetched_at, acknowledgedAt: exp.acknowledged_at, erpReference: exp.erp_reference } : null,
     };

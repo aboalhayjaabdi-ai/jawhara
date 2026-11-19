@@ -85,7 +85,9 @@ Response:
           "imageUrl": "https://jghzjdirxdxtshywezxz.supabase.co/storage/v1/object/public/product-media/…-hd2.png",
           "productId": "f86edac4-…",
           "variantId": "8a1c…",
-          "productHandle": "lady-vaska-1"
+          "productHandle": "lady-vaska-1",
+          "model": "Lady Väska",
+          "color": "Röd"
         }
       ],
       "erp": { "firstFetchedAt": "2026-11-19T10:00:00Z", "acknowledgedAt": null, "erpReference": null }
@@ -99,6 +101,10 @@ Response:
 - `items[].quantity` is what is **still to ship** (ordered minus already shipped minus refunded).
 - `items[].imageUrl` is the image of the **exact purchased variant**, as frozen when the order came
   in (falls back to the variant's, then the product's current first image). Public URL, no login.
+- **What exactly to pack, per line:** `title` (product name), `variantTitle` (every option the
+  customer chose, e.g. "17 cm" or "Röd"; `null` when the product has no options), `model` + `color`
+  (set when the product is one colour of a model, e.g. bags: "Lilly Väska" / "Svart"),
+  `quantity`, and `imageUrl` (the picture of exactly that product/variant).
 - `status`: `ready`, `partially_fulfilled`, `fulfilled`, `cancelled`, `unpaid`, `hidden`.
 - `nextCursor` is `null` when there are no more pages.
 
@@ -150,6 +156,8 @@ Active products with variants, SKUs and public image URLs, from the website's ow
       "handle": "lady-vaska-1",
       "title": "Lady Väska",
       "productType": null,
+      "model": "Lady Väska",
+      "color": "Röd",
       "url": "https://jawhara.se/products/lady-vaska-1",
       "updatedAt": "2026-11-17T12:00:00Z",
       "images": ["https://…/product-media/…-hd2.png", "https://…/product-media/…-hd2.png"],

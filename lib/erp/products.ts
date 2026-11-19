@@ -1,6 +1,9 @@
 import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
 import { normalizeVariantTitle } from "@/lib/variant-title";
+import { COLOR_GROUPS } from "@/lib/product-colors";
+
+const COLOR_BY_HANDLE = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, { model: g.model, color: m.color }] as const)));
 
 if (typeof window !== "undefined") {
   throw new Error("lib/erp/products.ts must never be imported into client code");
@@ -48,6 +51,9 @@ export async function listProducts(params: { offset: number; limit: number; sku:
       handle: p.handle,
       title: p.title,
       productType: p.product_type || null,
+      // Set when this product is one colour of a model (lib/product-colors.ts), else null.
+      model: COLOR_BY_HANDLE.get(p.handle)?.model ?? null,
+      color: COLOR_BY_HANDLE.get(p.handle)?.color ?? null,
       url: `${siteUrl}/products/${p.handle}`,
       updatedAt: p.updated_at,
       images: imgs.map((m) => mediaUrl(m.storage_path)),
