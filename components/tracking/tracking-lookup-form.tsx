@@ -292,8 +292,10 @@ function ShipmentResults({ result }: { result: OrderTrackingResult & { ok: true 
 // --- Page component -----------------------------------------------------------------------
 
 export function TrackingLookupForm({ token }: { token?: string }) {
+  const [mode, setMode] = useState<"order" | "tracking">("order");
   const [orderNumber, setOrderNumber] = useState("");
   const [email, setEmail] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">(token ? "loading" : "idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OrderTrackingResult | null>(null);
@@ -336,7 +338,7 @@ export function TrackingLookupForm({ token }: { token?: string }) {
     const res = await fetch("/api/tracking/lookup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderNumber, email }),
+      body: JSON.stringify(mode === "tracking" ? { trackingNumber } : { orderNumber, email }),
     });
     const data = await res.json();
 
@@ -362,7 +364,52 @@ export function TrackingLookupForm({ token }: { token?: string }) {
       {(!token || !result?.ok) && (
         <>
           {token && error && <p className="mb-6 text-sm leading-6 text-muted">{error}</p>}
+          <div className="mb-6 flex max-w-md border border-line text-xs font-semibold uppercase tracking-wide" role="tablist" aria-label="Sök med">
+            {(
+              [
+                ["order", "Ordernummer + e-post"],
+                ["tracking", "Spårningsnummer"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={mode === key}
+                onClick={() => {
+                  setMode(key);
+                  setStatus("idle");
+                  setError(null);
+                  setResult(null);
+                }}
+                className={`flex-1 px-3 py-3 ${mode === key ? "bg-fg text-bg" : "text-muted"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
+            {mode === "tracking" && (
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="trackingNumber" className="text-xs uppercase tracking-wide text-muted">
+                  Spårningsnummer *
+                </label>
+                <input
+                  id="trackingNumber"
+                  name="trackingNumber"
+                  type="text"
+                  required
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  className="h-11 border border-line px-3 text-sm"
+                />
+                <p className="text-xs leading-5 text-muted">Du hittar spårningsnumret i mejlet du fick när paketet skickades.</p>
+              </div>
+            )}
+            {mode === "order" && (
+              <>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="orderNumber" className="text-xs uppercase tracking-wide text-muted">
                 Ordernummer *
@@ -391,6 +438,8 @@ export function TrackingLookupForm({ token }: { token?: string }) {
                 className="h-11 border border-line px-3 text-sm"
               />
             </div>
+              </>
+            )}
             {status === "error" && error && !token && <p className="text-xs text-red-700">{error}</p>}
             <button
               type="submit"

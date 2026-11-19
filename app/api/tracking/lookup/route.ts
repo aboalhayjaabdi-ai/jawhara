@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { lookupOrderTracking, lookupOrderTrackingByToken } from "@/lib/tracking/lookup";
+import { lookupOrderTracking, lookupOrderTrackingByToken, lookupTrackingNumber } from "@/lib/tracking/lookup";
 
 function clientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -11,15 +11,18 @@ export async function POST(req: NextRequest) {
   const token: string | undefined = body?.token;
   const orderNumber: string | undefined = body?.orderNumber;
   const email: string | undefined = body?.email;
+  const trackingNumber: string | undefined = typeof body?.trackingNumber === "string" ? body.trackingNumber : undefined;
 
   const result = token
     ? await lookupOrderTrackingByToken(token)
-    : orderNumber && email
-      ? await lookupOrderTracking(orderNumber, email, clientIp(req))
-      : null;
+    : trackingNumber
+      ? await lookupTrackingNumber(trackingNumber, clientIp(req))
+      : orderNumber && email
+        ? await lookupOrderTracking(orderNumber, email, clientIp(req))
+        : null;
 
   if (!result) {
-    return NextResponse.json({ error: "Ordernummer och e-postadress krävs." }, { status: 400 });
+    return NextResponse.json({ error: "Ange ordernummer och e-postadress, eller ditt spårningsnummer." }, { status: 400 });
   }
 
   if (!result.ok) {
@@ -28,6 +31,9 @@ export async function POST(req: NextRequest) {
     }
     if (result.reason === "invalid_token") {
       return NextResponse.json({ error: "Länken har gått ut eller är ogiltig. Sök upp din order nedan istället.", reason: "invalid_token" }, { status: 410 });
+    }
+    if (trackingNumber) {
+      return NextResponse.json({ error: "Spårningsnumret hittades inte. Kontrollera numret, eller sök med ordernummer och e-postadress." }, { status: 404 });
     }
     // Deliberately the same generic message for "no such order" and "wrong email" -- never
     // discloses which, to prevent order-number enumeration.

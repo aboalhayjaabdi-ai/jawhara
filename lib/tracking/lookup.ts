@@ -28,14 +28,19 @@ const RATE_LIMIT_MAX_ATTEMPTS = 10;
 // just caps how often we hit their API, not a cost concern.
 const CACHE_STALE_AFTER_MINUTES = 15;
 
-async function loadShipments(orderId: string): Promise<ShipmentTracking[]> {
-  const { data: fulfillments } = await supabaseService
+async function loadShipments(
+  orderId: string,
+  // Tracking-number-only lookups show just the shipment(s) with that number.
+  options: { onlyFulfillmentIds?: string[] } = {}
+): Promise<ShipmentTracking[]> {
+  let query = supabaseService
     .from("fulfillments")
     .select(
       "id, status, tracking_number, tracking_url, tracking_company, created_at, tracking_cache(events, tracking_api_registered_at, last_polled_at)"
     )
-    .eq("order_id", orderId)
-    .order("created_at");
+    .eq("order_id", orderId);
+  if (options.onlyFulfillmentIds) query = query.in("id", options.onlyFulfillmentIds);
+  const { data: fulfillments } = await query.order("created_at");
 
   const carrierCodeByName = await loadCarrierCodesByName();
 
@@ -96,6 +101,44 @@ export async function lookupOrderTracking(orderNumber: string, email: string, ip
 
   const shipments = await loadShipments(order.id);
   return { ok: true, orderNumber: order.order_number, notYetShipped: shipments.length === 0, shipments };
+}
+
+/** Tracking numbers as carriers print them: letters and digits, sometimes with dashes or spaces. */
+function normalizeTrackingNumber(input: string): string | null {
+  const cleaned = input.replace(/[\s-]+/g, "").toUpperCase();
+  return /^[A-Z0-9]{6,40}$/.test(cleaned) ? cleaned : null;
+}
+
+/**
+ * Looks a parcel up by its tracking number alone. Whether the number belongs to Jawhara is decided
+ * only from the shipments registered in Jawhara admin (the fulfillments table) -- an unknown number
+ * is never sent to 17TRACK, so it costs no quota. A known number is then tracked through 17TRACK
+ * exactly like the order-number + email lookup. Shows only that shipment's status (never the
+ * customer's name, address or items) and shares the same per-IP rate limit.
+ */
+export async function lookupTrackingNumber(trackingNumber: string, ipAddress: string): Promise<OrderTrackingResult> {
+  const allowed = await checkRateLimit(ipAddress);
+  await supabaseService.from("tracking_lookup_attempts").insert({ ip_address: ipAddress, order_number: `sparning:${trackingNumber.trim().slice(0, 60)}` });
+  if (!allowed) return { ok: false, reason: "rate_limited" };
+
+  const normalized = normalizeTrackingNumber(trackingNumber);
+  if (!normalized) return { ok: false, reason: "not_found" };
+
+  // Letters and digits only (validated above), so ilike here is an exact, case-insensitive match.
+  const { data: matches } = await supabaseService
+    .from("fulfillments")
+    .select("id, order_id, status, tracking_number, orders!inner(order_number, cancelled_at)")
+    .ilike("tracking_number", normalized)
+    .neq("status", "CANCELLED")
+    .limit(5);
+  const found = ((matches ?? []) as any[]).filter((f) => !f.orders?.cancelled_at);
+  if (found.length === 0) return { ok: false, reason: "not_found" };
+
+  const orderId = found[0].order_id as string;
+  const shipments = await loadShipments(orderId, {
+    onlyFulfillmentIds: found.filter((f) => f.order_id === orderId).map((f) => f.id as string),
+  });
+  return { ok: true, orderNumber: found[0].orders.order_number, notYetShipped: false, shipments };
 }
 
 /** Verifies the signed per-order token from a shipping-confirmation email's "Spåra mitt paket"

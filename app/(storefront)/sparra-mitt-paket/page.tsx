@@ -10,8 +10,8 @@ export default async function TrackOrderPage({ searchParams }: { searchParams: P
     <div className="mx-auto max-w-[760px] px-6 py-16 lg:px-0">
       <h1 className="mb-6 font-serif text-4xl">Spåra din beställning</h1>
       <p className="mb-8 text-sm leading-6 text-muted">
-        Ange ditt ordernummer och den e-postadress du använde vid beställningen för att se status på
-        din leverans.
+        Ange ditt ordernummer och den e-postadress du använde vid beställningen, eller bara ditt
+        spårningsnummer, för att se status på din leverans.
       </p>
       <TrackingLookupForm token={token} />
     </div>
