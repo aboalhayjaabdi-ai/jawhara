@@ -80,22 +80,81 @@ const DESCRIPTION_SV: Record<string, string> = {
   "arrived at origin facility": "Ankom till terminal",
   "waiting for a flight": "Väntar på flygtransport",
   "hand over to airline": "Överlämnad till flygbolag",
+  "parcel outbound from transit center": "Paketet har lämnat transitcentralen",
+  "departure from the original airport": "Avgått från avreseflygplatsen",
+  "arrive in transit center": "Ankommit till transitcentral",
+  "arrival to the destination airport": "Ankommit till destinationsflygplatsen",
+  "released from customs: customs cleared": "Tullklarerat",
+  "the shipment item is under transportation": "Paketet är under transport",
+  "arrived at sort facility": "Ankommit till sorteringsterminal",
+  "departed from facility": "Avgått från terminal",
+  "shipping information received": "Paketinformation mottagen",
+  "the shipment item has been loaded": "Paketet har lastats",
+  "the shipment item has arrived at the country of destination": "Paketet har ankommit till Sverige",
+  "the shipmen item has been delivered to the recipients mailbox": "Paketet har levererats till din postlåda",
+  "the shipment item has been delivered to the recipients mailbox": "Paketet har levererats till din postlåda",
+  "the shipment item has been delivered to the recipient's mailbox": "Paketet har levererats till din postlåda",
+  "customs clearance agent received the shipment in destnation country": "Tullombudet i Sverige har tagit emot paketet",
+  "customs clearance agent received the shipment in destination country": "Tullombudet i Sverige har tagit emot paketet",
+  "shipment is ready for outbound": "Paketet är redo att skickas",
+  "clearance processing completed - import": "Tullbehandling slutförd (import)",
+  "clearence processing completed - import": "Tullbehandling slutförd (import)",
+  "start customs clearence": "Tullbehandling påbörjad",
+  "start customs clearance": "Tullbehandling påbörjad",
+  "noa received": "Ankomstavisering mottagen",
+  "international flight has departed": "Internationellt flyg har avgått",
+  "collected at cargo terminal": "Mottaget vid fraktterminal",
+  "international flight has arrived": "Internationellt flyg har landat",
+  "delivered to local carrier": "Överlämnat till lokal transportör",
+  "arrived at the warehouse of customs broker": "Ankommit till tullombudets lager",
+  "in transit,it'sprogressing through delivery network": "Under transport",
+  "in transit": "Under transport",
+  "the package has arrived at terminal (t1)": "Paketet har ankommit till terminalen",
+  "the package has arrived at terminal (t2)": "Paketet har ankommit till terminalen",
+  "your item is being processed at our sorting center": "Paketet hanteras på sorteringscentralen",
+  "the shipment item has been delivered at the recipient's door": "Paketet har levererats till din dörr",
+  "early bird has received the package": "Early Bird har tagit emot paketet",
+  "a text message notification has been sent to the recipient": "Ett sms har skickats till dig",
+  "the booking of the delivery is completed": "Leveransen är bokad",
+  "the package is activated for delivery": "Paketet är klart för leverans",
+  "the shipment item has been delivered to a service point": "Paketet har levererats till ombud",
+  "the package has been delivered in a bag at the mailbox": "Paketet har levererats i en påse vid postlådan",
+  "the shipment item has been delivered": "Paketet har levererats",
+  "the package has been delivered to the mailbox": "Paketet har levererats till din postlåda",
+  "returned parcel has been recieved by shipper": "Returpaketet har tagits emot av avsändaren",
+  "returned parcel has been received by shipper": "Returpaketet har tagits emot av avsändaren",
+  "the package's weight and/or size have been updated": "Paketets vikt och/eller storlek har uppdaterats",
+  "shipment has been returned to sender": "Paketet har returnerats till avsändaren",
+  "delayed operation": "Försenad hantering",
 };
+
+// Chinese script, and place names in China, that 17TRACK's carriers put in event texts and
+// locations -- nothing about the parcel's origin is ever shown to a customer.
+const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+const CHINA_PLACES =
+  /\b(china|chinese|cn|prc|mainland|hong\s*kong|hk|macau|yiwu|jinhua|nancheng|hongqiao|pudong|shatian|dongguan|humen|changping|shenzhen|guangzhou|baiyun|foshan|zhongshan|huizhou|shanghai|beijing|hangzhou|ningbo|suzhou|wuxi|xiamen|fuzhou|quanzhou|wuhan|chengdu|chongqing|zhengzhou|qingdao|tianjin|nanjing|guangdong|zhejiang|jiangsu|fujian|shandong|henan|hubei|sichuan)\b/i;
 
 function translateDescription(description: string | undefined, fallbackLabel: string): string {
   if (!description) return fallbackLabel;
-  const key = description.trim().toLowerCase().replace(/\.+$/, "");
+  // Chinese text, or anything naming a place in China: the Swedish status label instead.
+  if (CJK.test(description) || CHINA_PLACES.test(description)) return fallbackLabel;
+  const key = description.trim().toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/\.+$/, "");
   if (DESCRIPTION_SV[key]) return DESCRIPTION_SV[key];
   // Already Swedish (e.g. a domestic last-mile carrier's own message) -- pass it through rather
-  // than translating text that doesn't need it.
-  if (/[åäö]/i.test(description)) return description;
+  // than translating text that doesn't need it. Swedish letters, or words English never uses.
+  if (/[åäö]/i.test(description) || /\b(paketet|paket|ditt|din|har|till|mottagaren|ombud|sändning|aviserad|levererats?|ankommit)\b/i.test(description)) {
+    return description;
+  }
   return fallbackLabel;
 }
 
-// Never show the parcel's country of origin to a customer -- strips China/CN in any of the forms
-// 17TRACK sends them in, and drops the location entirely if nothing real is left after that.
+// Never show the parcel's country of origin to a customer -- drops Chinese locations entirely
+// (see CHINA_PLACES), strips any leftover China/CN, and drops the location if nothing real is left.
 function cleanLocation(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
+  // Any location in China (Chinese script, a Chinese city/province, "China"/"CN") is dropped
+  // entirely, as are carrier-internal ids like "60dc4a9adc07fa00085326e1".
+  if (CJK.test(raw) || CHINA_PLACES.test(raw) || /^[0-9a-f]{20,}$/i.test(raw.trim())) return undefined;
   const cleaned = raw
     .replace(/mainland china/gi, "")
     .replace(/\bchina\b/gi, "")
