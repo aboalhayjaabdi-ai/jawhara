@@ -2,6 +2,7 @@ import { supabaseService } from "@/lib/supabase/service-client";
 import { mediaUrl } from "@/lib/supabase/media";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { COLOR_GROUPS } from "@/lib/product-colors";
+import { zhLine, zhVariant } from "./zh";
 
 const COLOR_BY_HANDLE = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) => [m.handle, { model: g.model, color: m.color }] as const)));
 
@@ -27,7 +28,7 @@ export async function listProducts(params: { offset: number; limit: number; sku:
 
   let q = supabaseService
     .from("products")
-    .select("id, handle, title, product_type, updated_at, product_variants(id, sku, barcode, title, option1, option2, option3, price, compare_at_price, weight, weight_unit)", { count: "exact" })
+    .select("id, handle, title, product_type, updated_at, product_variants(id, sku, barcode, title, option1, option2, option3, weight, weight_unit)", { count: "exact" })
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .range(params.offset, params.offset + params.limit - 1);
@@ -54,6 +55,10 @@ export async function listProducts(params: { offset: number; limit: number; sku:
       // Set when this product is one colour of a model (lib/product-colors.ts), else null.
       model: COLOR_BY_HANDLE.get(p.handle)?.model ?? null,
       color: COLOR_BY_HANDLE.get(p.handle)?.color ?? null,
+      // Simplified Chinese for the warehouse (lib/erp/zh.ts); the fields above are unchanged.
+      zh: (({ title, model, color }) => ({ title, model, color }))(
+        zhLine({ title: p.title, variantTitle: null, model: COLOR_BY_HANDLE.get(p.handle)?.model ?? null, color: COLOR_BY_HANDLE.get(p.handle)?.color ?? null })
+      ),
       url: `${siteUrl}/products/${p.handle}`,
       updatedAt: p.updated_at,
       images: imgs.map((m) => mediaUrl(m.storage_path)),
@@ -65,12 +70,11 @@ export async function listProducts(params: { offset: number; limit: number; sku:
           barcode: v.barcode || null,
           title: normalizeVariantTitle(v.title),
           options: [v.option1, v.option2, v.option3].filter((o) => o && o !== "Default Title"),
-          price: Number(v.price),
-          compareAtPrice: v.compare_at_price != null ? Number(v.compare_at_price) : null,
           weight: v.weight != null ? Number(v.weight) : null,
           weightUnit: v.weight_unit,
           imageUrl: own ? mediaUrl(own.storage_path) : first,
           imageIsVariantSpecific: !!own,
+          zh: { title: zhVariant(v.title) },
         };
       }),
     };

@@ -5,6 +5,7 @@ import { orderStores } from "@/lib/shopify/stores";
 import { normalizeVariantTitle } from "@/lib/variant-title";
 import { COLOR_GROUPS } from "@/lib/product-colors";
 import { ErpError } from "./http";
+import { zhLine } from "./zh";
 
 if (typeof window !== "undefined") {
   throw new Error("lib/erp/orders.ts must never be imported into client code");
@@ -18,9 +19,11 @@ const COLOR_BY_HANDLE = new Map(COLOR_GROUPS.flatMap((g) => g.members.map((m) =>
 /** Paid (or partly refunded), not cancelled, test or hidden -- and something left to ship. */
 const PAYABLE = ["PAID", "PARTIALLY_REFUNDED", "paid", "partially_refunded"];
 
+// No price, total, discount, shipping cost or tax column is even read: the forwarder's ERP must not
+// see what the customer paid (financial_status is read only to decide whether to ship).
 const ORDER_SELECT =
-  "id, shopify_id, order_number, phone, currency_code, financial_status, fulfillment_status, subtotal_price, total_shipping, total_discounts, total_price, note, cancelled_at, processed_at, created_at, shipping_address_id, hidden_at, is_test_order, " +
-  "order_items(id, sku, title, quantity, fulfilled_quantity, refunded_quantity, unit_price, discounted_unit_price, image_url, variant_title_snapshot, variant_id, product_id, product_variants(title, weight, weight_unit), products(handle))";
+  "id, shopify_id, order_number, phone, financial_status, fulfillment_status, note, cancelled_at, processed_at, created_at, shipping_address_id, hidden_at, is_test_order, " +
+  "order_items(id, sku, title, quantity, fulfilled_quantity, refunded_quantity, image_url, variant_title_snapshot, variant_id, product_id, product_variants(title, weight, weight_unit), products(handle))";
 
 export type ErpOrderStatus = "ready" | "partially_fulfilled" | "fulfilled" | "cancelled" | "unpaid" | "hidden";
 
@@ -87,14 +90,7 @@ async function toErpOrders(rows: any[]): Promise<any[]> {
       status: orderStatus(o),
       createdAt: o.created_at,
       paidAt: o.processed_at,
-      currency: o.currency_code,
       shippingMethod: (o.shopify_id && methods.get(o.shopify_id)) || null,
-      totals: {
-        subtotal: Number(o.subtotal_price ?? 0),
-        shipping: Number(o.total_shipping ?? 0),
-        discounts: Number(o.total_discounts ?? 0),
-        total: Number(o.total_price ?? 0),
-      },
       // Only what is needed to deliver the parcel: no email address, no customer history.
       recipient: {
         name: [a?.first_name, a?.last_name].filter(Boolean).join(" ") || null,
@@ -107,27 +103,34 @@ async function toErpOrders(rows: any[]): Promise<any[]> {
       customerNote: o.note || null,
       items: ((o.order_items ?? []) as any[])
         .filter((i) => remaining(i) > 0)
-        .map((i) => ({
-          lineId: i.id,
-          sku: i.sku || null,
-          title: i.title,
-          variantTitle: normalizeVariantTitle(i.variant_title_snapshot ?? i.product_variants?.title ?? null),
-          quantity: remaining(i),
-          orderedQuantity: i.quantity,
-          unitPrice: Number(i.discounted_unit_price ?? i.unit_price),
-          weight: i.product_variants?.weight != null ? Number(i.product_variants.weight) : null,
-          weightUnit: i.product_variants?.weight_unit ?? null,
-          // The exact purchased variant's image, frozen when the order came in; otherwise the
-          // variant's (or product's) current first image.
-          imageUrl: i.image_url ?? fallbackImages[i.id]?.imageUrl ?? null,
-          productId: i.product_id,
-          variantId: i.variant_id,
-          productHandle: i.products?.handle ?? null,
+        .map((i) => {
+          const variantTitle = normalizeVariantTitle(i.variant_title_snapshot ?? i.product_variants?.title ?? null);
           // Model and colour when the product is one colour of a model (bags, many jewellery
           // models); null otherwise -- then the colour/size is in variantTitle.
-          model: COLOR_BY_HANDLE.get(i.products?.handle)?.model ?? null,
-          color: COLOR_BY_HANDLE.get(i.products?.handle)?.color ?? null,
-        })),
+          const model = COLOR_BY_HANDLE.get(i.products?.handle)?.model ?? null;
+          const color = COLOR_BY_HANDLE.get(i.products?.handle)?.color ?? null;
+          return {
+            lineId: i.id,
+            sku: i.sku || null,
+            title: i.title,
+            variantTitle,
+            quantity: remaining(i),
+            orderedQuantity: i.quantity,
+            weight: i.product_variants?.weight != null ? Number(i.product_variants.weight) : null,
+            weightUnit: i.product_variants?.weight_unit ?? null,
+            // The exact purchased variant's image, frozen when the order came in; otherwise the
+            // variant's (or product's) current first image.
+            imageUrl: i.image_url ?? fallbackImages[i.id]?.imageUrl ?? null,
+            productId: i.product_id,
+            variantId: i.variant_id,
+            productHandle: i.products?.handle ?? null,
+            model,
+            color,
+            // The same line in Simplified Chinese for the warehouse (lib/erp/zh.ts); the fields
+            // above stay exactly as they are.
+            zh: zhLine({ title: i.title, variantTitle, model, color, quantity: remaining(i) }),
+          };
+        }),
       erp: exp ? { firstFetchedAt: exp.first_fetched_at, acknowledgedAt: exp.acknowledged_at, erpReference: exp.erp_reference } : null,
     };
   });

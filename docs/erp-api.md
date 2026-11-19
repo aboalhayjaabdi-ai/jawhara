@@ -6,7 +6,11 @@ existing order and product data (Supabase, kept in sync with Shopify); nothing i
 the Shopify checkout or the existing order sync is changed by it.
 
 - **Base URL:** `https://www.jawhara.se/api/erp/v1`
-- **Format:** JSON (UTF-8). Times are ISO 8601 in UTC. Prices are in the order's currency (SEK).
+- **Format:** JSON (UTF-8). Times are ISO 8601 in UTC.
+- **No financial information:** no endpoint returns prices, order values, totals, discounts,
+  shipping costs, taxes or currency. Jawhara does not even read those columns for this API.
+- **Simplified Chinese:** every order line and product carries a `zh` block (简体中文) beside the
+  unchanged Swedish fields; see "Chinese (`zh`)" below.
 - **Code:** `app/api/erp/v1/*`, `lib/erp/*`. Tables: `erp_order_exports`, `erp_api_requests`
   (migration `supabase/migrations/0052_erp_api.sql`).
 
@@ -62,9 +66,7 @@ Response:
       "status": "ready",
       "createdAt": "2026-11-03T14:30:24+00:00",
       "paidAt": "2026-11-03T14:30:26+00:00",
-      "currency": "SEK",
       "shippingMethod": "PostNord Hemleverans",
-      "totals": { "subtotal": 1248, "shipping": 0, "discounts": 0, "total": 1248 },
       "recipient": { "name": "Anna Andersson", "company": null, "phone": "+46701234567" },
       "shippingAddress": {
         "address1": "Storgatan 1", "address2": null, "city": "Stockholm",
@@ -79,7 +81,6 @@ Response:
           "variantTitle": "Röd",
           "quantity": 1,
           "orderedQuantity": 1,
-          "unitPrice": 999,
           "weight": 0,
           "weightUnit": "KILOGRAMS",
           "imageUrl": "https://jghzjdirxdxtshywezxz.supabase.co/storage/v1/object/public/product-media/…-hd2.png",
@@ -87,7 +88,9 @@ Response:
           "variantId": "8a1c…",
           "productHandle": "lady-vaska-1",
           "model": "Lady Väska",
-          "color": "Röd"
+          "color": "Röd",
+          "zh": { "title": "Lady 包", "model": "Lady 包", "color": "红色", "variant": "红色",
+                  "quantity": "数量 1", "line": "Lady 包 – 红色 · 数量 1" }
         }
       ],
       "erp": { "firstFetchedAt": "2026-11-19T10:00:00Z", "acknowledgedAt": null, "erpReference": null }
@@ -106,6 +109,25 @@ Response:
   (set when the product is one colour of a model, e.g. bags: "Lilly Väska" / "Svart"),
   `quantity`, and `imageUrl` (the picture of exactly that product/variant).
 - `status`: `ready`, `partially_fulfilled`, `fulfilled`, `cancelled`, `unpaid`, `hidden`.
+
+#### Chinese (`zh`)
+
+`items[].zh` repeats the line in Simplified Chinese for the warehouse; every other field stays
+exactly as before (Swedish), so lines are still matched by `lineId`. Customer data (name,
+address, phone, note) is never translated.
+
+| `zh` field | Example | From |
+|---|---|---|
+| `title` | `Aura 戒指` | `title` |
+| `model` | `水滴形镶边戒指` | `model` |
+| `color` | `银色` | `color` |
+| `variant` | `尺寸 7`, `尺寸 17 厘米（标准）`, `黑色` | `variantTitle` (sizes as 尺寸, colours as colours) |
+| `quantity` | `数量 2` | `quantity` |
+| `line` | `Aura 戒指 – 银色 · 尺寸 7 · 数量 1` | all of the above, ready to print |
+
+From a fixed glossary in `lib/erp/zh.ts` (no translation service). Model names such as "Lilly" or
+"Aura" stay in Latin letters; a word not in the glossary is left as it is rather than guessed.
+Any `zh` value can be `null` when the Swedish field is empty.
 - `nextCursor` is `null` when there are no more pages.
 
 ### `GET /orders/{orderNumber}`
@@ -158,25 +180,27 @@ Active products with variants, SKUs and public image URLs, from the website's ow
       "productType": null,
       "model": "Lady Väska",
       "color": "Röd",
+      "zh": { "title": "Lady 包", "model": "Lady 包", "color": "红色" },
       "url": "https://jawhara.se/products/lady-vaska-1",
       "updatedAt": "2026-11-17T12:00:00Z",
       "images": ["https://…/product-media/…-hd2.png", "https://…/product-media/…-hd2.png"],
       "variants": [
         {
           "variantId": "8a1c…", "sku": "LADY-RED", "barcode": null, "title": "Röd", "options": ["Röd"],
-          "price": 999, "compareAtPrice": 1899, "weight": 0, "weightUnit": "KILOGRAMS",
-          "imageUrl": "https://…/product-media/…-hd2.png", "imageIsVariantSpecific": true
+          "weight": 0, "weightUnit": "KILOGRAMS",
+          "imageUrl": "https://…/product-media/…-hd2.png", "imageIsVariantSpecific": true,
+          "zh": { "title": "红色" }
         }
       ]
     }
   ],
-  "total": 446,
+  "total": 380,
   "nextOffset": 100,
   "requestId": "…"
 }
 ```
 
-`variants[].imageUrl` is the image assigned to that variant (`imageIsVariantSpecific: true`),
+`total` is the number of products (not money). `variants[].imageUrl` is the image assigned to that variant (`imageIsVariantSpecific: true`),
 otherwise the product's first image. Images are only read; nothing is uploaded to Shopify.
 
 ## 3. Shipments (tracking numbers)
