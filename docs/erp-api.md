@@ -10,7 +10,7 @@ the Shopify checkout or the existing order sync is changed by it.
 - **No financial information:** no endpoint returns prices, order values, totals, discounts,
   shipping costs, taxes or currency. Jawhara does not even read those columns for this API.
 - **Simplified Chinese:** every order line and product carries a `zh` block (简体中文) beside the
-  unchanged Swedish fields; see "Chinese (`zh`)" below.
+  unchanged Swedish fields (the product name itself stays Swedish); see "Chinese (`zh`)" below.
 - **Code:** `app/api/erp/v1/*`, `lib/erp/*`. Tables: `erp_order_exports`, `erp_api_requests`
   (migration `supabase/migrations/0052_erp_api.sql`).
 
@@ -89,8 +89,8 @@ Response:
           "productHandle": "lady-vaska-1",
           "model": "Lady Väska",
           "color": "Röd",
-          "zh": { "title": "Lady 包", "model": "Lady 包", "color": "红色", "variant": "红色",
-                  "quantity": "数量 1", "line": "Lady 包 – 红色 · 数量 1" }
+          "zh": { "model": "Lady 包", "color": "红色", "variant": "红色",
+                  "quantity": "数量 1", "line": "Lady Väska – 红色 · 数量 1" }
         }
       ],
       "erp": { "firstFetchedAt": "2026-11-19T10:00:00Z", "acknowledgedAt": null, "erpReference": null }
@@ -112,21 +112,22 @@ Response:
 
 #### Chinese (`zh`)
 
-`items[].zh` repeats the line in Simplified Chinese for the warehouse; every other field stays
-exactly as before (Swedish), so lines are still matched by `lineId`. Customer data (name,
+`items[].zh` gives the line's colour, size/variant, quantity and model in Simplified Chinese for
+the warehouse. The product name itself stays Swedish (`title`, as on jawhara.se), and every other
+field stays exactly as before, so lines are still matched by `lineId`. Customer data (name,
 address, phone, note) is never translated.
 
 | `zh` field | Example | From |
 |---|---|---|
-| `title` | `Aura 戒指` | `title` |
 | `model` | `水滴形镶边戒指` | `model` |
 | `color` | `银色` | `color` |
 | `variant` | `尺寸 7`, `尺寸 17 厘米（标准）`, `黑色` | `variantTitle` (sizes as 尺寸, colours as colours) |
 | `quantity` | `数量 2` | `quantity` |
-| `line` | `Aura 戒指 – 银色 · 尺寸 7 · 数量 1` | all of the above, ready to print |
+| `line` | `Aura ring – 银色 · 尺寸 7 · 数量 1` | the Swedish `title` + the above, ready to print |
 
-From a fixed glossary in `lib/erp/zh.ts` (no translation service). Model names such as "Lilly" or
-"Aura" stay in Latin letters; a word not in the glossary is left as it is rather than guessed.
+From a fixed glossary in `lib/erp/zh.ts` (no translation service). Names such as "Lilly" or
+"Aura" in `model` stay in Latin letters; a word not in the glossary is left as it is rather than
+guessed.
 Any `zh` value can be `null` when the Swedish field is empty.
 - `nextCursor` is `null` when there are no more pages.
 
@@ -180,7 +181,7 @@ Active products with variants, SKUs and public image URLs, from the website's ow
       "productType": null,
       "model": "Lady Väska",
       "color": "Röd",
-      "zh": { "title": "Lady 包", "model": "Lady 包", "color": "红色" },
+      "zh": { "model": "Lady 包", "color": "红色" },
       "url": "https://jawhara.se/products/lady-vaska-1",
       "updatedAt": "2026-11-17T12:00:00Z",
       "images": ["https://…/product-media/…-hd2.png", "https://…/product-media/…-hd2.png"],
@@ -189,7 +190,7 @@ Active products with variants, SKUs and public image URLs, from the website's ow
           "variantId": "8a1c…", "sku": "LADY-RED", "barcode": null, "title": "Röd", "options": ["Röd"],
           "weight": 0, "weightUnit": "KILOGRAMS",
           "imageUrl": "https://…/product-media/…-hd2.png", "imageIsVariantSpecific": true,
-          "zh": { "title": "红色" }
+          "zh": { "variant": "红色" }
         }
       ]
     }

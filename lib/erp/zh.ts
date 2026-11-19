@@ -1,5 +1,6 @@
 /**
- * Simplified Chinese (简体中文) for the freight forwarder's warehouse staff -- ERP API only.
+ * Simplified Chinese (简体中文) for the freight forwarder's warehouse staff -- ERP API only. Product names
+ * themselves stay Swedish; colours, sizes, quantities and model descriptions are translated.
  *
  * A fixed, reviewable glossary (no translation service: the same Swedish always gives the same
  * Chinese, and no data leaves Jawhara). Only product words are translated: product types, colours,
@@ -170,15 +171,18 @@ export function zhVariant(raw: string | null | undefined): string | null {
   return zhColor(s) ?? zhName(s);
 }
 
-/** The Chinese block for one order line or product. Originals are never changed. */
+/**
+ * The Chinese block for one order line or product. The product name itself stays Swedish (as on
+ * jawhara.se); colour, size/variant, quantity and model are given in Chinese. Originals are never
+ * changed.
+ */
 export function zhLine(input: { title: string | null; variantTitle: string | null; model: string | null; color: string | null; quantity?: number }) {
-  const title = zhName(input.title);
   const model = zhName(input.model);
   const color = zhColor(input.color) ?? (input.color ? zhName(input.color) : null);
   const variant = zhVariant(input.variantTitle);
   const quantity = input.quantity != null ? `数量 ${input.quantity}` : null;
-  // e.g. "Lilly 包 – 黑色 · 数量 1", "Aura 戒指 – 银色 · 尺寸 7 · 数量 1"
+  // e.g. "Lilly Väska – 黑色 · 数量 1", "Aura ring – 银色 · 尺寸 7 · 数量 1"
   const variantPart = variant && variant !== color ? variant : null;
-  const line = [title ?? "", color ? ` – ${color}` : "", variantPart ? ` · ${variantPart}` : "", quantity ? ` · ${quantity}` : ""].join("");
-  return { title, model, color, variant, quantity, line: line || null };
+  const line = [input.title ?? "", color ? ` – ${color}` : "", variantPart ? ` · ${variantPart}` : "", quantity ? ` · ${quantity}` : ""].join("");
+  return { model, color, variant, quantity, line: line || null };
 }

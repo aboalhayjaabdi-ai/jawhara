@@ -56,7 +56,8 @@ export async function listProducts(params: { offset: number; limit: number; sku:
       model: COLOR_BY_HANDLE.get(p.handle)?.model ?? null,
       color: COLOR_BY_HANDLE.get(p.handle)?.color ?? null,
       // Simplified Chinese for the warehouse (lib/erp/zh.ts); the fields above are unchanged.
-      zh: (({ title, model, color }) => ({ title, model, color }))(
+      // (the product name itself stays Swedish, in `title`).
+      zh: (({ model, color }) => ({ model, color }))(
         zhLine({ title: p.title, variantTitle: null, model: COLOR_BY_HANDLE.get(p.handle)?.model ?? null, color: COLOR_BY_HANDLE.get(p.handle)?.color ?? null })
       ),
       url: `${siteUrl}/products/${p.handle}`,
@@ -74,7 +75,7 @@ export async function listProducts(params: { offset: number; limit: number; sku:
           weightUnit: v.weight_unit,
           imageUrl: own ? mediaUrl(own.storage_path) : first,
           imageIsVariantSpecific: !!own,
-          zh: { title: zhVariant(v.title) },
+          zh: { variant: zhVariant(v.title) },
         };
       }),
     };
