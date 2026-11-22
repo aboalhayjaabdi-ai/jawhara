@@ -79,7 +79,7 @@ export default async function BlackMonthPage() {
       {/* 1. 3 för 2 på alla smycken -- the headline offer */}
       <section className="bg-fg text-bg">
         <div className="mx-auto max-w-[880px] px-6 py-12 text-center sm:py-14">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-bg/70">Black Month</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-bg/70">{BLACK_MONTH.name}</p>
           <h2 className="mt-3 text-[24px] uppercase leading-tight tracking-[0.08em] sm:text-[34px]">{BLACK_MONTH.threeForTwo.heading}</h2>
           <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-bg/80">{BLACK_MONTH.threeForTwo.pdpBody}</p>
           <nav aria-label="Smyckeskategorier" className="mx-auto mt-7 flex max-w-lg flex-wrap justify-center gap-2.5">

@@ -1,5 +1,6 @@
 /**
- * Black Month campaign -- the ONE place campaign-specific copy and switches live.
+ * Black Week campaign (was Black Month; the code names and the /black-month URL are kept so links
+ * and ads keep working) -- the ONE place campaign-specific copy and switches live.
  *
  * Turning the campaign off later:
  *   1. Set `BLACK_MONTH.active` to false. That alone:
@@ -21,36 +22,36 @@
  */
 export const BLACK_MONTH = {
   active: true,
-  name: "Black Month",
+  name: "Black Week",
   path: "/black-month",
   collectionHandle: "black-month",
 
   /** Product-card / product-page label for products with a compare-at price (replaces "Rea"). */
-  saleLabel: "Black Month",
+  saleLabel: "Black Week",
 
-  announcements: ["BLACK MONTH – UPPTÄCK VÅRA ERBJUDANDEN", "3 FÖR 2 PÅ ALLA SMYCKEN", "FRI FRAKT PÅ ALLA BESTÄLLNINGAR INOM SVERIGE"],
+  announcements: ["BLACK WEEK – UPPTÄCK VÅRA ERBJUDANDEN", "3 FÖR 2 PÅ ALLA SMYCKEN", "FRI FRAKT PÅ ALLA BESTÄLLNINGAR INOM SVERIGE"],
 
   threeForTwo: {
     heading: "3 FÖR 2 PÅ ALLA SMYCKEN",
-    pdpHeading: "BLACK MONTH – 3 FÖR 2",
+    pdpHeading: "BLACK WEEK – 3 FÖR 2",
     body: "Köp 3 smycken och få det billigaste på köpet.",
     pdpBody: "Köp 3 smycken och få det billigaste på köpet. Rabatten dras automatiskt i varukorgen.",
   },
 
   /** Short line under the price on bag product pages (only shown when the product has a compare-at price). */
-  bagPriceNote: "Black Month-pris · Fri frakt inom Sverige",
+  bagPriceNote: "Black Week-pris · Fri frakt inom Sverige",
   /** products.template_suffix values that identify a bag product page. */
   bagTemplateKeys: ["vaskor", "erbjudande-vaskor", "gift-sets"],
 
   page: {
-    title: "BLACK MONTH",
+    title: "BLACK WEEK",
     subtitle: "Smycken och väskor till kampanjpriser – och 3 för 2 på alla smycken.",
-    seoTitle: "Black Month – smycken och väskor till kampanjpris",
-    seoDescription: "Upptäck Jawharas Black Month: 3 för 2 på alla smycken, smycken och väskor till kampanjpriser och fri frakt inom Sverige.",
+    seoTitle: "Black Week – smycken och väskor till kampanjpris",
+    seoDescription: "Upptäck Jawharas Black Week: 3 för 2 på alla smycken, smycken och väskor till kampanjpriser och fri frakt inom Sverige.",
     /** Order on the page: jewelry first, bags second (see app/(storefront)/black-month/page.tsx). */
     jewelryOffers: {
       heading: "Smycken till kampanjpris",
-      intro: "Armband, halsband, örhängen och ringar – nu till Black Month-pris. Köp 3 och få det billigaste på köpet.",
+      intro: "Armband, halsband, örhängen och ringar – nu till Black Week-pris. Köp 3 och få det billigaste på köpet.",
       collectionHandle: "alla-smycken",
       limit: 12,
       buttonText: "Se alla smycken",
@@ -58,7 +59,7 @@ export const BLACK_MONTH = {
     /** H bags, Noélle Väska and Noélle Väska Mini first. */
     hBagOffers: {
       heading: "Noélle-väskor till kampanjpris",
-      intro: "Noélle och Noélle Mini – tidlösa favoriter, nu till Black Month-pris.",
+      intro: "Noélle och Noélle Mini – tidlösa favoriter, nu till Black Week-pris.",
       limit: 8,
       buttonText: "Se alla H väskor",
       buttonHref: "/collections/h-vaskor",
@@ -78,7 +79,7 @@ export const BLACK_MONTH = {
   },
 } as const;
 
-/** Label for the "has a compare-at price" badge -- "Black Month" during the campaign, "Rea" otherwise. */
+/** Label for the "has a compare-at price" badge -- "Black Week" during the campaign, "Rea" otherwise. */
 export const SALE_LABEL: string = BLACK_MONTH.active ? BLACK_MONTH.saleLabel : "Rea";
 
 /** Announcement-bar messages used when the campaign is off (the bar's previous content). */

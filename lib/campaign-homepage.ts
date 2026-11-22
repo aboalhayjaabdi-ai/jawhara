@@ -1,5 +1,6 @@
 import { BLACK_MONTH } from "@/lib/campaign";
-import { getPrioritizedHBags, hBagPriority, interleaveNoelle, resolveMixedJewelry } from "@/lib/campaign-products";
+import { getPrioritizedHBags, interleaveNoelle, resolveMixedJewelry } from "@/lib/campaign-products";
+import { resolveProductList } from "@/lib/product-sections";
 import type { HomeSection, ProductCard } from "@/lib/queries";
 
 if (typeof window !== "undefined") {
@@ -14,7 +15,8 @@ if (typeof window !== "undefined") {
  * Jewelry first, bags second, and where bags show the H bags lead (Noélle Väska, then Noélle
  * Väska Mini):
  *    1. Banner + rullande text        (admin's own; "3 FÖR 2 PÅ ALLA SMYCKEN" added to the text)
- *    2. Black Month – våra bästa erbjudanden: jewelry from every category mixed with Noélle bags
+ *    2. Black Week – våra bästa erbjudanden: jewelry from every category mixed with the best-selling
+ *       bags (real units sold, last 90 days, all bags)
  *    3. 3 för 2 på alla smycken        (replaces "Smycken att älska"; mixed jewelry categories)
  *    4. Shoppa efter kategori          (jewelry categories first)
  *    5. Noélle-väskor                  (replaces "Noelle mini väskor"; H bags, Noélle first)
@@ -54,11 +56,14 @@ export async function applyBlackMonthHomepage(
   if (!BLACK_MONTH.active) return { sections, presetProducts: new Map() };
 
   // --- Products for the campaign sections (resolved in page order, nothing repeats) ---
-  const [bmJewelry, hBags] = await Promise.all([resolveMixedJewelry(4), getPrioritizedHBags()]);
-  const noelle = hBags.filter((p) => hBagPriority(p.title) === 0).slice(0, 2);
-  const noelleMini = hBags.filter((p) => hBagPriority(p.title) === 1).slice(0, 2);
+  const [bmJewelry, hBags, bestBags] = await Promise.all([
+    resolveMixedJewelry(4),
+    getPrioritizedHBags(),
+    resolveProductList({ collectionHandle: "vaskor-och-tillbehor", limit: 12, sort: "best-selling" }),
+  ]);
+  const topBags = bestBags.filter((p) => p.available).slice(0, 4);
   // Mixed so each row on mobile pairs a piece of jewelry with a bag.
-  const bmProducts = [bmJewelry[0], noelle[0], bmJewelry[1], noelleMini[0], bmJewelry[2], noelle[1], bmJewelry[3], noelleMini[1]].filter(
+  const bmProducts = [bmJewelry[0], topBags[0], bmJewelry[1], topBags[1], bmJewelry[2], topBags[2], bmJewelry[3], topBags[3]].filter(
     (p): p is ProductCard => Boolean(p)
   );
   const shown = new Set(bmProducts.map((p) => p.id));
@@ -71,8 +76,8 @@ export async function applyBlackMonthHomepage(
     type: "product_list",
     visible: true,
     config: {
-      heading: "Black Month – våra bästa erbjudanden",
-      intro: "3 för 2 på alla smycken och våra Noélle-väskor till kampanjpris.",
+      heading: "Black Week – våra bästa erbjudanden",
+      intro: "3 för 2 på alla smycken och våra mest sålda väskor till kampanjpris.",
       collectionHandle: BLACK_MONTH.collectionHandle,
       style: "campaign",
       layout: "grid",
@@ -120,7 +125,7 @@ export async function applyBlackMonthHomepage(
       return top.push({ ...s, config: { ...s.config, items: next } });
     }
     // Replaced by the campaign sections above.
-    if (s.type === "product_list" && (/^black month.*erbjudanden$/.test(h) || h === "smycken att älska" || h === "noelle mini väskor")) return;
+    if (s.type === "product_list" && (/^black (month|week).*erbjudanden$/.test(h) || h === "smycken att älska" || h === "noelle mini väskor")) return;
     if (HIDDEN_HEADINGS.has(h)) return;
     if (s.type === "collection_links" && h === "shoppa efter kategori") {
       return top.push({ ...s, config: { ...s.config, handles: ["armband", "halsband", "orhangen", "ringar", "vaskor-och-tillbehor", "gift-sets"] } });
