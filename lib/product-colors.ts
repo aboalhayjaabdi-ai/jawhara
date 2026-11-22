@@ -56,7 +56,7 @@ export const COLOR_GROUPS: ColorGroup[] = [
   group("Klöver örhänge guld", [["klover-orhange", "Vinröd"], ["klover-orhange-10", "Grön"], ["klover-orhange-11", "Svart"], ["klover-orhange-12", "Röd"], ["klover-orhange-13", "Ljusgrå"], ["klover-orhange-4", "Rosa"], ["klover-orhange-6", "Tigeröga"], ["klover-orhange-7", "Guld"], ["klover-orhange-8", "Blå"], ["klover-orhange-9", "Ljusrosa"]]),
   group("Klöver halsband hänge silver", [["klover-halsband-3", "Vit pärlemor"], ["klover-halsband-4", "Svart"], ["klover-halsband-5", "Rosa"]]),
   // Samma modell i olika metall
-  group("Love armband", [["love-armband", "Silver"], ["love-armband-3", "Guld"], ["love-armband-2", "Roséguld"]]),
+  group("Love armband", [["love-armband", "Silver"], ["love-armband-1", "Guld"], ["love-armband-2", "Roséguld"]]),
   group("Knot armband med stenar", [["knot-armband", "Silver"], ["knot-armband-1", "Roséguld"]]),
   group("Knot armband", [["knot-armband-2", "Silver"], ["knot-armband-4", "Guld"], ["knot-armband-3", "Roséguld"]]),
   group("Spik armband", [["spik-armband", "Silver"], ["cordell-armband-l", "Guld"]]),
