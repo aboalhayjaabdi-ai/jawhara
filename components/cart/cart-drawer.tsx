@@ -172,7 +172,16 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
   // The gift box upsell is only offered alongside jewelry -- "jewelry" = anything the live
   // "3 för 2" jewelry promotion covers (eligibleDiscountsByVariant comes from the same discount
   // data, independent of whether a code currently blocks the promotion).
-  const hasJewelry = items.some((i) => totals?.eligibleDiscountsByVariant[i.variantId]?.includes("3 för 2"));
+  // (The gift box itself never counts as jewelry.)
+  const hasJewelry = items.some(
+    (i) => i.variantId !== giftBoxOffer?.variantId && totals?.eligibleDiscountsByVariant[i.variantId]?.includes("3 för 2")
+  );
+  // A gift box ticked earlier goes again once the last piece of jewelry has been removed (bags,
+  // wallets etc. alone never come with one). Only acted on with `totals` for exactly this cart --
+  // never while it is still loading, when hasJewelry would read false for every cart.
+  useEffect(() => {
+    if (giftBoxOffer && totals && giftBoxInCart && !hasJewelry) removeItem(giftBoxOffer.variantId);
+  }, [giftBoxOffer, totals, giftBoxInCart, hasJewelry, removeItem]);
 
   const blockingErrors = totals?.errors.filter((e) => !e.toLowerCase().includes("rabattkod")) ?? [];
   const displayLines = buildDisplayLines(items, totals);
