@@ -50,8 +50,8 @@ export const BLACK_MONTH = {
     seoDescription: "Upptäck Jawharas Black Week: 3 för 2 på alla smycken, smycken och väskor till kampanjpriser och fri frakt inom Sverige.",
     /** Order on the page: jewelry first, bags second (see app/(storefront)/black-month/page.tsx). */
     jewelryOffers: {
-      heading: "Smycken till kampanjpris",
-      intro: "Armband, halsband, örhängen och ringar – nu till Black Week-pris. Köp 3 och få det billigaste på köpet.",
+      heading: "Våra bästa erbjudanden",
+      intro: "Smycken och våra mest sålda väskor – nu till Black Week-pris. Köp 3 smycken och få det billigaste på köpet.",
       collectionHandle: "alla-smycken",
       limit: 12,
       buttonText: "Se alla smycken",

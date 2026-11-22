@@ -39,14 +39,20 @@ const JEWELRY_CATEGORIES = [
 export default async function BlackMonthPage() {
   if (!BLACK_MONTH.active) notFound();
 
-  const [jewelryOffers, jewelryIds, hBags] = await Promise.all([
-    resolveMixedJewelry(page.jewelryOffers.limit),
+  const half = Math.ceil(page.jewelryOffers.limit / 2);
+  const [offerJewelry, jewelryIds, hBags, bestBags] = await Promise.all([
+    resolveMixedJewelry(half),
     getCollectionProductIds(page.jewelryOffers.collectionHandle),
     getPrioritizedHBags(),
+    resolveProductList({ collectionHandle: "vaskor-och-tillbehor", limit: half + 6, sort: "best-selling" }),
   ]);
+  // Like the start page: jewelry mixed with the best-selling bags (real units sold, last 90 days),
+  // so each row on mobile pairs a piece of jewelry with a bag.
+  const topBags = bestBags.filter((p) => p.available).slice(0, half);
+  const jewelryOffers = offerJewelry.flatMap((j, i) => [j, topBags[i]]).filter((p): p is NonNullable<typeof p> => Boolean(p));
   const shown = new Set(jewelryOffers.map((p) => p.id));
   // Noélle Väska and Noélle Väska Mini side by side, then any other H bags.
-  const hBagOffers = interleaveNoelle(hBags).slice(0, page.hBagOffers.limit);
+  const hBagOffers = interleaveNoelle(hBags.filter((p) => !shown.has(p.id))).slice(0, page.hBagOffers.limit);
   for (const p of hBagOffers) shown.add(p.id);
   const moreJewelry = await resolveMixedJewelry(page.moreJewelry.limit, shown);
   for (const p of moreJewelry) shown.add(p.id);
