@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { BLACK_MONTH } from "@/lib/campaign";
 import { resolveProductList } from "@/lib/product-sections";
 import { getCollectionProductIds } from "@/lib/queries";
-import { getPrioritizedHBags, interleaveNoelle, resolveMixedJewelry } from "@/lib/campaign-products";
+import { resolveMixedJewelry } from "@/lib/campaign-products";
 import { ProductListSection } from "@/components/home/product-list";
 import { CollectionLinks } from "@/components/home/collection-links";
 
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 // Every line here is a verified, standing offer -- see lib/campaign.ts.
-const BENEFITS = ["3 för 2 på alla smycken", "Smycken & väskor till kampanjpris", "Fri frakt inom Sverige"];
+const BENEFITS = ["Bästsäljande väskor till kampanjpris", "3 för 2 på alla smycken", "Fri frakt inom Sverige"];
 
 const JEWELRY_CATEGORIES = [
   { title: "Armband", href: "/collections/armband" },
@@ -30,39 +30,27 @@ const JEWELRY_CATEGORIES = [
 ];
 
 /**
- * Black Month landing page -- jewelry first, bags second:
- *   intro -> 3 för 2 band -> jewelry from every category -> Noélle/H bags -> more jewelry ->
- *   other Black Month bags (the Black Month collection, Jawhara admin -> Kollektioner) -> categories.
- * No product is shown twice on the page. All copy lives in lib/campaign.ts; setting
- * BLACK_MONTH.active = false turns this route into a 404.
+ * Black Week landing page -- bags first, then jewelry:
+ *   intro -> the best-selling bags -> 3 för 2 band -> jewelry from every category -> more best-selling
+ *   bags -> more jewelry -> categories (bags first).
+ * "Best-selling" = real units sold over the last 90 days (lib/product-sections.ts). No product is
+ * shown twice on the page. All copy lives in lib/campaign.ts; setting BLACK_MONTH.active = false
+ * turns this route into a 404.
  */
 export default async function BlackMonthPage() {
   if (!BLACK_MONTH.active) notFound();
 
-  const half = Math.ceil(page.jewelryOffers.limit / 2);
-  const [offerJewelry, jewelryIds, hBags, bestBags] = await Promise.all([
-    resolveMixedJewelry(half),
+  const [rankedBags, jewelryIds, jewelryOffers] = await Promise.all([
+    resolveProductList({ collectionHandle: page.bestBags.collectionHandle, limit: 80, sort: "best-selling" }),
     getCollectionProductIds(page.jewelryOffers.collectionHandle),
-    getPrioritizedHBags(),
-    resolveProductList({ collectionHandle: "vaskor-och-tillbehor", limit: half + 6, sort: "best-selling" }),
+    resolveMixedJewelry(page.jewelryOffers.limit),
   ]);
-  // Like the start page: jewelry mixed with the best-selling bags (real units sold, last 90 days),
-  // so each row on mobile pairs a piece of jewelry with a bag.
-  const topBags = bestBags.filter((p) => p.available).slice(0, half);
-  const jewelryOffers = offerJewelry.flatMap((j, i) => [j, topBags[i]]).filter((p): p is NonNullable<typeof p> => Boolean(p));
-  const shown = new Set(jewelryOffers.map((p) => p.id));
-  // Noélle Väska and Noélle Väska Mini side by side, then any other H bags.
-  const hBagOffers = interleaveNoelle(hBags.filter((p) => !shown.has(p.id))).slice(0, page.hBagOffers.limit);
-  for (const p of hBagOffers) shown.add(p.id);
-  const moreJewelry = await resolveMixedJewelry(page.moreJewelry.limit, shown);
-  for (const p of moreJewelry) shown.add(p.id);
-  // The Black Month collection is mostly bags; jewelry in it is shown in the jewelry sections.
   const jewelrySet = new Set(jewelryIds);
-  const bagOffers = (
-    await resolveProductList({ collectionHandle: BLACK_MONTH.collectionHandle, limit: page.bagOffers.limit + shown.size + jewelrySet.size, unique: true }, shown)
-  )
-    .filter((p) => !jewelrySet.has(p.id))
-    .slice(0, page.bagOffers.limit);
+  const bags = rankedBags.filter((p) => p.available && !jewelrySet.has(p.id));
+  const bestBags = bags.slice(0, page.bestBags.limit);
+  const moreBags = bags.slice(page.bestBags.limit, page.bestBags.limit + page.bagOffers.limit);
+  const shown = new Set([...bestBags, ...jewelryOffers, ...moreBags].map((p) => p.id));
+  const moreJewelry = await resolveMixedJewelry(page.moreJewelry.limit, shown);
 
   return (
     <>
@@ -82,7 +70,22 @@ export default async function BlackMonthPage() {
         </div>
       </section>
 
-      {/* 1. 3 för 2 på alla smycken -- the headline offer */}
+      {/* 1. Våra mest sålda väskor -- the best-selling bags */}
+      <ProductListSection
+        id="vaskor"
+        variant="campaign"
+        layout="grid"
+        heading={page.bestBags.heading}
+        intro={page.bestBags.intro}
+        collectionHandle={page.bestBags.collectionHandle}
+        limit={page.bestBags.limit}
+        products={bestBags}
+        priorityImages={4}
+        buttonText={page.bestBags.buttonText}
+        buttonHref={page.bestBags.buttonHref}
+      />
+
+      {/* 2. 3 för 2 på alla smycken */}
       <section className="bg-fg text-bg">
         <div className="mx-auto max-w-[880px] px-6 py-12 text-center sm:py-14">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-bg/70">{BLACK_MONTH.name}</p>
@@ -108,7 +111,7 @@ export default async function BlackMonthPage() {
         </div>
       </section>
 
-      {/* 2. Smycken till kampanjpris */}
+      {/* 3. Smycken till kampanjpris -- from every jewelry category */}
       <ProductListSection
         id="smycken"
         variant="campaign"
@@ -118,29 +121,27 @@ export default async function BlackMonthPage() {
         collectionHandle={page.jewelryOffers.collectionHandle}
         limit={page.jewelryOffers.limit}
         products={jewelryOffers}
-        priorityImages={4}
         buttonText={page.jewelryOffers.buttonText}
       />
 
-      {/* 3. Noélle-väskor till kampanjpris -- H bags, Noélle first, on a full-width band */}
-      {hBagOffers.length > 0 && (
+      {/* 4. Fler väskor till kampanjpris -- the next best-selling bags, on a full-width band */}
+      {moreBags.length > 0 && (
         <div className="bg-[#f7f7f7]">
           <ProductListSection
-            id="vaskor"
+            id="fler-vaskor"
             variant="campaign"
             layout="grid"
-            heading={page.hBagOffers.heading}
-            intro={page.hBagOffers.intro}
-            collectionHandle="h-vaskor"
-            limit={page.hBagOffers.limit}
-            products={hBagOffers}
-            buttonText={page.hBagOffers.buttonText}
-            buttonHref={page.hBagOffers.buttonHref}
+            heading={page.bagOffers.heading}
+            collectionHandle={page.bestBags.collectionHandle}
+            limit={page.bagOffers.limit}
+            products={moreBags}
+            buttonText={page.bagOffers.buttonText}
+            buttonHref={page.bagOffers.buttonHref}
           />
         </div>
       )}
 
-      {/* 4. Fler smycken att älska -- again from every jewelry category */}
+      {/* 5. Fler smycken att älska */}
       <ProductListSection
         id="fler-smycken"
         variant="campaign"
@@ -152,22 +153,7 @@ export default async function BlackMonthPage() {
         buttonText={page.moreJewelry.buttonText}
       />
 
-      {/* 5. Fler väskor till kampanjpris -- the Black Month collection's other bags, compact carousel */}
-      {bagOffers.length > 0 && (
-        <div className="border-t border-line">
-          <ProductListSection
-            id="fler-vaskor"
-            heading={page.bagOffers.heading}
-            collectionHandle={BLACK_MONTH.collectionHandle}
-            limit={page.bagOffers.limit}
-            products={bagOffers}
-            buttonText={page.bagOffers.buttonText}
-            buttonHref={page.bagOffers.buttonHref}
-          />
-        </div>
-      )}
-
-      {/* 6. Shoppa efter kategori -- jewelry categories first */}
+      {/* 6. Shoppa efter kategori -- bags first */}
       <div className="border-t border-line">
         <CollectionLinks heading={page.categories.heading} handles={[...page.categories.handles]} />
       </div>

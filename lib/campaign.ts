@@ -45,36 +45,36 @@ export const BLACK_MONTH = {
 
   page: {
     title: "BLACK WEEK",
-    subtitle: "Smycken och väskor till kampanjpriser – och 3 för 2 på alla smycken.",
-    seoTitle: "Black Week – smycken och väskor till kampanjpris",
-    seoDescription: "Upptäck Jawharas Black Week: 3 för 2 på alla smycken, smycken och väskor till kampanjpriser och fri frakt inom Sverige.",
-    /** Order on the page: jewelry first, bags second (see app/(storefront)/black-month/page.tsx). */
+    subtitle: "Våra mest sålda väskor och smycken till kampanjpriser – och 3 för 2 på alla smycken.",
+    seoTitle: "Black Week – väskor och smycken till kampanjpris",
+    seoDescription: "Upptäck Jawharas Black Week: våra mest sålda väskor och smycken till kampanjpriser, 3 för 2 på alla smycken och fri frakt inom Sverige.",
+    /** Order on the page: best-selling bags first, then jewelry (see app/(storefront)/black-month/page.tsx). */
+    bestBags: {
+      heading: "Våra mest sålda väskor",
+      intro: "Kundernas favoriter – nu till Black Week-pris.",
+      collectionHandle: "vaskor-och-tillbehor",
+      limit: 12,
+      buttonText: "Shoppa alla väskor",
+      buttonHref: "/collections/vaskor-och-tillbehor",
+    },
     jewelryOffers: {
-      heading: "Våra bästa erbjudanden",
-      intro: "Smycken och våra mest sålda väskor – nu till Black Week-pris. Köp 3 smycken och få det billigaste på köpet.",
+      heading: "Smycken till kampanjpris",
+      intro: "Armband, halsband, örhängen och ringar – nu till Black Week-pris. Köp 3 och få det billigaste på köpet.",
       collectionHandle: "alla-smycken",
       limit: 12,
       buttonText: "Se alla smycken",
     },
-    /** H bags, Noélle Väska and Noélle Väska Mini first. */
-    hBagOffers: {
-      heading: "Noélle-väskor till kampanjpris",
-      intro: "Noélle och Noélle Mini – tidlösa favoriter, nu till Black Week-pris.",
-      limit: 8,
-      buttonText: "Se alla H väskor",
-      buttonHref: "/collections/h-vaskor",
-    },
-    moreJewelry: { heading: "Fler smycken att älska", collectionHandle: "alla-smycken", limit: 12, buttonText: "Visa fler smycken" },
-    /** The Black Month collection's other bags, as a compact carousel further down. */
+    /** The next best-selling bags after the first section. */
     bagOffers: {
       heading: "Fler väskor till kampanjpris",
-      limit: 8,
+      limit: 12,
       buttonText: "Shoppa alla väskor",
       buttonHref: "/collections/vaskor-och-tillbehor",
     },
+    moreJewelry: { heading: "Fler smycken att älska", collectionHandle: "alla-smycken", limit: 12, buttonText: "Visa fler smycken" },
     categories: {
       heading: "Shoppa efter kategori",
-      handles: ["armband", "halsband", "orhangen", "ringar", "vaskor-och-tillbehor", "gift-sets"],
+      handles: ["vaskor-och-tillbehor", "gift-sets", "armband", "halsband", "orhangen", "ringar"],
     },
   },
 } as const;
