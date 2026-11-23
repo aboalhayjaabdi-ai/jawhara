@@ -144,6 +144,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
+  // A saved-cart link (e.g. the abandoned-cart e-mail): "?varukorg=<variantId>*<qty>,...&rabatt=CODE".
+  // Replaces the cart with those lines (today's price and image), adds the code, opens the cart so
+  // the customer can change it before going to checkout, then removes the parameters from the URL.
+  useEffect(() => {
+    if (!hydrated) return;
+    let params: URLSearchParams;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+    const saved = params.get("varukorg");
+    if (!saved) return;
+    const code = params.get("rabatt")?.trim().toUpperCase().slice(0, 64) || null;
+    const lines = saved.split(",").map((part) => {
+      const [variantId, qty] = part.split("*");
+      return { variantId, qty: Number(qty) || 1 };
+    });
+    params.delete("varukorg");
+    params.delete("rabatt");
+    const rest = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+    fetchWithTimeout("/api/cart/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lines }) })
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data: { items?: CartItem[] }) => {
+        if (!data.items?.length) return;
+        setItems(data.items);
+        if (code) {
+          setDiscountCodeState(code);
+          try {
+            localStorage.setItem(DISCOUNT_CODE_STORAGE_KEY, code);
+          } catch {
+            // ignore
+          }
+        }
+        setIsOpen(true);
+      })
+      .catch(() => {});
+  }, [hydrated]);
+
   useEffect(() => {
     if (!hydrated) return;
     try {
