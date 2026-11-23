@@ -357,6 +357,7 @@ export async function computeCheckoutTotals(
   const bxgy = toApply.filter((d) => d.buy_quantity != null && d.get_quantity != null);
   const bxgyResultById = giftLineVariantGid() ? giftFirstBxgy(bxgy, units, variantMap) : oneDiscountPerUnitBxgy(bxgy, units, variantMap);
 
+  const productDiscountTotal = toApply.reduce((sum, d) => sum + (bxgyResultById.get(d.id)?.amountOff ?? 0), 0);
   for (const d of toApply) {
     const r = bxgyResultById.get(d.id);
     if (r) {
@@ -387,8 +388,10 @@ export async function computeCheckoutTotals(
       }
     } else if (d.get_percentage != null) {
       // Order-level percentage off (all 3 real codes apply to the whole order -- items.allItems=true).
+      // Like Shopify, it is taken from what is left after product discounts (a "3 för 2" free item
+      // it is combined with), so the cart and Shopify's checkout charge the same.
       const pct = Number(d.get_percentage) / 100;
-      const amountOff = Math.round(subtotal * pct * 100) / 100;
+      const amountOff = Math.round(Math.max(0, subtotal - productDiscountTotal) * pct * 100) / 100;
       if (amountOff > 0) {
         appliedDiscounts.push({ discountId: d.id, title: d.title, kind: "order_percentage", amountOff });
       }

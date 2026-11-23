@@ -19,7 +19,7 @@ function formatSek(amount: number) {
 const CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === "true";
 
 export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null }) {
-  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, setDiscountCode, shopifyWarnings, goToCheckout, warmCheckout, subtotal, lastAdded } =
+  const { items, isOpen, close, addItem, removeItem, setQty, discountCode, discountFromLink, setDiscountCode, shopifyWarnings, goToCheckout, warmCheckout, subtotal, lastAdded } =
     useCart();
 
   useEffect(() => {
@@ -41,10 +41,12 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
 
   // The cart no longer has a discount-code field (codes can still be entered in Shopify's own
   // checkout). A code saved earlier in this browser would otherwise keep applying invisibly, with
-  // no way to see or remove it here -- so it's cleared.
+  // no way to see or remove it here -- so it's cleared. Exception: a code that came with a
+  // saved-cart link (the abandoned-cart e-mail), which is shown below with a remove button.
   useEffect(() => {
-    if (discountCode) setDiscountCode(null);
-  }, [discountCode, setDiscountCode]);
+    if (discountCode && !discountFromLink) setDiscountCode(null);
+  }, [discountCode, discountFromLink, setDiscountCode]);
+  const linkCodeLine = discountCode && discountFromLink && totals?.codeDiscountId ? totals.appliedDiscounts.find((d) => d.discountId === totals.codeDiscountId) ?? null : null;
 
   // While the cart is open, the page behind it must not scroll -- only the cart's own list does.
   useEffect(() => {
@@ -329,6 +331,18 @@ export function CartDrawer({ giftBoxOffer }: { giftBoxOffer: GiftBoxOffer | null
               />
               <span>Lägg till en presentask för {formatSek(giftBoxOffer.price)}</span>
             </label>
+          )}
+
+          {items.length > 0 && discountCode && discountFromLink && (
+            <div className="mb-2 flex items-center justify-between gap-3 border border-line bg-[#f4f4f4] px-3 py-2 text-sm">
+              <span>
+                Rabattkod <strong className="tracking-wide">{discountCode}</strong>
+                {linkCodeLine ? <span className="text-muted"> · −{formatSek(linkCodeLine.amountOff)}</span> : null}
+              </span>
+              <button type="button" onClick={() => setDiscountCode(null)} className="text-xs text-muted underline">
+                Ta bort
+              </button>
+            </div>
           )}
 
           {items.length > 0 && (

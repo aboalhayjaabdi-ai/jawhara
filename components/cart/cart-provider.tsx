@@ -67,6 +67,10 @@ type CartState = {
   // any form: admin-managed discounts aren't connected to the Shopify side of checkout until
   // Phase 4, so Shopify's own checkout total can disagree with this (see cart-drawer.tsx).
   discountCode: string | null;
+  // True when discountCode came from a saved-cart link (e.g. the abandoned-cart e-mail's
+  // "?rabatt=") -- the only kind of code the cart keeps and shows (with a remove button); any
+  // other stored code is cleared by the cart drawer, which has no code field.
+  discountFromLink: boolean;
   // Customer-safe, Swedish warnings from the most recent background Shopify cart sync (e.g. a
   // variant that couldn't be matched, or a quantity that got clamped to real stock) -- informational
   // only, never blocks adding/removing/checking out, since Supabase (not this) is what prices and
@@ -115,6 +119,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFA
 
 const STORAGE_KEY = "jawhara_cart";
 const DISCOUNT_CODE_STORAGE_KEY = "jawhara_discount_code";
+const DISCOUNT_FROM_LINK_STORAGE_KEY = "jawhara_discount_code_from_link";
 // The real Shopify Storefront API cart id this Jawhara cart is mirrored into (lib/shopify/cart-
 // sync.ts) -- kept in its own key so a customer's visible cart (STORAGE_KEY, unchanged since
 // Phase 1) never depends on whether the Shopify side of the sync has ever succeeded.
@@ -126,6 +131,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [bump, setBump] = useState(0);
   const [discountCode, setDiscountCodeState] = useState<string | null>(null);
+  const [discountFromLink, setDiscountFromLink] = useState(false);
   const [shopifyCartId, setShopifyCartId] = useState<string | null>(null);
   const [shopifyWarnings, setShopifyWarnings] = useState<string[]>([]);
   const [lastAdded, setLastAdded] = useState<CartState["lastAdded"]>(null);
@@ -136,6 +142,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (raw) setItems(JSON.parse(raw));
       const code = localStorage.getItem(DISCOUNT_CODE_STORAGE_KEY);
       if (code) setDiscountCodeState(code);
+      if (code && localStorage.getItem(DISCOUNT_FROM_LINK_STORAGE_KEY) === "1") setDiscountFromLink(true);
       const shopifyId = localStorage.getItem(SHOPIFY_CART_ID_STORAGE_KEY);
       if (shopifyId) setShopifyCartId(shopifyId);
     } catch {
@@ -173,8 +180,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setItems(data.items);
         if (code) {
           setDiscountCodeState(code);
+          setDiscountFromLink(true);
           try {
             localStorage.setItem(DISCOUNT_CODE_STORAGE_KEY, code);
+            localStorage.setItem(DISCOUNT_FROM_LINK_STORAGE_KEY, "1");
           } catch {
             // ignore
           }
@@ -419,7 +428,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const setDiscountCode = useCallback((code: string | null) => {
     setDiscountCodeState(code);
+    setDiscountFromLink(false);
     try {
+      localStorage.removeItem(DISCOUNT_FROM_LINK_STORAGE_KEY);
       if (code) localStorage.setItem(DISCOUNT_CODE_STORAGE_KEY, code);
       else localStorage.removeItem(DISCOUNT_CODE_STORAGE_KEY);
     } catch {
@@ -488,8 +499,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [open, close, addItem, removeItem, setQty, setDiscountCode, syncPrices, goToCheckout, warmCheckout]
   );
   const state = useMemo<CartState>(
-    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded }),
-    [items, isOpen, subtotal, count, hydrated, bump, discountCode, shopifyWarnings, lastAdded]
+    () => ({ items, isOpen, subtotal, count, hydrated, bump, discountCode, discountFromLink, shopifyWarnings, lastAdded }),
+    [items, isOpen, subtotal, count, hydrated, bump, discountCode, discountFromLink, shopifyWarnings, lastAdded]
   );
 
   return (
