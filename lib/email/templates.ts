@@ -302,7 +302,7 @@ export function trackingReminderTemplate(
 }
 
 /**
- * "Har du fått ditt paket?" -- sent once the latest expected delivery date has passed (see
+ * "Har du fått ditt paket?" -- sent 20 days after the order was placed (see
  * lib/email/delivery-check.ts). Its job is to make contacting Jawhara the obvious first step for a
  * customer whose parcel has not arrived, before they turn to their bank or card issuer. Kept
  * visually different from the shipping and reminder emails: no progress bar, no tracking card --
