@@ -65,6 +65,9 @@ export async function GET() {
       // "<handle>", which selects a product that's in multiple collections for every matching set
       // (a single-value field couldn't).
       const customLabel0 = buildCustomLabel0(p.collectionHandles);
+      // Ranked lists ("topp100-smycken": all-time best-selling jewellery) get their own field, so a
+      // product set can always select them even when custom_label_0 is full for that product.
+      const customLabel3 = p.collectionHandles.filter((h) => h.startsWith("topp")).sort().join(",");
 
       return `
     <item>
@@ -82,6 +85,7 @@ export async function GET() {
       ${customLabel0 ? `<g:custom_label_0>${escapeXml(customLabel0)}</g:custom_label_0>` : ""}
       <g:custom_label_1>${customLabel1}</g:custom_label_1>
       ${customLabel2 ? `<g:custom_label_2>${customLabel2}</g:custom_label_2>` : ""}
+      ${customLabel3 ? `<g:custom_label_3>${escapeXml(customLabel3)}</g:custom_label_3>` : ""}
     </item>`;
     })
     .join("");
