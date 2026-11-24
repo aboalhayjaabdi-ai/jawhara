@@ -13,7 +13,7 @@ export const DELIVERY_CHECK_DEFAULT_CONTENT: EmailTemplateContent = {
   subject: "Har du fått ditt paket? — order {{orderNumber}}",
   heading: "Hur gick det med din beställning?",
   introHtml:
-    '<p style="font-size: 14px; line-height: 1.6;">Hej {{firstName}}!</p><p style="font-size: 14px; line-height: 1.6;">Det har nu gått en tid sedan du gjorde din beställning {{orderNumber}}, och vi vill bara höra hur det har gått.</p>',
+    '<p style="font-size: 14px; line-height: 1.6;">Hej {{firstName}}!</p><p style="font-size: 14px; line-height: 1.6;">Tack för att du handlade hos Jawhara! Vi vill gärna höra hur det gick med din beställning {{orderNumber}}.</p>',
   outroHtml:
     '<p style="font-size: 13px; line-height: 1.6; color: #666;">Om något inte är som det ska, oavsett vad, hör av dig till oss först – vi löser det alltid tillsammans med dig.</p>',
 };
