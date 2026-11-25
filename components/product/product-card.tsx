@@ -88,7 +88,7 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
           </div>
         )}
         {product.available && savePercent > 0 && (
-          <div className="absolute right-2 top-2 sm:right-3 sm:top-3">
+          <div className="absolute right-2 top-2 flex flex-col items-end sm:right-3 sm:top-3">
             <span className={SAVE_BADGE_CLASS}>Spara {savePercent}%</span>
           </div>
         )}
