@@ -10,8 +10,8 @@ import { LinkPendingIndicator } from "@/components/ui/link-pending-indicator";
 import { SALE_LABEL } from "@/lib/campaign";
 
 // Red "Spara 52%" label, top right -- the opposite corner from the campaign/3 för 2 labels.
-const SAVE_BADGE_CLASS = "bg-[#d93a32] px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-white sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide";
-const BADGE_CLASS = "bg-fg px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-bg sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide";
+const SAVE_BADGE_CLASS = "bg-[#d93a32] px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-white sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide max-[413px]:px-1.5 max-[413px]:text-[8px] max-[413px]:tracking-[0.03em]";
+const BADGE_CLASS = "bg-fg px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-bg sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide max-[413px]:px-1.5 max-[413px]:text-[8px] max-[413px]:tracking-[0.03em]";
 
 function formatSek(amount: number) {
   return `${Math.round(amount)} kr`;
@@ -82,13 +82,13 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
           // Stacked in one column (never side by side) so two labels can't collide on narrow
           // mobile cards. Label text comes from lib/campaign.ts ("Black Month" during the
           // campaign, "Rea" otherwise).
-          <div className="absolute left-2 top-2 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
+          <div className="absolute left-2 top-2 flex flex-col items-start gap-1 max-[413px]:left-1.5 max-[413px]:top-1.5 sm:left-3 sm:top-3">
             {onSale && <span className={BADGE_CLASS}>{SALE_LABEL}</span>}
             {product.threeForTwo && <span className={BADGE_CLASS}>3 för 2</span>}
           </div>
         )}
         {product.available && savePercent > 0 && (
-          <div className="absolute right-2 top-2 flex flex-col items-end sm:right-3 sm:top-3">
+          <div className={`absolute right-2 top-2 flex flex-col items-end max-[413px]:right-1.5 max-[413px]:top-1.5 sm:right-3 sm:top-3 ${onSale || product.threeForTwo ? "max-[359px]:top-[30px]" : ""}`}>
             <span className={SAVE_BADGE_CLASS}>Spara {savePercent}%</span>
           </div>
         )}
