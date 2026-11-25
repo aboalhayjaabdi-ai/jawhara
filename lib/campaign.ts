@@ -40,6 +40,8 @@ export const BLACK_MONTH = {
 
   /** Short line under the price on bag product pages (only shown when the product has a compare-at price). */
   bagPriceNote: "Black Week-pris · Fri frakt inom Sverige",
+  /** The offer ends at the end of 30 November (Swedish time): the red countdown under bagPriceNote counts down to this. */
+  saleEndsAt: "2026-11-30T23:59:59+01:00",
   /** products.template_suffix values that identify a bag product page. */
   bagTemplateKeys: ["vaskor", "erbjudande-vaskor", "gift-sets"],
 

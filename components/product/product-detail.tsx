@@ -10,7 +10,8 @@ import type { ProductTemplateContent } from "@/lib/product-templates";
 import type { VariantGallery } from "@/lib/queries";
 import { addRecentlyViewed } from "@/lib/recently-viewed";
 import { trackViewContent } from "@/lib/marketing/events";
-import { SALE_LABEL } from "@/lib/campaign";
+import { BLACK_MONTH, SALE_LABEL } from "@/lib/campaign";
+import { SaleCountdown } from "@/components/product/sale-countdown";
 import type { ColorOption } from "@/lib/product-colors";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ReviewSubmitSection } from "@/components/product/review-submit-section";
@@ -485,7 +486,10 @@ export function ProductDetail({
             </div>
           )}
           {variant && onSale && salePriceNote && (
-            <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
+            <>
+              <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
+              {BLACK_MONTH.active && <SaleCountdown endsAt={BLACK_MONTH.saleEndsAt} />}
+            </>
           )}
 
           {promoBox && (
