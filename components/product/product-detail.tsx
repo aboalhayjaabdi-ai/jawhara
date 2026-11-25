@@ -404,6 +404,7 @@ export function ProductDetail({
   const galleryJumpIndex = variant && !variantGallery ? variantImageIndex[variant.id] : undefined;
 
   const onSale = variant?.compare_at_price != null && variant.compare_at_price > variant.price;
+  const savePercent = onSale ? Math.round((1 - variant!.price / variant!.compare_at_price!) * 100) : 0;
   const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null;
 
   useEffect(() => {
@@ -449,9 +450,15 @@ export function ProductDetail({
               {SALE_LABEL}
             </div>
           )}
-          {threeForTwoEligible && (
-            <div className="absolute right-4 top-4 z-10 bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">
-              3 för 2
+          {(savePercent > 0 || threeForTwoEligible) && (
+            // Right-hand corner: red "Spara 52%" (opposite the campaign label), then 3 för 2 under it.
+            <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-1">
+              {savePercent > 0 && (
+                <div className="bg-[#d93a32] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white">Spara {savePercent}%</div>
+              )}
+              {threeForTwoEligible && (
+                <div className="bg-fg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-bg">3 för 2</div>
+              )}
             </div>
           )}
         </div>

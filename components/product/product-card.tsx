@@ -9,6 +9,8 @@ import { normalizeVariantTitle } from "@/lib/variant-title";
 import { LinkPendingIndicator } from "@/components/ui/link-pending-indicator";
 import { SALE_LABEL } from "@/lib/campaign";
 
+// Red "Spara 52%" label, top right -- the opposite corner from the campaign/3 för 2 labels.
+const SAVE_BADGE_CLASS = "bg-[#d93a32] px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-white sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide";
 const BADGE_CLASS = "bg-fg px-2 py-[3px] text-[9px] font-bold uppercase leading-[14px] tracking-[0.08em] text-bg sm:px-2.5 sm:py-1 sm:text-[10px] sm:tracking-wide";
 
 function formatSek(amount: number) {
@@ -18,6 +20,7 @@ function formatSek(amount: number) {
 export function ProductCard({ product, priority = false }: { product: ProductCardType; priority?: boolean }) {
   const { addItem } = useCartActions();
   const onSale = product.compareAtPrice != null && product.compareAtPrice > product.price;
+  const savePercent = onSale ? Math.round((1 - product.price / product.compareAtPrice!) * 100) : 0;
   // The card shows the cheapest variant's price; when sizes/colors cost different amounts that is
   // marked "Från", so it never contradicts the (often pricier) default size on the product page.
   const hasPriceRange = product.variants.some((v) => v.price !== product.price);
@@ -82,6 +85,11 @@ export function ProductCard({ product, priority = false }: { product: ProductCar
           <div className="absolute left-2 top-2 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
             {onSale && <span className={BADGE_CLASS}>{SALE_LABEL}</span>}
             {product.threeForTwo && <span className={BADGE_CLASS}>3 för 2</span>}
+          </div>
+        )}
+        {product.available && savePercent > 0 && (
+          <div className="absolute right-2 top-2 sm:right-3 sm:top-3">
+            <span className={SAVE_BADGE_CLASS}>Spara {savePercent}%</span>
           </div>
         )}
         <LinkPendingIndicator />
