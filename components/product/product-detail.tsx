@@ -486,16 +486,21 @@ export function ProductDetail({
             </div>
           )}
           {variant && onSale && salePriceNote && (
-            <>
-              <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
-              {BLACK_MONTH.active && <SaleCountdown endsAt={BLACK_MONTH.saleEndsAt} />}
-            </>
+            <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{salePriceNote}</p>
           )}
 
           {promoBox && (
             <div className="mt-5 border border-line bg-[#f7f7f7] px-4 py-3.5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em]">{promoBox.heading}</div>
               <p className="mt-1.5 text-[13px] leading-5 text-muted">{promoBox.body}</p>
+            </div>
+          )}
+
+          {/* Red countdown to the end of Black Week on every product with a campaign price: under the
+              3 för 2 box on jewelry, under the price line on bags. */}
+          {BLACK_MONTH.active && (onSale || promoBox) && (
+            <div className={promoBox ? "mt-2.5" : ""}>
+              <SaleCountdown endsAt={BLACK_MONTH.saleEndsAt} />
             </div>
           )}
 
